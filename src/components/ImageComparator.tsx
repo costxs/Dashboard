@@ -1,7 +1,3 @@
-import {
-  ReactCompareSlider,
-  ReactCompareSliderImage,
-} from "react-compare-slider";
 import { Images } from "lucide-react";
 import { rockImageDataUri } from "../utils/placeholderImage";
 
@@ -32,38 +28,32 @@ export function ImageComparator({
         </div>
       </div>
       <div className="p-7">
-        <div className="overflow-hidden rounded-lg border border-[var(--color-neutral-300)] shadow-sm">
-          <ReactCompareSlider
-            itemOne={
-              <ReactCompareSliderImage
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-3">
+            <div className="overflow-hidden rounded-lg border border-[var(--color-neutral-300)] shadow-sm">
+              <img
                 src={rockImageDataUri(beforeSeed, "before")}
                 alt={beforeLabel}
+                className="w-full h-[320px] object-cover"
               />
-            }
-            itemTwo={
-              <ReactCompareSliderImage
+            </div>
+            <div className="flex items-center justify-center gap-2 text-[13px] font-semibold text-[var(--color-neutral-700)]">
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-neutral-400)] shadow-sm" /> {beforeLabel}
+            </div>
+          </div>
+          
+          <div className="flex flex-col gap-3">
+            <div className="overflow-hidden rounded-lg border border-[var(--color-neutral-300)] shadow-sm">
+              <img
                 src={rockImageDataUri(afterSeed, "after")}
                 alt={afterLabel}
+                className="w-full h-[320px] object-cover"
               />
-            }
-            style={{ height: 420, width: "100%" }}
-            handle={
-              <div className="flex h-full w-1 items-center justify-center bg-[var(--color-accent)]">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--color-accent)] bg-white text-[12px] font-extrabold text-[var(--color-accent)] shadow-md">
-                  ↔
-                </div>
-              </div>
-            }
-          />
-        </div>
-        <div className="mt-4 flex items-center justify-between text-[12px] font-semibold text-[var(--color-neutral-600)]">
-          <span className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-neutral-400)] shadow-sm" /> {beforeLabel}
-          </span>
-          <span className="text-[11px] uppercase tracking-[0.05em] text-[var(--color-neutral-500)]">Arraste a barra para comparar</span>
-          <span className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-accent)] shadow-sm" /> {afterLabel}
-          </span>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-[13px] font-semibold text-[var(--color-neutral-700)]">
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-accent)] shadow-sm" /> {afterLabel}
+            </div>
+          </div>
         </div>
       </div>
     </div>
