@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node check-login.mjs)",
+      "Bash(node check-flow.mjs)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 17508 //F)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}

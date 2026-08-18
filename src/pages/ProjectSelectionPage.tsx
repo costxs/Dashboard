@@ -8,9 +8,14 @@ export function ProjectSelectionPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const username = location.state?.username || "Visitante";
-
   const setActiveProject = useSampleStore((s) => s.setActiveProject);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Bom dia";
+    if (hour < 18) return "Boa tarde";
+    return "Boa noite";
+  };
 
   const projects: { id: string; name: ProjectPartner; logo: string }[] = [
     {
@@ -63,7 +68,7 @@ export function ProjectSelectionPage() {
 
         {/* Greeting Header */}
         <div className="mb-8 text-center sm:text-left">
-          <h1 className="text-[28px] font-bold text-slate-900 tracking-tight leading-tight">Bom dia, {username}</h1>
+          <h1 className="text-[28px] font-bold text-slate-900 tracking-tight leading-tight">{getGreeting()}</h1>
           <p className="text-slate-500 mt-1.5 text-sm font-medium">Quais projetos quer acessar hoje?</p>
         </div>
 
