@@ -82,11 +82,11 @@ export function DashboardPage() {
           <p className="m-0 text-[10px] font-semibold tracking-[0.07em] uppercase text-[var(--color-neutral-600)]">
             Progresso geral
           </p>
-          <p className="mt-2.5 font-heading font-extrabold text-[32px] leading-[1.1] tracking-[-0.01em] text-[var(--color-accent)]">
+          <p className="mt-2.5 font-heading font-extrabold text-[32px] leading-[1.1] tracking-[-0.01em] text-emerald-600">
             {overallProgress}%
           </p>
-          <p className="mt-2 text-[12px] text-[var(--color-accent-700)]">
-            abaixo do planejado
+          <p className="mt-2 text-[12px] text-emerald-700 font-medium">
+            acima do planejado
           </p>
         </div>
       </div>
