@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Search, ChevronRight, Briefcase } from "lucide-react";
 import { useSampleStore } from "../store/useSampleStore";
 import type { ProjectPartner } from "../types";
 
 export function ProjectSelectionPage() {
   const navigate = useNavigate();
-  const location = useLocation();
+
   const [searchQuery, setSearchQuery] = useState("");
   const setActiveProject = useSampleStore((s) => s.setActiveProject);
 
