@@ -8,7 +8,7 @@ export function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/projetos", { state: { username } });
+    navigate("/projetos");
   };
 
   return (
@@ -50,7 +50,6 @@ export function LoginPage() {
           Memória experimental
         </h1>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5 animate-stagger-1">
             <label htmlFor="username" className="text-sm font-normal text-slate-600 transition-colors">
@@ -67,7 +66,6 @@ export function LoginPage() {
               className="w-full h-11 px-3 border border-[#c0c0c0] bg-[#e6e6e6] text-black text-sm focus:outline-none focus:border-slate-500 focus:bg-white focus:-translate-y-0.5 focus:shadow-sm transition-all duration-300"
             />
           </div>
-
           <div className="flex flex-col gap-1.5 animate-stagger-2">
             <label htmlFor="password" className="text-sm font-normal text-slate-600 transition-colors">
               Senha
