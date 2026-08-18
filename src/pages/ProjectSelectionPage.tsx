@@ -29,7 +29,7 @@ export function ProjectSelectionPage() {
 
   const handleSelectProject = (projectPartner: ProjectPartner) => {
     setActiveProject(projectPartner);
-    navigate("/");
+    navigate("/dashboard");
   };
 
   return (

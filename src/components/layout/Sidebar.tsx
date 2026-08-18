@@ -18,7 +18,7 @@ export function Sidebar() {
   const toggleSidebar = useSampleStore((s) => s.toggleSidebar);
 
   const navItems = [
-    { to: "/", label: "Dashboard Gerencial", icon: LayoutDashboard, end: true },
+    { to: "/dashboard", label: "Dashboard Gerencial", icon: LayoutDashboard, end: true },
     { to: "/amostras", label: "Banco de Amostras", icon: Database, end: false },
     { to: "/literatura", label: "Banco da Literatura", icon: BookOpen, end: false },
   ];

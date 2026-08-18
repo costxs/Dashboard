@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./components/layout/Shell";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SamplesListPage } from "./pages/SamplesListPage";
@@ -11,10 +11,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/projetos" element={<ProjectSelectionPage />} />
         <Route element={<Shell />}>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/amostras" element={<SamplesListPage />} />
           <Route path="/amostras/:id" element={<SampleDetailPage />} />
           <Route path="/literatura" element={<LiteraturePage />} />
