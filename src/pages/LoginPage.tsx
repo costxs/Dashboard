@@ -1,19 +1,34 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+import { entrar } from "../servicos/contexto";
+import { useContexto } from "../store/useContexto";
 
 export function LoginPage() {
-  const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const sessao = useContexto((s) => s.sessao);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  if (sessao) return <Navigate to="/projetos" replace />;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/projetos");
+    setErro(null);
+    setEnviando(true);
+    try {
+      await entrar(email, password); // a sessão muda e o redirecionamento acontece sozinho
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#f0f0f0] p-6 font-sans">
-      <div className="w-full max-w-[420px] border-2 border-[#d0d0d0] p-8 sm:p-10 bg-white shadow-sm animate-[fadeIn_0.5s_ease-out]">
+    <div className="min-h-screen w-full flex items-center justify-center p-6 font-sans bg-[linear-gradient(160deg,var(--color-blue-900)_0%,var(--color-blue-700)_55%,var(--color-blue)_100%)]">
+      <div className="w-full max-w-[420px] bg-white shadow-2xl shadow-black/30 rounded-[18px] overflow-hidden animate-[fadeIn_0.5s_ease-out]">
         <style>
           {`
             @keyframes fadeIn {
@@ -25,70 +40,56 @@ export function LoginPage() {
             .animate-stagger-3 { animation: fadeIn 0.5s ease-out 0.3s both; }
           `}
         </style>
-        {/* Logos container */}
-        <div className="flex items-center justify-center gap-6 mb-10">
-          <div className="w-[150px] h-[85px] flex items-center justify-center">
-            <img 
-              src="/lab-logo-1.png" 
-              alt="Logo Lab 1" 
-              className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
-            />
+        <div className="faixa-lcp" />
+        <div className="p-8 sm:p-10">
+          <div className="flex items-center justify-center gap-6 mb-9">
+            <div className="w-[150px] h-[85px] flex items-center justify-center">
+              <img src="/lab-logo-1.png" alt="LC PETRO" className="max-w-full max-h-full object-contain" />
+            </div>
+            <div className="w-[1px] h-[75px] bg-[var(--color-neutral-300)]" />
+            <div className="w-[150px] h-[85px] flex items-center justify-center">
+              <img src="/lab-logo-2.png" alt="Laboratório" className="max-w-full max-h-full object-contain" />
+            </div>
           </div>
-          <div className="w-[1px] h-[75px] bg-[#d0d0d0]" />
-          <div className="w-[150px] h-[85px] flex items-center justify-center">
-            <img 
-              src="/lab-logo-2.png" 
-              alt="Logo Lab 2" 
-              className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
-            />
-          </div>
+
+          <h1 className="text-[26px] font-bold text-[var(--color-blue-800)] mb-8 leading-tight tracking-tight">
+            Bem-vindo ao<br />
+            <span className="text-[var(--color-red)]">Memória Experimental</span>
+          </h1>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5 animate-stagger-1">
+              <label htmlFor="email" className="text-sm text-[var(--color-neutral-600)]">E-mail</label>
+              <input
+                id="email" name="email" type="email" required autoComplete="username"
+                value={email} onChange={(e) => setEmail(e.target.value)}
+                className="input h-11"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 animate-stagger-2">
+              <label htmlFor="password" className="text-sm text-[var(--color-neutral-600)]">Senha</label>
+              <input
+                id="password" name="password" type="password" required autoComplete="current-password"
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                className="input h-11"
+              />
+            </div>
+
+            {erro && <div className="aviso aviso-erro">{erro}</div>}
+
+            <button
+              type="submit"
+              disabled={enviando}
+              className="mt-3 w-full h-11 rounded-[10px] bg-[var(--color-red)] hover:bg-[var(--color-red-700)] active:scale-[0.98] text-white font-semibold text-base flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 animate-stagger-3 disabled:opacity-60"
+            >
+              {enviando && <Loader2 size={16} className="animate-spin" />}
+              {enviando ? "Entrando…" : "Entrar"}
+            </button>
+            <p className="text-center text-[12px] text-[var(--color-neutral-500)]">
+              Acesso liberado pelo administrador do LC PETRO.
+            </p>
+          </form>
         </div>
-
-        {/* Title */}
-        <h1 className="text-[26px] font-bold text-black mb-8 leading-tight tracking-tight">
-          Bem vindo ao<br />
-          Memória experimental
-        </h1>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5 animate-stagger-1">
-            <label htmlFor="username" className="text-sm font-normal text-slate-600 transition-colors">
-              Usuário
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full h-11 px-3 border border-[#c0c0c0] bg-[#e6e6e6] text-black text-sm focus:outline-none focus:border-slate-500 focus:bg-white focus:-translate-y-0.5 focus:shadow-sm transition-all duration-300"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5 animate-stagger-2">
-            <label htmlFor="password" className="text-sm font-normal text-slate-600 transition-colors">
-              Senha
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-11 px-3 border border-[#c0c0c0] bg-[#e6e6e6] text-black text-sm focus:outline-none focus:border-slate-500 focus:bg-white focus:-translate-y-0.5 focus:shadow-sm transition-all duration-300"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="mt-4 w-full h-11 bg-[#f0320a] hover:bg-[#e02b05] active:scale-[0.98] text-white font-semibold text-base flex items-center justify-center cursor-pointer transition-all duration-200 animate-stagger-3"
-          >
-            Entrar
-          </button>
-        </form>
       </div>
     </div>
   );

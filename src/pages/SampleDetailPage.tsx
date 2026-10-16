@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -6,142 +5,122 @@ import {
   ClipboardList,
   Droplets,
   FlaskConical,
+  Gauge,
   type LucideIcon,
   Microscope,
+  Pencil,
+  RotateCw,
   Scan,
   ScanEye,
 } from "lucide-react";
-import { experimentResults } from "../data/samples";
-import { OverviewTab } from "./sample-tabs/OverviewTab";
-import { PetrographyTab } from "./sample-tabs/PetrographyTab";
-import { CorefloodingTab } from "./sample-tabs/CorefloodingTab";
-import { XrdTab } from "./sample-tabs/XrdTab";
-import { StaticDissolutionTab } from "./sample-tabs/StaticDissolutionTab";
-import { MicroCtTab } from "./sample-tabs/MicroCtTab";
-import { SemTab } from "./sample-tabs/SemTab";
+import { AbaAnalise } from "../components/analises/AbaAnalise";
+import { RdaDaAmostra } from "../components/analises/RdaDaAmostra";
+import { PvbtDaAmostra } from "../components/pvbt/PvbtDaAmostra";
+import { Aviso, Carregando } from "../components/ui/base";
+import { ANALISES } from "../config/analises";
+import { useConsulta } from "../hooks/useConsulta";
+import { obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
+import { rotuloFinalidade } from "../utils/controleRochas";
+import { meuPapel } from "../servicos/contexto";
+import type { AmostraResumo } from "../tipos/banco";
+import { OverviewTab } from "./sample-tabs/VisaoGeralTab";
+import { OrigemTexto } from "./SamplesListPage";
+import { classeStatus, STATUS_ROTULO } from "../utils/status";
 
-type TabKey =
-  | "overview"
-  | "petrography"
-  | "coreflooding"
-  | "xrd"
-  | "static-dissolution"
-  | "microct"
-  | "sem";
-
-interface TabDef {
-  key: TabKey;
-  label: string;
-  icon: LucideIcon;
-}
-
-const tabs: TabDef[] = [
-  { key: "overview", label: "Visão Geral", icon: ClipboardList },
-  { key: "petrography", label: "Análise Petrográfica", icon: Microscope },
-  { key: "coreflooding", label: "Coreflooding", icon: Droplets },
-  { key: "xrd", label: "Difração de Raios X", icon: Atom },
-  { key: "static-dissolution", label: "Dissolução Estática", icon: FlaskConical },
-  { key: "microct", label: "Microtomografia de Raios X", icon: Scan },
-  { key: "sem", label: "Microscopia Eletrônica de Varredura (MEV)", icon: ScanEye },
-];
+// ícone de cada análise (mesma ordem da reunião: 1 Petrofísica … 8 MEV)
+const ICONES: Record<string, LucideIcon> = {
+  petrofisica: Gauge,
+  microct: Scan,
+  coreflooding: Droplets,
+  reatividade: FlaskConical,
+  rda: RotateCw,
+  drx: Atom,
+  petrografia: Microscope,
+  mev: ScanEye,
+};
 
 export function SampleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "geral";
 
-  const result = id ? experimentResults[id] : undefined;
-  const activeTab = (searchParams.get("tab") as TabKey) ?? "overview";
+  const amostra = useConsulta(() => obterAmostra(id!), [id]);
+  // observações e petrofísica "depois": vêm do controle de rochas e a view v_amostras não traz
+  const controle = useConsulta(() => obterControleDaAmostra(id!), [id]);
+  const papel = useConsulta(
+    () => (amostra.dados ? meuPapel(amostra.dados.projeto_id) : Promise.resolve(null)), [amostra.dados?.projeto_id]);
+  const podeEditar = papel.dados === "editor";
 
-  const availability = useMemo(() => {
-    if (!result) return {} as Record<TabKey, boolean>;
-    return {
-      overview: true,
-      petrography: !!result.petrography,
-      coreflooding: !!result.coreflooding,
-      xrd: !!result.xrd,
-      "static-dissolution": !!result.staticDissolution,
-      microct: !!result.microCt,
-      sem: !!result.sem,
-    } satisfies Record<TabKey, boolean>;
-  }, [result]);
-
-  if (!result) {
+  if (amostra.carregando && !amostra.dados) return <Carregando />;
+  if (amostra.erro || !amostra.dados) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
         <p className="font-heading font-bold text-xl text-[var(--color-neutral-500)]">Amostra não encontrada.</p>
-        <button
-          type="button"
-          onClick={() => navigate("/amostras")}
-          className="mt-4 flex items-center gap-1.5 text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-700)] transition-colors"
-        >
+        {amostra.erro && <Aviso tipo="erro">{amostra.erro}</Aviso>}
+        <button type="button" onClick={() => navigate("/amostras")}
+          className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-red)] hover:text-[var(--color-red-700)] transition-colors">
           <ArrowLeft size={15} /> Voltar ao banco de amostras
         </button>
       </div>
     );
   }
 
-  const { sample } = result;
-
-  function setTab(tab: TabKey) {
-    setSearchParams({ tab });
-  }
+  const a = amostra.dados;
+  const abas: { key: string; label: string; icon: LucideIcon; n?: number }[] = [
+    { key: "geral", label: "Visão Geral", icon: ClipboardList },
+    ...ANALISES.map((cfg) => ({
+      key: cfg.chave,
+      label: `${cfg.numero}. ${cfg.titulo}`,
+      icon: ICONES[cfg.chave],
+      n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
+    })),
+  ];
+  const cfgAtiva = ANALISES.find((c) => c.chave === activeTab);
 
   return (
     <div>
       <div className="bg-white border-b border-[var(--color-neutral-300)] px-7 pt-6">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--color-neutral-500)] uppercase tracking-[0.07em]">
-          <span
-            className="cursor-pointer flex items-center gap-1 hover:text-[var(--color-accent)] transition-colors"
-            onClick={() => navigate("/amostras")}
-          >
+          <span className="cursor-pointer flex items-center gap-1 hover:text-[var(--color-red)] transition-colors" onClick={() => navigate("/amostras")}>
             <ArrowLeft size={12} /> Banco de Amostras
           </span>
           <span>/</span>
-          <span>{sample.code}</span>
+          <span>{a.codigo}</span>
         </div>
 
-        <div className="flex items-start justify-between gap-5 mt-5">
+        <div className="flex flex-wrap items-start justify-between gap-5 mt-5">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="m-0 text-[24px] leading-[1.2] font-heading font-extrabold text-[var(--color-accent)]">
-                {sample.code}{" "}
-                <span className="text-[var(--color-text)] font-bold">{sample.name}</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="m-0 text-[26px] leading-[1.2] font-heading font-extrabold text-[var(--color-red)]">
+                {a.codigo} <span className="text-[var(--color-blue-800)] font-bold">{a.litologia}</span>
               </h1>
-              <span className="tag tag-accent">{sample.project}</span>
+              <span className={classeStatus(a.status)}>{STATUS_ROTULO[a.status]}</span>
+              <span className="tag tag-blue">{a.empresa} · {a.projeto}</span>
             </div>
-            <p className="mt-2 text-[13px] text-[var(--color-neutral-700)]">
-              {sample.lithoType} &middot; {sample.well}
+            <p className="mt-2 text-[13px]">
+              <OrigemTexto a={a} />
+              {rotuloFinalidade(a.finalidade) && <span className="tag tag-outline ml-2">{rotuloFinalidade(a.finalidade)}</span>}
             </p>
           </div>
-          <div className="flex flex-wrap gap-1.5 justify-end">
-            {sample.tags.map((tag) => (
-              <span key={tag} className="tag tag-neutral">
-                {tag}
-              </span>
-            ))}
-          </div>
+          {podeEditar && (
+            <button className="btn btn-secondary" onClick={() => navigate(`/amostras/${a.id}/editar`)}><Pencil size={14} /> Editar amostra</button>
+          )}
         </div>
 
-        <div className="flex gap-8 mt-8 overflow-x-auto scrollbar-hide">
-          {tabs.map(({ key, label, icon: Icon }) => {
-            const isActive = activeTab === key;
-            const hasData = availability[key];
+        <div className="flex flex-wrap gap-x-7 gap-y-1 mt-7">
+          {abas.map(({ key, label, icon: Icon, n }) => {
+            const ativa = activeTab === key;
             return (
-              <div
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex items-center gap-2 pb-3 cursor-pointer text-[13px] font-semibold whitespace-nowrap border-b-2 transition-all ${
-                  isActive
-                    ? "border-[var(--color-accent)] text-[var(--color-accent-800)]"
-                    : "border-transparent text-[var(--color-neutral-600)] hover:text-[var(--color-neutral-900)] hover:border-[var(--color-neutral-300)]"
-                }`}
-              >
-                <Icon size={14} className={isActive ? "text-[var(--color-accent)]" : "text-[var(--color-neutral-400)]"} />
+              <div key={key} onClick={() => setSearchParams({ tab: key })}
+                className={`flex items-center gap-2 pb-3 cursor-pointer text-[13px] font-semibold whitespace-nowrap border-b-[3px] transition-all ${ativa
+                  ? "border-[var(--color-orange)] text-[var(--color-blue-800)]"
+                  : "border-transparent text-[var(--color-neutral-600)] hover:text-[var(--color-blue)] hover:border-[var(--color-blue-200)]"}`}>
+                <Icon size={14} className={ativa ? "text-[var(--color-red)]" : "text-[var(--color-neutral-400)]"} />
                 {label}
-                {!hasData && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-neutral-300)] ml-1"></span>
-                )}
+                {n != null && (n > 0
+                  ? <span className="rounded-full bg-[var(--color-blue)] px-1.5 text-[10px] font-bold text-white">{n}</span>
+                  : <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-neutral-300)]" title="Sem registros" />)}
               </div>
             );
           })}
@@ -149,15 +128,11 @@ export function SampleDetailPage() {
       </div>
 
       <div className="px-7 pt-7 pb-10">
-        {activeTab === "overview" && <OverviewTab sample={sample} />}
-        {activeTab === "petrography" && <PetrographyTab data={result.petrography} />}
-        {activeTab === "coreflooding" && <CorefloodingTab data={result.coreflooding} />}
-        {activeTab === "xrd" && <XrdTab data={result.xrd} />}
-        {activeTab === "static-dissolution" && (
-          <StaticDissolutionTab data={result.staticDissolution} />
-        )}
-        {activeTab === "microct" && <MicroCtTab data={result.microCt} />}
-        {activeTab === "sem" && <SemTab data={result.sem} />}
+        {activeTab === "geral" && <OverviewTab a={a} podeEditar={podeEditar} observacoes={controle.dados?.observacoes ?? null} />}
+        {cfgAtiva && <AbaAnalise key={cfgAtiva.chave} cfg={cfgAtiva} amostraId={a.id} podeEditar={podeEditar} aoMudar={amostra.recarregar}
+          amostra={{ finalidade: a.finalidade, status: a.status, codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} controle={controle.dados ?? null}
+          extra={cfgAtiva.chave === "coreflooding" ? <PvbtDaAmostra amostraId={a.id} codigo={a.codigo} />
+            : cfgAtiva.chave === "rda" ? <RdaDaAmostra codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} /> : undefined} />}
       </div>
     </div>
   );

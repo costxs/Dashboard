@@ -7,6 +7,8 @@ interface SelectProps<T extends string> {
   options: T[];
   label?: string;
   className?: string;
+  /** texto exibido para cada opção (ex.: id -> nome); sem isso mostra o próprio valor */
+  rotulos?: Record<string, string>;
 }
 
 export function Select<T extends string>({
@@ -15,7 +17,9 @@ export function Select<T extends string>({
   options,
   label,
   className = "",
+  rotulos,
 }: SelectProps<T>) {
+  const texto = (v: string) => rotulos?.[v] ?? v;
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,13 +46,13 @@ export function Select<T extends string>({
       <div
         className={`flex w-full cursor-pointer items-center justify-between rounded-[10px] border px-4 py-2.5 text-[14px] transition-colors ${
           isOpen
-            ? "border-[var(--color-accent)] ring-1 ring-[var(--color-accent)] bg-white"
+            ? "border-[var(--color-blue)] ring-1 ring-[var(--color-blue)] bg-white"
             : "border-[var(--color-neutral-300)] bg-white hover:border-[var(--color-neutral-400)]"
         }`}
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className="block truncate text-[var(--color-neutral-900)]">
-          {value}
+          {texto(value)}
         </span>
         <ChevronDown
           size={16}
@@ -67,7 +71,7 @@ export function Select<T extends string>({
                 key={opt}
                 className={`relative flex cursor-pointer select-none items-center py-2.5 pl-10 pr-4 text-[14px] transition-colors ${
                   isSelected
-                    ? "bg-[var(--color-accent-50)] text-[var(--color-accent-800)] font-semibold"
+                    ? "bg-[var(--color-blue-50)] text-[var(--color-blue-800)] font-semibold"
                     : "text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-100)] hover:text-[var(--color-neutral-900)]"
                 }`}
                 onClick={() => {
@@ -76,11 +80,11 @@ export function Select<T extends string>({
                 }}
               >
                 {isSelected && (
-                  <span className="absolute left-3.5 flex items-center text-[var(--color-accent)]">
+                  <span className="absolute left-3.5 flex items-center text-[var(--color-orange)]">
                     <Check size={16} strokeWidth={3} />
                   </span>
                 )}
-                <span className="block truncate">{opt}</span>
+                <span className="block truncate">{texto(opt)}</span>
               </div>
             );
           })}

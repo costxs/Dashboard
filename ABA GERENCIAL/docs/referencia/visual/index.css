@@ -1,0 +1,365 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-heading: "Archivo Narrow", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   Paleta LC PETRO: VERMELHO (ação principal), LARANJA (destaque), AZUL (estrutura)
+   --color-accent-* continua existindo para as classes antigas e agora é o vermelho.
+   --------------------------------------------------------------------------- */
+:root {
+  --color-bg: #f5f7fb;
+  --color-text: #0b1b33;
+  --color-divider: #e8edf5;
+
+  /* vermelho */
+  --color-red-50: #fdf1f2;
+  --color-red-100: #fbdfe2;
+  --color-red-200: #f5b8bf;
+  --color-red-400: #e5525f;
+  --color-red: #c8102e;
+  --color-red-600: #b00d27;
+  --color-red-700: #920b20;
+  --color-red-800: #74091a;
+
+  /* laranja (texto laranja usa -700 para ter contraste) */
+  --color-orange-50: #fff5eb;
+  --color-orange-100: #ffe6cc;
+  --color-orange-200: #ffc98f;
+  --color-orange-400: #ff9a2e;
+  --color-orange: #f77f00;
+  --color-orange-600: #d96a00;
+  --color-orange-700: #a85200;
+  --color-orange-800: #7a3c00;
+
+  /* azul */
+  --color-blue-50: #eef3fb;
+  --color-blue-100: #dbe6f6;
+  --color-blue-200: #b3c9ec;
+  --color-blue-400: #4f7fcf;
+  --color-blue: #1f4e9c;
+  --color-blue-600: #183f80;
+  --color-blue-700: #133266;
+  --color-blue-800: #0e254d;
+  --color-blue-900: #0a1a38;
+
+  /* "accent" = vermelho (usado pelos componentes existentes) */
+  --color-accent-50: var(--color-red-50);
+  --color-accent-100: var(--color-red-100);
+  --color-accent-200: var(--color-red-200);
+  --color-accent-300: var(--color-red-200);
+  --color-accent-400: var(--color-red-400);
+  --color-accent: var(--color-red);
+  --color-accent-600: var(--color-red-600);
+  --color-accent-700: var(--color-red-700);
+  --color-accent-800: var(--color-red-800);
+  --color-accent-900: var(--color-red-800);
+
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f4f9;
+  --color-neutral-200: #e3e8f0;
+  --color-neutral-300: #cdd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+
+  /* gráficos: série 1 = azul (literatura), série 2 = laranja (LC PETRO) — paleta validada para daltonismo */
+  --grafico-serie-1: #2a78d6;
+  --grafico-serie-2: #eb6834;
+  --grafico-linha: #c8102e;
+  --grafico-grade: #e3e8f0;
+  --grafico-texto: #475569;
+  --grafico-fundo: #ffffff;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--color-blue);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-red);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-neutral-200);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-neutral-400);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-neutral-600);
+  }
+}
+
+/* faixa tricolor (vermelho · laranja · azul) usada no topo do cabeçalho e no login */
+.faixa-lcp {
+  height: 4px;
+  background: linear-gradient(90deg,
+    var(--color-red) 0 33.3%,
+    var(--color-orange) 33.3% 66.6%,
+    var(--color-blue) 66.6% 100%);
+}
+
+.lcp-row {
+  transition: background-color 0.15s ease;
+}
+.lcp-row:hover {
+  background: var(--color-blue-50);
+}
+
+/* navegação lateral (fundo azul) */
+.lcp-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  color: var(--color-blue-100);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.lcp-nav:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.lcp-nav[data-active="true"],
+.lcp-nav.active {
+  border-left-color: var(--color-orange);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-red);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-red-700);
+}
+.btn-blue {
+  background: var(--color-blue);
+  color: #fff;
+}
+.btn-blue:hover:not(:disabled) {
+  background: var(--color-blue-700);
+}
+.btn-secondary {
+  background: #fff;
+  border: 1px solid var(--color-neutral-300);
+  color: var(--color-text);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-blue-50);
+  border-color: var(--color-blue-200);
+}
+.btn-danger {
+  background: #fff;
+  border: 1px solid var(--color-red-200);
+  color: var(--color-red-700);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-red-50);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 10px;
+  background: #fff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus {
+  border-color: var(--color-blue);
+  box-shadow: 0 0 0 3px var(--color-blue-100);
+}
+select.input {
+  padding-right: 32px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label,
+.field .rotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+.field .ajuda {
+  font-size: 11px;
+  color: var(--color-neutral-500);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.table th {
+  padding: 12px 24px 12px 0;
+  border-bottom: 2px solid var(--color-blue-200);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-blue-700);
+}
+.table td {
+  padding: 14px 24px 14px 0;
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tag-accent {
+  background: var(--color-red-100);
+  color: var(--color-red-800);
+}
+.tag-orange {
+  background: var(--color-orange-100);
+  color: var(--color-orange-800);
+}
+.tag-blue {
+  background: var(--color-blue-100);
+  color: var(--color-blue-800);
+}
+.tag-neutral {
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-800);
+}
+.tag-outline {
+  border: 1px solid var(--color-orange);
+  color: var(--color-orange-700);
+}
+.tag-solid {
+  background: var(--color-blue);
+  color: #fff;
+}
+.tag-muted {
+  border: 1px dashed var(--color-neutral-400);
+  color: var(--color-neutral-600);
+}
+
+/* cartão padrão das páginas */
+.cartao {
+  background: #fff;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 14px;
+}
+.cartao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--color-neutral-300);
+}
+.cartao-topo h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+}
+.cartao-topo p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-neutral-600);
+}
+
+/* selo do projeto no topo das páginas */
+.selo-projeto {
+  display: inline-block;
+  background: var(--color-orange);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.aviso {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.aviso-erro {
+  background: var(--color-red-50);
+  border: 1px solid var(--color-red-200);
+  color: var(--color-red-800);
+}
+.aviso-ok {
+  background: var(--color-blue-50);
+  border: 1px solid var(--color-blue-200);
+  color: var(--color-blue-800);
+}
+.aviso-info {
+  background: var(--color-orange-50);
+  border: 1px solid var(--color-orange-200);
+  color: var(--color-orange-800);
+}

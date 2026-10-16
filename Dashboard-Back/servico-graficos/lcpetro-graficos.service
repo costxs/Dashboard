@@ -1,0 +1,15 @@
+# /etc/systemd/system/lcpetro-graficos.service  (VM Debian da UFPA)
+[Unit]
+Description=LC PETRO - servico de graficos (padrao Origin)
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/lcpetro-graficos
+EnvironmentFile=/opt/lcpetro-graficos/.env
+Environment=MPLCONFIGDIR=/tmp/matplotlib
+ExecStart=/opt/lcpetro-graficos/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8010 --workers 2
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

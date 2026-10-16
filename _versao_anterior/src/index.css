@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-heading: "Archivo Narrow", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --color-bg: #f8fafc; /* slate-50 */
+  --color-text: #0f172a; /* slate-900 */
+  --color-divider: #f1f5f9; /* slate-100 */
+  
+  --color-accent-50: #fff3ed;
+  --color-accent-100: #ffe4d5;
+  --color-accent-200: #ffc6a6;
+  --color-accent-300: #ffa06d;
+  --color-accent-400: #ff6d2b;
+  --color-accent: #f5460b;
+  --color-accent-600: #db2b04;
+  --color-accent-700: #b61c05;
+  --color-accent-800: #91160a;
+  --color-accent-900: #75140b;
+  
+  --color-neutral-200: #e2e8f0; /* slate-200 */
+  --color-neutral-300: #cbd5e1; /* slate-300 */
+  --color-neutral-400: #94a3b8; /* slate-400 */
+  --color-neutral-500: #64748b; /* slate-500 */
+  --color-neutral-600: #475569; /* slate-600 */
+  --color-neutral-700: #334155; /* slate-700 */
+  --color-neutral-800: #1e293b; /* slate-800 */
+  --color-neutral-900: #0f172a; /* slate-900 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-accent-700);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-200);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-400);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-600);
+}
+
+/* Base utility classes from prototype */
+.lcp-row {
+  transition: background-color 0.15s ease;
+}
+.lcp-row:hover {
+  background: var(--color-accent-100);
+}
+
+.lcp-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  color: var(--color-neutral-800);
+  transition: background-color 0.15s ease;
+}
+.lcp-nav:hover {
+  background: var(--color-neutral-200);
+}
+.lcp-nav[data-active="true"] {
+  border-left-color: var(--color-accent);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--color-neutral-300);
+  color: var(--color-text);
+}
+.btn-secondary:hover {
+  background: var(--color-neutral-200);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 10px;
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.input:focus {
+  border-color: var(--color-accent);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.table th {
+  padding: 12px 24px 12px 0;
+  border-bottom: 2px solid var(--color-neutral-300);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+.table td {
+  padding: 16px 24px 16px 0;
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tag-accent {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.tag-neutral {
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-800);
+}
+.tag-outline {
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent-700);
+}
+.tag-solid {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+.tag-muted {
+  border: 1px dashed var(--color-neutral-400);
+  color: var(--color-neutral-600);
+}
