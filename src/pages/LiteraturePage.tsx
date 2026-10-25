@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Simbolos } from "../components/ui/Simbolos";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronUp, Download, ExternalLink, FileText, Layers, LineChart, Lock, Pencil, Plus, Table2 } from "lucide-react";
+import { ChevronUp, Download, ExternalLink, FileText, Layers, LineChart, Lock, Pencil, Table2 } from "lucide-react";
 import { GraficoRda } from "../components/charts/GraficoRda";
 import { MedidasAgrupadas, type Agrupamento } from "../components/literatura/MedidasAgrupadas";
 import { PainelPvbt } from "../components/pvbt/PainelPvbt";
@@ -12,12 +12,11 @@ import { ANALISES } from "../config/analises";
 import { useConsulta } from "../hooks/useConsulta";
 import { linkArquivo } from "../servicos/analises";
 import { listarLitologias, listarSistemasAcidos } from "../servicos/amostras";
-import { listarProjetos, souEditor } from "../servicos/contexto";
+import { listarProjetos } from "../servicos/contexto";
 import { arquivosDaPublicacao, listarDadosRda, listarPublicacoes, listarRochasLiteratura, pontosComparacao, publicacoesComArquivo, type FiltroRda } from "../servicos/literatura";
 import { listarPvbt } from "../servicos/pvbt";
 import { useContexto } from "../store/useContexto";
 import type { DadoLiteraturaRda, Publicacao } from "../tipos/banco";
-import { FormularioPublicacao } from "./literatura/FormularioPublicacao";
 
 const TODOS = "Todos";
 const EIXOS: Record<string, string> = Object.fromEntries(ANALISES.map((a) => [a.chave, `${a.numero}. ${a.titulo}`]));
@@ -333,18 +332,6 @@ function Propria() {
   const [ordem, setOrdem] = useState("Mais recentes");
   const pubs = useConsulta(() => listarPublicacoes({ categoria: "propria", eixo: eixo !== TODOS ? eixo : undefined }), [eixo]);
   const comPdf = useConsulta(publicacoesComArquivo, []);
-  const [editando, setEditando] = useState<Publicacao | "nova" | null>(null);
-  const editor = useConsulta(souEditor, []);
-
-  if (editando) {
-    return (
-      <div className="px-7 pt-6 pb-10">
-        <FormularioPublicacao publicacao={editando === "nova" ? undefined : editando}
-          aoCancelar={() => setEditando(null)} aoSalvar={() => { setEditando(null); pubs.recarregar(); comPdf.recarregar(); }} />
-      </div>
-    );
-  }
-
   const lista =[...(pubs.dados ?? [])].sort((a, b) =>
     ordem === "Mais recentes" ? (b.ano_ordem ?? 0) - (a.ano_ordem ?? 0) : (a.ano_ordem ?? 0) - (b.ano_ordem ?? 0));
 
@@ -354,11 +341,10 @@ function Propria() {
         <Select className="min-w-[240px]" label="Filtrar por eixo" value={eixo} onChange={setEixo}
           options={[TODOS, ...Object.keys(EIXOS)]} rotulos={EIXOS} />
         <Select className="min-w-[200px]" label="Ordenação" value={ordem} onChange={setOrdem} options={["Mais recentes", "Mais antigas"]} />
-        {editor.dados && <button className="btn btn-primary ml-auto" onClick={() => setEditando("nova")}><Plus size={14} /> Nova publicação</button>}
       </div>
       <div className="px-7 pt-6 pb-10">
         {pubs.erro && <Aviso tipo="erro">{pubs.erro}</Aviso>}
-        <ListaPublicacoes lista={pubs.dados ? lista : null} comPdf={comPdf.dados} aoEditar={editor.dados ? setEditando : undefined} />
+        <ListaPublicacoes lista={pubs.dados ? lista : null} comPdf={comPdf.dados} />
       </div>
     </>
   );

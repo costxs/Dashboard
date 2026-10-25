@@ -8,12 +8,12 @@ import {
   Gauge,
   type LucideIcon,
   Microscope,
-  Pencil,
   RotateCw,
   Scan,
   ScanEye,
 } from "lucide-react";
 import { AbaAnalise } from "../components/analises/AbaAnalise";
+import { PermeabilidadeCoreflood } from "../components/analises/PermeabilidadeCoreflood";
 import { RdaDaAmostra } from "../components/analises/RdaDaAmostra";
 import { PvbtDaAmostra } from "../components/pvbt/PvbtDaAmostra";
 import { Aviso, Carregando } from "../components/ui/base";
@@ -21,7 +21,6 @@ import { ANALISES } from "../config/analises";
 import { useConsulta } from "../hooks/useConsulta";
 import { obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
 import { rotuloFinalidade } from "../utils/controleRochas";
-import { meuPapel } from "../servicos/contexto";
 import type { AmostraResumo } from "../tipos/banco";
 import { OverviewTab } from "./sample-tabs/VisaoGeralTab";
 import { OrigemTexto } from "./SamplesListPage";
@@ -48,9 +47,6 @@ export function SampleDetailPage() {
   const amostra = useConsulta(() => obterAmostra(id!), [id]);
   // observações e petrofísica "depois": vêm do controle de rochas e a view v_amostras não traz
   const controle = useConsulta(() => obterControleDaAmostra(id!), [id]);
-  const papel = useConsulta(
-    () => (amostra.dados ? meuPapel(amostra.dados.projeto_id) : Promise.resolve(null)), [amostra.dados?.projeto_id]);
-  const podeEditar = papel.dados === "editor";
 
   if (amostra.carregando && !amostra.dados) return <Carregando />;
   if (amostra.erro || !amostra.dados) {
@@ -67,16 +63,20 @@ export function SampleDetailPage() {
   }
 
   const a = amostra.dados;
+  const todas = ANALISES.map((cfg) => ({
+    key: cfg.chave,
+    label: `${cfg.numero}. ${cfg.titulo}`,
+    icon: ICONES[cfg.chave],
+    n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
+  }));
+  // só aparecem as abas dos ensaios que foram realizados nesta amostra. Os ensaios são lançados no painel gerencial:
+  // aqui as abas são só de consulta
   const abas: { key: string; label: string; icon: LucideIcon; n?: number }[] = [
     { key: "geral", label: "Visão Geral", icon: ClipboardList },
-    ...ANALISES.map((cfg) => ({
-      key: cfg.chave,
-      label: `${cfg.numero}. ${cfg.titulo}`,
-      icon: ICONES[cfg.chave],
-      n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
-    })),
+    ...todas.filter((t) => t.n > 0),
   ];
-  const cfgAtiva = ANALISES.find((c) => c.chave === activeTab);
+  const cfgAtiva = abas.some((t) => t.key === activeTab) ? ANALISES.find((c) => c.chave === activeTab) : undefined;
+  const semEnsaio = todas.every((t) => t.n === 0);
 
   return (
     <div>
@@ -103,9 +103,6 @@ export function SampleDetailPage() {
               {rotuloFinalidade(a.finalidade) && <span className="tag tag-outline ml-2">{rotuloFinalidade(a.finalidade)}</span>}
             </p>
           </div>
-          {podeEditar && (
-            <button className="btn btn-secondary" onClick={() => navigate(`/amostras/${a.id}/editar`)}><Pencil size={14} /> Editar amostra</button>
-          )}
         </div>
 
         <div className="flex flex-wrap gap-x-7 gap-y-1 mt-7">
@@ -128,9 +125,15 @@ export function SampleDetailPage() {
       </div>
 
       <div className="px-7 pt-7 pb-10">
-        {activeTab === "geral" && <OverviewTab a={a} podeEditar={podeEditar} observacoes={controle.dados?.observacoes ?? null} />}
-        {cfgAtiva && <AbaAnalise key={cfgAtiva.chave} cfg={cfgAtiva} amostraId={a.id} podeEditar={podeEditar} aoMudar={amostra.recarregar}
+        {activeTab === "geral" && a.status === "utilizada" && semEnsaio && (
+          <div className="mb-5"><Aviso tipo="info">Esta amostra está como utilizada, mas não tem nenhum ensaio registrado.</Aviso></div>
+        )}
+        {activeTab === "geral" && <OverviewTab a={a} podeEditar={false} observacoes={controle.dados?.observacoes ?? null} />}
+        {cfgAtiva && <AbaAnalise key={cfgAtiva.chave} cfg={cfgAtiva} amostraId={a.id} podeEditar={false} aoMudar={amostra.recarregar}
           amostra={{ finalidade: a.finalidade, status: a.status, codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} controle={controle.dados ?? null}
+          antes={cfgAtiva.chave === "coreflooding"
+            ? <PermeabilidadeCoreflood amostraId={a.id} amostra={{ codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} />
+            : undefined}
           extra={cfgAtiva.chave === "coreflooding" ? <PvbtDaAmostra amostraId={a.id} codigo={a.codigo} />
             : cfgAtiva.chave === "rda" ? <RdaDaAmostra codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} /> : undefined} />}
       </div>

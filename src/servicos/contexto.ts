@@ -7,6 +7,40 @@ export async function entrar(email: string, senha: string) {
   if (error) throw new Error(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message)
 }
 
+/**
+ * Pedido de acesso: cria a conta no Supabase Auth. O banco (migração 020) cria o perfil como PENDENTE,
+ * com a instituição e o motivo; até o administrador aprovar no gerencial, a pessoa não vê nada.
+ * Devolve true quando o Supabase exige confirmar o e-mail antes do primeiro login.
+ */
+export async function registrar(d: { nome: string; email: string; senha: string; instituicao: string; motivo: string }): Promise<boolean> {
+  const { data, error } = await supabase.auth.signUp({
+    email: d.email.trim(), password: d.senha,
+    options: {
+      data: { nome: d.nome.trim(), instituicao: d.instituicao.trim(), motivo: d.motivo.trim() },
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
+  })
+  if (error) {
+    if (/already registered|already exists/i.test(error.message)) throw new Error('Já existe uma conta com este e-mail: entre com a sua senha.')
+    if (/signups? not allowed|disabled/i.test(error.message)) throw new Error('O cadastro está desligado no momento. Fale com o administrador do LC PETRO.')
+    if (/password/i.test(error.message)) throw new Error('Senha fraca: use pelo menos 8 caracteres, com letras e números.')
+    throw new Error(error.message)
+  }
+  return !data.session
+}
+
+/** Link de "esqueci minha senha": o Supabase manda um e-mail que abre /redefinir-senha deste dashboard. */
+export async function pedirNovaSenha(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/redefinir-senha` })
+  if (error) throw new Error(/rate|seconds/i.test(error.message) ? 'Muitos pedidos seguidos: espere um minuto e tente de novo.' : error.message)
+}
+
+/** Define a senha na sessão temporária aberta pelo link do e-mail (convite ou recuperação). */
+export async function definirSenha(senha: string) {
+  const { error } = await supabase.auth.updateUser({ password: senha })
+  if (error) throw new Error(/password/i.test(error.message) ? 'Senha fraca: use pelo menos 8 caracteres, com letras e números.' : error.message)
+}
+
 export async function sair() {
   await supabase.auth.signOut()
 }

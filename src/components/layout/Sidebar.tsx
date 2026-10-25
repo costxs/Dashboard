@@ -2,12 +2,12 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   ChevronLeft,
+  ChartScatter,
   ChevronRight,
   Database,
   LayoutDashboard,
   Microscope,
   Repeat,
-  Settings,
 } from "lucide-react";
 import { LogoEmpresa } from "../LogoEmpresa";
 import { useContexto } from "../../store/useContexto";
@@ -20,11 +20,11 @@ export function Sidebar() {
   const empresaSigla = useContexto((s) => s.empresaSigla);
   const empresaNome = useContexto((s) => s.empresaNome);
   const projetoNome = useContexto((s) => s.projetoNome);
-  const admin = useContexto((s) => s.perfil?.administrador);
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard Gerencial", icon: LayoutDashboard },
     { to: "/amostras", label: "Banco de Amostras", icon: Database },
+    { to: "/comparacao", label: "Comparação de resultados", icon: ChartScatter },
   ];
   const abaLiteratura = new URLSearchParams(location.search).get("aba") ?? "geral";
   const naLiteratura = location.pathname.startsWith("/literatura");
@@ -80,13 +80,6 @@ export function Sidebar() {
         </div>
 
         {!recolhido && <Secao texto="Laboratório" />}
-        {admin && (
-          <NavLink to="/administracao" title={recolhido ? "Administração" : undefined}
-            className={({ isActive }) => classeItem(isActive)}>
-            <Settings size={17} className="shrink-0" />
-            {!recolhido && "Administração"}
-          </NavLink>
-        )}
         <div className={`flex items-center text-sm text-[var(--color-blue-400)] cursor-not-allowed ${recolhido ? "justify-center py-4" : "gap-3 px-5 py-2.5"}`}
           title="Em breve">
           <Microscope size={17} />

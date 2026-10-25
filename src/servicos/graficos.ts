@@ -102,21 +102,50 @@ export function montarPedido(d: DadosEnsaio, c: ConfigGraficos, modo: Modo, form
   };
 }
 
+/** Plano grátis do Render: depois de ~15 min parado o serviço dorme e leva ~1 min para acordar; as chamadas feitas
+ *  nesse intervalo falham no navegador. Chama /saude até responder (só fora do computador local) e lembra por 10 min. */
+let acordadoAte = 0
+async function acordarServico(url: string, sinal?: AbortSignal): Promise<void> {
+  if (/\/\/(localhost|127\.0\.0\.1)/.test(url) || Date.now() < acordadoAte) return
+  for (let i = 0; i < 12; i++) {
+    try {
+      const r = await fetch(`${url}/saude`, { signal: sinal })
+      if (r.ok) { acordadoAte = Date.now() + 10 * 60_000; return }
+    } catch (e) {
+      if (sinal?.aborted) throw e
+    }
+    await new Promise((ok) => setTimeout(ok, 5000))
+  }
+}
+
 /** POST /permeabilidade/grafico com o token da sessão; devolve a imagem ou lança o erro em português */
-export async function pedirGrafico(corpo: string, sinal?: AbortSignal): Promise<Blob> {
+export async function pedirGrafico(corpo: string, sinal?: AbortSignal, rota = "permeabilidade/grafico"): Promise<Blob> {
   if (!URL_GRAFICOS) throw new Error("Falta o endereço do serviço de gráficos (VITE_URL_GRAFICOS).");
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Sua sessão expirou: entre de novo para ver os gráficos.");
+  await acordarServico(URL_GRAFICOS, sinal);
   let r: Response;
   try {
-    r = await fetch(`${URL_GRAFICOS}/permeabilidade/grafico`, {
+    r = await fetch(`${URL_GRAFICOS}/${rota}`, {
       method: "POST", signal: sinal, body: corpo,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     });
   } catch (e) {
     if (sinal?.aborted) throw e;
-    throw new Error(`O serviço de gráficos não respondeu (${URL_GRAFICOS}).`);
+    if (URL_GRAFICOS.includes('localhost')) {
+      const fallbackUrl = URL_GRAFICOS.replace('localhost', '127.0.0.1');
+      try {
+        r = await fetch(`${fallbackUrl}/${rota}`, {
+          method: "POST", signal: sinal, body: corpo,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        throw new Error(`O serviço de gráficos não respondeu (${URL_GRAFICOS}).`);
+      }
+    } else {
+      throw new Error(`O serviço de gráficos não respondeu (${URL_GRAFICOS}).`);
+    }
   }
   if (r.ok) return r.blob();
   const detalhe = await r.json().then((j: { detail?: unknown }) => j.detail).catch(() => null);
@@ -135,4 +164,19 @@ export function baixarArquivo(blob: Blob, nome: string) {
   a.download = nome;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---- acidificação: os três gráficos do padrão Origin, montados pelo backend com o que foi GRAVADO ----
+// (curva ΔP × tempo + fases do tratamento). O backend lê o banco com o login de quem pede: o RLS decide.
+export type GraficoAcid = "geral" | "pv" | "apos";
+
+export function pedirGraficoAcidificacao(analiseId: number, qual: GraficoAcid, formato: Formato, dpi: number, sinal?: AbortSignal): Promise<Blob> {
+  return pedirGrafico(JSON.stringify({ analise_id: analiseId, qual, formato, dpi }), sinal, "acidificacao/grafico-salvo");
+}
+
+// ---- comparação de resultados (PVbt): o backend desenha, com os dados que a pessoa pode ver (RLS) ----
+export type VisaoComparacao = "barras" | "velocidade";
+
+export function pedirComparacaoPvbt(amostras: string[], visao: VisaoComparacao, formato: Formato, dpi: number, sinal?: AbortSignal): Promise<Blob> {
+  return pedirGrafico(JSON.stringify({ amostras, visao, formato, dpi }), sinal, "comparacao/pvbt");
 }

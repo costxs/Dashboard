@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Briefcase, ChevronRight, FolderKanban, LogOut, Search, Settings } from "lucide-react";
+import { ArrowLeft, Briefcase, ChevronRight, FolderKanban, LogOut, Search } from "lucide-react";
 import { LogoEmpresa } from "../components/LogoEmpresa";
 import { Aviso, Carregando } from "../components/ui/base";
 import { useConsulta } from "../hooks/useConsulta";
@@ -71,11 +71,6 @@ export function ProjectSelectionPage() {
               />
             </div>
             <div className="flex items-center gap-1">
-              {perfil?.administrador && (
-                <button className="btn btn-secondary" onClick={() => navigate("/administracao")} title="Empresas, projetos e acessos">
-                  <Settings size={14} /> Administração
-                </button>
-              )}
               <button className="btn btn-secondary" onClick={() => sair()} title="Sair"><LogOut size={14} /></button>
             </div>
           </div>
@@ -119,7 +114,6 @@ export function ProjectSelectionPage() {
                   <Briefcase size={32} className="text-[var(--color-neutral-300)]" />
                   {empresas.dados.length === 0
                     ? <span>Você ainda não tem acesso a nenhum projeto. Peça ao administrador do LC PETRO.
-                        {perfil?.administrador && <> Como administrador, crie a primeira empresa em <button className="underline text-[var(--color-red)]" onClick={() => navigate("/administracao")}>Administração</button>.</>}
                       </span>
                     : <span>Nenhuma empresa encontrada com "{searchQuery}"</span>}
                 </div>

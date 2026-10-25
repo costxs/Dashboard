@@ -4,11 +4,15 @@ import { Mountain, Drill } from "lucide-react";
 import { Aviso, CabecalhoPagina, Campo } from "../components/ui/base";
 import { mensagemErro, paraNumero } from "../utils/formatacao";
 import { useConsulta } from "../hooks/useConsulta";
-import { criarLitologia, listarLitologias, obterAmostraEditavel, salvarAmostra } from "../servicos/amostras";
+import { criarLitologia, listarLitologias, obterAmostra, obterAmostraEditavel, salvarAmostra } from "../servicos/amostras";
+import { ANALISES } from "../config/analises";
 import { listarProjetos } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
-import type { Amostra, StatusAmostra, TipoOrigem } from "../tipos/banco";
+import type { Amostra, AmostraResumo, StatusAmostra, TipoOrigem } from "../tipos/banco";
 import { STATUS_ROTULO } from "../utils/status";
+
+// no cadastro só há estas situações; "Utilizada" exige um ensaio já registrado na amostra
+const STATUS_CADASTRO: StatusAmostra[] = ["disponivel", "reservada", "utilizada"];
 
 type Rascunho = Partial<Record<keyof Amostra, string>>;
 
@@ -35,6 +39,10 @@ export function SampleFormPage() {
   const [novaLitologia, setNovaLitologia] = useState("");
   const litologias = useConsulta(listarLitologias, []);
   const projetos = useConsulta(() => listarProjetos(empresaId ?? undefined), [empresaId]);
+  // ensaios já registrados nesta amostra (amostra nova: nenhum)
+  const resumo = useConsulta(() => (id ? obterAmostra(id) : Promise.resolve(null)), [id]);
+  const nEnsaios = resumo.dados ? ANALISES.reduce((t, c) => t + Number(resumo.dados![c.contador as keyof AmostraResumo] ?? 0), 0) : 0;
+  const temEnsaio = nEnsaios > 0;
 
   useEffect(() => {
     if (!id) return;
@@ -84,6 +92,10 @@ export function SampleFormPage() {
     // coluna antiga: só guarda valor único (mesma regra do importador)
     dados.permeabilidade_fabricante_md = kDe === kAte ? kDe : null;
     if (origem === "testemunho" && !r.poco) { setErro("Testemunho precisa do poço."); return; }
+    if (r.status === "utilizada" && !temEnsaio) {
+      setErro('Uma amostra "Utilizada" precisa ter um ensaio registrado: salve como Disponível ou Reservada, lance o ensaio no painel gerencial e depois marque como Utilizada.');
+      return;
+    }
     setSalvando(true);
     try {
       const salva = await salvarAmostra(dados as Parameters<typeof salvarAmostra>[0]);
@@ -98,7 +110,7 @@ export function SampleFormPage() {
   return (
     <div>
       <CabecalhoPagina titulo={id ? `Editar amostra ${r.codigo ?? ""}` : "Nova amostra"}
-        subtitulo="Os ensaios (petrofísica, coreflooding, RDA…) são lançados depois, nas abas da ficha da amostra." />
+        subtitulo="Os ensaios (petrofísica, coreflooding, RDA…) são lançados depois, no painel gerencial." />
 
       <form onSubmit={enviar} className="px-7 pb-10 flex flex-col gap-6 max-w-5xl">
         <div className="cartao p-6 grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -115,9 +127,12 @@ export function SampleFormPage() {
               {litologias.dados?.map((l) => <option key={l.nome}>{l.nome}</option>)}
             </select>
           </Campo>
-          <Campo rotulo="Status">
+          <Campo rotulo="Status" ajuda={temEnsaio ? undefined : '"Utilizada" só depois de lançar um ensaio no gerencial'}>
             <select {...campo("status")}>
-              {(Object.keys(STATUS_ROTULO) as StatusAmostra[]).map((s) => <option key={s} value={s}>{STATUS_ROTULO[s]}</option>)}
+              {/* uma amostra antiga com outro status continua mostrando o dela */}
+              {[...STATUS_CADASTRO, ...(r.status && !STATUS_CADASTRO.includes(r.status as StatusAmostra) ? [r.status as StatusAmostra] : [])].map((s) => (
+                <option key={s} value={s} disabled={s === "utilizada" && !temEnsaio}>{STATUS_ROTULO[s]}</option>
+              ))}
             </select>
           </Campo>
           <div className="md:col-span-4 flex items-end gap-2 text-[12px]">

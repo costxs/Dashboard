@@ -14,6 +14,8 @@ export interface Perfil {
   nome: string | null
   administrador: boolean
   ativo: boolean
+  // migração 020: quem se registra pelo dashboard fica pendente até o administrador aprovar
+  situacao?: "pendente" | "aprovado" | "recusado"
 }
 
 export interface Empresa {
@@ -190,6 +192,35 @@ export interface PermeabilidadeEtapa {
   k_equipamento_md: number | null
   estavel: boolean | null
   usada: boolean
+}
+
+/** Colunas de analise_coreflooding gravadas pelo tratamento de acidificação (migração 018). */
+export interface AcidificacaoGravada {
+  equipamento_aquisicao?: "JBV" | "DCI" | null
+  volume_poroso_usado_cm3?: number | null
+  volume_acido_bt_cm3?: number | null
+  criterio_bt?: string | null           // 'ΔP caiu 95 % do inicial (...) até o patamar (...)'
+  pvbt_equipamento?: number | null      // o que o próprio equipamento calculou
+  arquivo_origem?: string | null
+}
+
+/** Tabela acidificacao_fases (migração 018): uma fase (garrafa + vazão) do ensaio de acidificação. */
+export interface AcidificacaoFase {
+  id: number
+  analise_id: number
+  ordem: number
+  garrafa: number | null                // vazio se veio só do rótulo do pesquisador
+  rotulo: string | null                 // "<fluido> @<Q>"
+  papel: "pre_fluxo" | "acido" | "pos_fluxo" | "outro"
+  fluido: string | null
+  t_inicio_s: number | null
+  t_fim_s: number | null
+  n_pontos: number | null
+  volume_cm3: number | null
+  vazao_ml_min: number | null
+  dp_inicial_psi: number | null
+  dp_final_psi: number | null
+  dp_max_psi: number | null
 }
 
 export interface Curva {

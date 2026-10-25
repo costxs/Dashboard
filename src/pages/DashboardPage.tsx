@@ -1,9 +1,7 @@
-import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Aviso, CabecalhoPagina, Carregando } from "../components/ui/base";
-import { fmt, fmtData, mensagemErro } from "../utils/formatacao";
+import { fmt, fmtData } from "../utils/formatacao";
 import { useConsulta } from "../hooks/useConsulta";
-import { apagarWorkPackage, dashboard, listarWorkPackages, meuPapel, salvarWorkPackage } from "../servicos/contexto";
+import { dashboard, listarWorkPackages } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
 import type { WorkPackage } from "../tipos/banco";
 
@@ -23,9 +21,6 @@ export function DashboardPage() {
   const resumo = useConsulta(() => dashboard(projetoId ?? undefined, empresaId ?? undefined), [projetoId, empresaId]);
   const ids = (resumo.dados ?? []).map((r) => r.projeto_id);
   const wps = useConsulta(() => listarWorkPackages(ids), [ids.join(",")]);
-  const papel = useConsulta(() => (projetoId ? meuPapel(projetoId) : Promise.resolve(null)), [projetoId]);
-  const podeEditar = papel.dados === "editor";
-  const [editando, setEditando] = useState<Partial<WorkPackage> | null>(null);
 
   if (resumo.carregando && !resumo.dados) return <Carregando />;
   if (resumo.erro) return <div className="p-7"><Aviso tipo="erro">{resumo.erro}</Aviso></div>;
@@ -84,23 +79,13 @@ export function DashboardPage() {
           <h2 className="m-0 text-[19px] text-[var(--color-blue-800)]">Work packages</h2>
           <div className="flex items-center gap-4">
             <Legenda />
-            {podeEditar && projetoId && (
-              <button className="btn btn-primary" onClick={() => setEditando({ projeto_id: projetoId, codigo: `WP${listaWps.length + 1}` })}>
-                <Plus size={14} /> Novo WP
-              </button>
-            )}
           </div>
         </div>
-
-        {editando && (
-          <FormularioWp wp={editando} aoFechar={() => setEditando(null)} aoSalvar={() => { setEditando(null); wps.recarregar(); resumo.recarregar(); }} />
-        )}
 
         {wps.erro && <Aviso tipo="erro">{wps.erro}</Aviso>}
         {listaWps.length === 0 && !wps.carregando && (
           <p className="text-[13px] text-[var(--color-neutral-600)]">
             Nenhum work package cadastrado{projetoId ? " neste projeto" : ""}.
-            {!projetoId && " Abra um projeto específico para cadastrar."}
           </p>
         )}
         {listaWps.length > 0 && (
@@ -113,7 +98,6 @@ export function DashboardPage() {
                 <th className="w-[110px]">Prazo</th>
                 <th className="w-[120px]">Status</th>
                 <th className="w-[260px] text-right">Evolução</th>
-                {podeEditar && <th className="w-[70px]" />}
               </tr>
             </thead>
             <tbody>
@@ -127,13 +111,6 @@ export function DashboardPage() {
                   <td>
                     <BarraWp planejado={wp.progresso_planejado ?? 0} realizado={wp.progresso_realizado ?? 0} codigo={wp.codigo} />
                   </td>
-                  {podeEditar && (
-                    <td className="text-right">
-                      <button title="Editar" className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-blue)]" onClick={() => setEditando(wp)}><Pencil size={14} /></button>
-                      <button title="Apagar" className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-red)]"
-                        onClick={async () => { if (confirm(`Apagar ${wp.codigo}?`)) { await apagarWorkPackage(wp.id); wps.recarregar(); } }}><Trash2 size={14} /></button>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
@@ -176,39 +153,6 @@ function Legenda() {
     <div className="flex items-center gap-3 text-[11px] text-[var(--color-neutral-600)]">
       <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-full bg-[var(--color-blue)]" /> realizado</span>
       <span className="flex items-center gap-1"><span className="inline-block h-3 w-[3px] rounded bg-[var(--color-orange)]" /> planejado</span>
-    </div>
-  );
-}
-
-function FormularioWp(p: { wp: Partial<WorkPackage>; aoFechar: () => void; aoSalvar: () => void }) {
-  const [v, setV] = useState({
-    codigo: p.wp.codigo ?? "", nome: p.wp.nome ?? "", inicio: p.wp.inicio ?? "", fim: p.wp.fim ?? "",
-    progresso_planejado: String(p.wp.progresso_planejado ?? ""), progresso_realizado: String(p.wp.progresso_realizado ?? ""),
-  });
-  const [erro, setErro] = useState<string | null>(null);
-  const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value });
-  async function salvar() {
-    try {
-      await salvarWorkPackage({
-        projeto_id: p.wp.projeto_id!, codigo: v.codigo, nome: v.nome, inicio: v.inicio || null, fim: v.fim || null,
-        progresso_planejado: v.progresso_planejado === "" ? null : Number(v.progresso_planejado),
-        progresso_realizado: v.progresso_realizado === "" ? null : Number(v.progresso_realizado),
-      });
-      p.aoSalvar();
-    } catch (e) { setErro(mensagemErro(e)); }
-  }
-  return (
-    <div className="cartao mb-5 p-5 grid grid-cols-2 lg:grid-cols-6 gap-4 items-end">
-      <label className="field"><span className="rotulo">Código</span><input className="input" value={v.codigo} onChange={set("codigo")} /></label>
-      <label className="field col-span-2"><span className="rotulo">Descrição</span><input className="input" value={v.nome} onChange={set("nome")} /></label>
-      <label className="field"><span className="rotulo">Prazo</span><input className="input" type="date" value={v.fim} onChange={set("fim")} /></label>
-      <label className="field"><span className="rotulo">Planejado (%)</span><input className="input" inputMode="numeric" value={v.progresso_planejado} onChange={set("progresso_planejado")} /></label>
-      <label className="field"><span className="rotulo">Realizado (%)</span><input className="input" inputMode="numeric" value={v.progresso_realizado} onChange={set("progresso_realizado")} /></label>
-      {erro && <div className="col-span-full"><Aviso tipo="erro">{erro}</Aviso></div>}
-      <div className="col-span-full flex gap-2">
-        <button className="btn btn-primary" onClick={salvar} disabled={!v.codigo || !v.nome}>Salvar</button>
-        <button className="btn btn-secondary" onClick={p.aoFechar}>Cancelar</button>
-      </div>
     </div>
   );
 }

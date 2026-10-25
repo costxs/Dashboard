@@ -12,6 +12,14 @@ export function fmt(v: unknown, casas = 2, cientifico = false): string {
   return n.toLocaleString("pt-BR", { maximumFractionDigits: casas });
 }
 
+/** Número como está, com todas as casas decimais (sem arredondar), em formato pt-BR. */
+export function fmtExato(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 12 });
+}
+
 /** Permeabilidade do fabricante: "30–50 mD" quando é faixa, "46 mD" quando é valor único. */
 export function fmtPermFabricante(a: {
   permeabilidade_fabricante_min_md?: number | null;

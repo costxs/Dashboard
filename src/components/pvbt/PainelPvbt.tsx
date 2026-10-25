@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Download, Focus } from 'lucide-react'
 import { Select } from '../ui/Select'
 import { Simbolos } from '../ui/Simbolos'
 import { Aviso, Carregando, Cartao } from '../ui/base'
-import { fmt } from '../../utils/formatacao'
+import { fmt, fmtExato } from '../../utils/formatacao'
 import type { FontePvbt, PontoPvbt } from '../../tipos/banco'
 import { GraficoPvbt } from './GraficoPvbt'
 import { COR_FONTE, ROTULO_FONTE, chaveSerie, sistema, subtituloSerie, temperatura, tituloSerie } from './seriesPvbt'
@@ -146,7 +146,7 @@ function Grupo({ g, serie, aberto, onAlternar, destacada, onDestacar, aoAbrirAmo
         </button>
         <Resumo rotulo="ensaios" valor={String(g.linhas.length)} />
         <Resumo rotulo="v intersticial (cm/min)" valor={vs.length ? (vs.length === 1 ? fmt(vs[0], 3) : `${fmt(Math.min(...vs), 3)}–${fmt(Math.max(...vs), 3)}`) : '—'} />
-        <Resumo rotulo={serie ? 'PVbt mínimo (ótimo)' : 'menor PVbt'} valor={otimo ? `${fmt(otimo.pvbt, 3)} @ ${fmt(otimo.vel_intersticial_cm_min, 3)}` : '—'} />
+        <Resumo rotulo={serie ? 'PVbt mínimo (ótimo)' : 'menor PVbt'} valor={otimo ? `${fmtExato(otimo.pvbt)} @ ${fmt(otimo.vel_intersticial_cm_min, 3)}` : '—'} />
         {serie && <MiniCurva linhas={comPvbt} cor={COR_FONTE[g.linhas[0].fonte]} />}
         {serie && (
           <button onClick={onDestacar} className={`btn !py-1.5 ${destacada ? 'btn-blue' : 'btn-secondary'}`}><Focus size={14} /> {destacada ? 'destacada' : 'destacar'}</button>
@@ -170,7 +170,7 @@ function Grupo({ g, serie, aberto, onAlternar, destacada, onDestacar, aoAbrirAmo
                   <td className="!py-1.5 tabular-nums">{fmt(l.k_inicial_md, 3)}</td>
                   <td className="!py-1.5 tabular-nums">{fmt(l.vazao_ml_min, 3)}</td>
                   <td className="!py-1.5 tabular-nums">{fmt(l.vel_intersticial_cm_min, 4)}</td>
-                  <td className="!py-1.5 tabular-nums font-bold">{fmt(l.pvbt, 3)}</td>
+                  <td className="!py-1.5 tabular-nums font-bold">{fmtExato(l.pvbt)}</td>
                   <td className="!py-1.5">{l.pvbt_condicao ?? '—'}</td>
                   <td className="!py-1.5 tabular-nums whitespace-nowrap">{l.comprimento_wormhole_uct_cm != null || l.comprimento_wormhole_cm != null
                     ? `${fmt(l.comprimento_wormhole_uct_cm ?? l.comprimento_wormhole_cm, 2)}${l.lwh_referencia ? ` (${l.lwh_referencia})` : ''}` : '—'}</td>

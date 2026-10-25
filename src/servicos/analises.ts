@@ -1,6 +1,6 @@
 import { BUCKET_ARQUIVOS, supabase, verificar } from '../lib/supabase'
 import type { ConfigAnalise } from '../config/analises'
-import type { Arquivo, Curva, PermeabilidadeEtapa, PontoCurva, RegistroAnalise } from '../tipos/banco'
+import type { AcidificacaoFase, Arquivo, Curva, PermeabilidadeEtapa, PontoCurva, RegistroAnalise } from '../tipos/banco'
 
 // ---------------------------------------------------------------------------
 // Análises (as 8 tabelas analise_* seguem o mesmo padrão)
@@ -54,6 +54,14 @@ export async function listarEtapasPermeabilidade(analiseId: number): Promise<Per
   // banco ainda sem a migração 015 (tabela não existe): a ficha segue sem o cartão de etapas
   if (r.error && ['42P01', 'PGRST205'].includes(r.error.code)) return []
   return verificar<PermeabilidadeEtapa[]>(r)
+}
+
+// ---- fases do tratamento de acidificação (coreflooding) ----
+export async function listarFasesAcidificacao(analiseId: number): Promise<AcidificacaoFase[]> {
+  const r = await supabase.from('acidificacao_fases').select('*').eq('analise_id', analiseId).order('ordem')
+  // banco ainda sem a migração 018 (tabela não existe): a ficha segue sem o cartão de fases
+  if (r.error && ['42P01', 'PGRST205'].includes(r.error.code)) return []
+  return verificar<AcidificacaoFase[]>(r)
 }
 
 // ---------------------------------------------------------------------------

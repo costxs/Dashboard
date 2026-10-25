@@ -10,10 +10,10 @@ import type { RegistroAnalise } from "../../tipos/banco";
 import { EmptyState } from "../EmptyState";
 import { Aviso, Carregando, Valor } from "../ui/base";
 import { fmt, fmtData } from "../../utils/formatacao";
+import { AcidificacaoFases } from "./AcidificacaoFases";
 import { Arquivos } from "./Arquivos";
 import { Curvas } from "./Curvas";
 import { FormularioAnalise } from "./FormularioAnalise";
-import { PermeabilidadeEtapas } from "./PermeabilidadeEtapas";
 
 // Uma aba da ficha da amostra (serve para as 8 análises).
 // Lista os registros; o selecionado mostra valores, calculados, composição, curvas e arquivos.
@@ -24,6 +24,8 @@ export function AbaAnalise(p: {
   controle?: ControleDaAmostra | null;
   /** bloco próprio da análise, abaixo dos ensaios (ex.: comparação com a literatura) */
   extra?: ReactNode;
+  /** bloco no topo da aba, mostrado mesmo sem registros (ex.: permeabilidade do coreflood) */
+  antes?: ReactNode;
 }) {
   const { cfg } = p;
   const registros = useConsulta(() => listarRegistros(cfg, p.amostraId), [cfg, p.amostraId]);
@@ -56,6 +58,7 @@ export function AbaAnalise(p: {
     if (condicoesRda || marcas) {
       return (
         <div className="flex flex-col gap-4">
+          {p.antes}
           <div className="aviso aviso-info flex items-start gap-2">
             <ClipboardList size={16} className="mt-0.5 shrink-0" />
             {condicoesRda ? (
@@ -76,13 +79,17 @@ export function AbaAnalise(p: {
       );
     }
     return (
-      <EmptyState message={`Nenhum registro de ${cfg.titulo.toLowerCase()} para esta amostra.`}
+      <div className="flex flex-col gap-6">
+        {p.antes}
+        <EmptyState message={`Nenhum registro de ${cfg.titulo.toLowerCase()} para esta amostra.`}
         acao={p.podeEditar && <button className="btn btn-primary" onClick={() => setEditando("novo")}><Plus size={14} /> Lançar {cfg.titulo.toLowerCase()}</button>} />
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
+      {p.antes}
       <div className="cartao">
         <div className="cartao-topo">
           <div>
@@ -170,7 +177,10 @@ function Detalhe(p: {
         ))}
       </div>
 
-      {cfg.chave === "petrofisica" && <PermeabilidadeEtapas r={r} amostra={p.amostra} />}
+      {cfg.chave === "petrofisica" && r.metodo_k != null && (
+        <Aviso tipo="info">Este k veio do tratamento de coreflood: as etapas de vazão, o ajuste ΔP × Q e os gráficos estão na aba 3. Coreflooding.</Aviso>
+      )}
+      {cfg.chave === "coreflooding" && <AcidificacaoFases r={r} />}
 
       {cfg.filha && !!filhos.dados?.length && (
         <div className="cartao">

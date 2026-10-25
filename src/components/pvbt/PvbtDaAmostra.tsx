@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Aviso, Carregando, Cartao } from '../ui/base'
 import { useConsulta } from '../../hooks/useConsulta'
 import { listarPvbt } from '../../servicos/pvbt'
-import { fmt } from '../../utils/formatacao'
+import { fmt, fmtExato } from '../../utils/formatacao'
 import type { PontoPvbt } from '../../tipos/banco'
 import { GraficoPvbt } from './GraficoPvbt'
 
@@ -64,7 +64,7 @@ export function PvbtDaAmostra({ amostraId, codigo }: { amostraId: string; codigo
                   {ensaios.map((e) => (
                     <tr key={e.id_experimento} className="lcp-row">
                       <td className="whitespace-nowrap font-bold text-[var(--color-blue-800)]">{e.id_experimento}</td>
-                      <td className="text-right tabular-nums">{fmt(e.pvbt, 3)}</td>
+                      <td className="text-right tabular-nums">{fmtExato(e.pvbt)}</td>
                       {CALCULADOS.map(([k, , casas]) => <td key={k} className="text-right tabular-nums">{fmt(e[k], casas)}</td>)}
                     </tr>
                   ))}

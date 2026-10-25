@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Simbolos } from "../components/ui/Simbolos";
 import { useNavigate } from "react-router-dom";
-import { ArrowDown, ArrowUp, ChartScatter, Disc, Layers, LayoutGrid, LayoutList, List, Plus, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartScatter, Disc, Layers, LayoutGrid, LayoutList, List, RotateCcw } from "lucide-react";
 import { GraficoDispersao } from "../components/charts/GraficoDispersao";
 import { Select } from "../components/ui/Select";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
 import { fmt, melhorK } from "../utils/formatacao";
 import { useConsulta } from "../hooks/useConsulta";
 import { listarAmostras, listarLitologias, opcoesFiltro } from "../servicos/amostras";
-import { souEditor } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
 import type { AmostraResumo, StatusAmostra, TipoOrigem } from "../tipos/banco";
 import { classeStatus, STATUS_ROTULO } from "../utils/status";
@@ -16,8 +15,6 @@ import {
   agruparAmostras, dimensoes, filtrarAmostras, fluidoDe, opcoesDeFiltro, prefixoDe, tipoDe, tituloPrefixo,
 } from "../utils/bancoAmostras";
 
-// endereço do gerencial (opcional): é lá que o editor cadastra o significado de um prefixo
-const URL_GERENCIAL = import.meta.env.VITE_URL_GERENCIAL as string | undefined;
 const ROTULO_TIPO: Record<string, string> = { plug: "Plug", disco: "Disco", outro: "Outro" };
 
 const TODOS = "Todos";
@@ -43,7 +40,6 @@ export function SamplesListPage() {
 
   const litologias = useConsulta(listarLitologias, []);
   const opcoes = useConsulta(() => opcoesFiltro(projetoId ?? undefined, empresaId ?? undefined), [projetoId, empresaId]);
-  const editor = useConsulta(souEditor, []);
   const num = (s: string) => (s.trim() === "" ? undefined : Number(s.replace(",", ".")));
 
   const amostras = useConsulta(() => listarAmostras({
@@ -140,9 +136,6 @@ export function SamplesListPage() {
         titulo="Banco de Amostras"
         subtitulo={<>{lista.length} amostra(s){busca && <> · busca "<strong>{busca}</strong>"</>}</>}
         acoes={<>
-          {editor.dados && (
-            <button className="btn btn-primary" onClick={() => navigate("/amostras/nova")}><Plus size={14} /> Nova amostra</button>
-          )}
           <div className="flex border border-[var(--color-neutral-300)] rounded-[10px] overflow-hidden shrink-0">
             <div onClick={() => setView("grupos")} title="Agrupar por tipo de amostra e prefixo do código"
               className={`${VIEWBTN} ${view === "grupos" ? "bg-[var(--color-blue)] text-white" : "text-[var(--color-neutral-700)] bg-white hover:bg-[var(--color-blue-50)]"}`}>
@@ -205,10 +198,9 @@ export function SamplesListPage() {
         <div className="px-7 pt-8 pb-14">
           <div className="border border-dashed border-[var(--color-blue-200)] rounded-[16px] px-8 py-11 text-center bg-white">
             <p className="m-0 font-heading font-bold text-[17px] text-[var(--color-blue-800)]">Nenhuma amostra encontrada.</p>
-            <p className="mt-2 text-[13px] text-[var(--color-neutral-700)]">Amplie os filtros ou cadastre uma nova amostra.</p>
+            <p className="mt-2 text-[13px] text-[var(--color-neutral-700)]">Amplie os filtros para ver mais amostras.</p>
             <div className="mt-5 flex justify-center gap-2">
               <button onClick={limpar} className="btn btn-secondary"><RotateCcw size={14} /> Limpar filtros</button>
-              {editor.dados && <button onClick={() => navigate("/amostras/nova")} className="btn btn-primary"><Plus size={14} /> Nova amostra</button>}
             </div>
           </div>
         </div>
@@ -222,24 +214,16 @@ export function SamplesListPage() {
                   {cabecalho}
                   {grupo.prefixos.map((g) => (
                     <tbody key={g.prefixo}>
-                      <tr>
-                        <td colSpan={COLUNAS} className="!border-b-2 !border-[var(--color-blue-200)] !bg-[var(--color-blue-50)] !py-2">
-                          <span className="font-heading text-[13px] font-bold text-[var(--color-blue-800)]">
-                            {g.prefixo && g.significado == null
-                              ? <>{g.prefixo} — <span className="font-normal italic text-[var(--color-neutral-600)]">significado não cadastrado</span></>
-                              : tituloPrefixo(g)}
-                            {" "}({g.amostras.length})
-                          </span>
-                          {g.prefixo && g.significado == null && editor.dados && (URL_GERENCIAL ? (
-                            <a href={`${URL_GERENCIAL.replace(/\/$/, "")}/administracao?${new URLSearchParams({ aba: "prefixos", prefixo: g.prefixo, tipo: grupo.tipo })}`}
-                              target="_blank" rel="noreferrer" className="ml-3 text-[12px] font-semibold text-[var(--color-blue)] underline">
-                              Cadastrar o significado de {g.prefixo}
-                            </a>
-                          ) : (
-                            <span className="ml-3 text-[12px] text-[var(--color-neutral-600)]">cadastre no gerencial: Administração › Prefixos de código</span>
-                          ))}
-                        </td>
-                      </tr>
+                      {/* o prefixo já aparece abaixo de cada código: a faixa só entra quando ele tem significado cadastrado */}
+                      {(!g.prefixo || g.significado != null) && (
+                        <tr>
+                          <td colSpan={COLUNAS} className="!border-b-2 !border-[var(--color-blue-200)] !bg-[var(--color-blue-50)] !py-2">
+                            <span className="font-heading text-[13px] font-bold text-[var(--color-blue-800)]">
+                              {tituloPrefixo(g)} ({g.amostras.length})
+                            </span>
+                          </td>
+                        </tr>
+                      )}
                       {g.amostras.map(linhaAmostra)}
                     </tbody>
                   ))}

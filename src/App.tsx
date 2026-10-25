@@ -3,15 +3,15 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./components/layout/Shell";
 import { Carregando } from "./components/ui/base";
 import { supabaseConfigurado } from "./lib/supabase";
-import { AdministracaoPage } from "./pages/AdministracaoPage";
+import { ComparacaoPage } from "./pages/ComparacaoPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LiteraturePage } from "./pages/LiteraturePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProjectSelectionPage } from "./pages/ProjectSelectionPage";
+import { RedefinirSenhaPage } from "./pages/RedefinirSenhaPage";
 import { SampleDetailPage } from "./pages/SampleDetailPage";
-import { SampleFormPage } from "./pages/SampleFormPage";
 import { SamplesListPage } from "./pages/SamplesListPage";
-import { meuPerfil } from "./servicos/contexto";
+import { meuPerfil, sair } from "./servicos/contexto";
 import { iniciarAutenticacao, useContexto } from "./store/useContexto";
 
 function App() {
@@ -30,16 +30,15 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
         <Route path="/projetos" element={<RequerLogin><ProjectSelectionPage /></RequerLogin>} />
         <Route element={<RequerLogin><Shell /></RequerLogin>}>
           <Route path="/dashboard" element={<RequerContexto><DashboardPage /></RequerContexto>} />
           <Route path="/amostras" element={<RequerContexto><SamplesListPage /></RequerContexto>} />
-          <Route path="/amostras/nova" element={<RequerContexto><SampleFormPage /></RequerContexto>} />
           <Route path="/amostras/:id" element={<RequerContexto><SampleDetailPage /></RequerContexto>} />
-          <Route path="/amostras/:id/editar" element={<RequerContexto><SampleFormPage /></RequerContexto>} />
+          <Route path="/comparacao" element={<RequerContexto><ComparacaoPage /></RequerContexto>} />
           <Route path="/analises" element={<Navigate to="/amostras" replace />} />
           <Route path="/literatura" element={<RequerContexto><LiteraturePage /></RequerContexto>} />
-          <Route path="/administracao" element={<AdministracaoPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
@@ -51,9 +50,33 @@ function App() {
 function RequerLogin({ children }: { children: ReactNode }) {
   const sessao = useContexto((s) => s.sessao);
   const carregada = useContexto((s) => s.sessaoCarregada);
+  const perfil = useContexto((s) => s.perfil);
   if (!carregada) return <Carregando texto="Verificando sessão…" />;
   if (!sessao) return <Navigate to="/login" replace />;
+  // registrado pelo dashboard e ainda não aprovado (ou recusado): o banco não entrega nada, a tela explica
+  if (perfil?.situacao === "pendente" || perfil?.situacao === "recusado") return <AguardandoAprovacao recusado={perfil.situacao === "recusado"} />;
   return <>{children}</>;
+}
+
+function AguardandoAprovacao({ recusado }: { recusado: boolean }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="cartao max-w-lg overflow-hidden">
+        <div className="faixa-lcp" />
+        <div className="p-8">
+          <h1 className="text-[22px] font-bold text-[var(--color-blue-800)]">
+            {recusado ? "Acesso não liberado" : "Aguardando aprovação"}
+          </h1>
+          <p className="mt-3 text-[14px] text-[var(--color-neutral-700)]">
+            {recusado
+              ? "O administrador do LC PETRO não liberou o acesso desta conta. Se achar que é um engano, fale com o laboratório."
+              : "Seu pedido de acesso foi recebido. Assim que o administrador do LC PETRO aprovar, os projetos liberados para você aparecem aqui."}
+          </p>
+          <button type="button" className="btn btn-secondary mt-6" onClick={() => { void sair(); }}>Sair</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** As páginas internas precisam de uma empresa escolhida. */
