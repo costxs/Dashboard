@@ -209,7 +209,7 @@ export function SamplesListPage() {
           {agruparAmostras(lista).map((grupo) => (
             <Cartao key={grupo.tipo} titulo={`${grupo.titulo} (${grupo.total})`} subtitulo={`${grupo.prefixos.length} prefixo(s) de código`}
               icone={grupo.tipo === "disco" ? <Disc size={18} /> : <Layers size={18} />}>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto px-6 pb-3">
                 <table className="table text-[14px]">
                   {cabecalho}
                   {grupo.prefixos.map((g) => (

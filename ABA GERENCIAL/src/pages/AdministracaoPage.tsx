@@ -5,6 +5,7 @@ import { CabecalhoPagina } from '../components/UI'
 import { useAuth } from '../context/AuthContext'
 import { CatalogosPage } from './CatalogosPage'
 import { EmpresasProjetosPage } from './EmpresasProjetosPage'
+import { AcessosPage } from './AcessosPage'
 import { PrefixosCodigoPage } from './PrefixosCodigoPage'
 
 // Seção "Laboratório": uma página só, com quatro abas.
@@ -49,7 +50,7 @@ export const AdministracaoPage: React.FC = () => {
       )}
 
       {aba === 'empresas' && <EmpresasProjetosPage embutida secao="empresas" />}
-      {aba === 'acessos' && <EmpresasProjetosPage embutida secao="acessos" />}
+      {aba === 'acessos' && <div className="space-y-6"><AcessosPage /><EmpresasProjetosPage embutida secao="acessos" /></div>}
       {aba === 'catalogos' && <CatalogosPage embutida />}
       {aba === 'prefixos' && <PrefixosCodigoPage />}
     </div>

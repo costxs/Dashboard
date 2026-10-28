@@ -1,0 +1,20 @@
+# Render (Blueprint): New + -> Blueprint -> escolha o repositório dashboard-backend.
+# As chaves NÃO ficam aqui: o Render pede os valores marcados com sync: false na hora de criar.
+services:
+  - type: web
+    name: lcpetro-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /saude
+    envVars:
+      - key: SUPABASE_URL
+        value: https://haybihlhhdgyiemafmhf.supabase.co
+      - key: SUPABASE_ANON_KEY          # publishable (sb_publishable_...)
+        sync: false
+      - key: SUPABASE_SECRET_KEY        # secret (sb_secret_...): só aqui no servidor
+        sync: false
+      - key: ORIGENS_PERMITIDAS         # endereços do dashboard (Vercel) e do gerencial, separados por vírgula
+        sync: false
+      # MODO_DEV não existe no servidor: aqui todo pedido exige login

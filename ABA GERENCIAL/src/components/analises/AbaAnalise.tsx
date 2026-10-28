@@ -22,7 +22,7 @@ import {
 import { lerPontos } from '../../utils/curvas'
 import { fmt, fmtData, numeroParaInput, paraNumero } from '../../utils/formatacao'
 
-/** Rótulo curto de um ensaio para os seletores de curva e de arquivo. */
+
 function rotuloEnsaio(ens: RegistroAnalise): string {
   const partes = [`#${ens.id}`, fmtData(ens.data_ensaio)]
   if (ens.id_sistema) partes.push(String(ens.id_sistema))

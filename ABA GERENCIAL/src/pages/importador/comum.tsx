@@ -55,8 +55,16 @@ export function explicarFalha(e: unknown, primeiraTabela: string): string {
 }
 
 /** Área de soltar/escolher o arquivo .xlsx. */
-export const AreaArquivo: React.FC<{ dica: React.ReactNode; aoEscolher: (arquivo?: File | null) => void }> = ({ dica, aoEscolher }) => {
+export const AreaArquivo: React.FC<{ dica: React.ReactNode; aoEscolher: (arquivo?: File | null) => void; desabilitado?: boolean }> = ({ dica, aoEscolher, desabilitado }) => {
   const [arrastando, setArrastando] = useState(false)
+  if (desabilitado) return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-[14px] border-2 border-dashed border-[var(--color-neutral-300)] bg-[var(--color-neutral-100)] px-6 py-12 text-center opacity-60"
+      aria-disabled="true">
+      <Upload size={28} className="text-[var(--color-neutral-500)]" />
+      <p className="m-0 font-semibold text-[var(--color-neutral-600)]">Envio de arquivo indisponível</p>
+      <p className="m-0 text-[12px] text-[var(--color-neutral-600)]">{dica}</p>
+    </div>
+  )
   return (
     <label
       onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}

@@ -102,6 +102,118 @@ select id, 'SHELL-1', 'Projeto novo' from empresas where sigla = 'SHELL';
 insert into resultado select 'admin cria empresa e projeto', '1',
     (select count(*) from projetos where codigo = 'SHELL-1')::text;
 
+-- ---------- lista de usuários (migração 019): só colegas de projeto/empresa
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+insert into resultado select 'Petrobras não vê e-mails da Total', 'petro@lab',
+    (select string_agg(email, ',' order by email) from perfis);
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+insert into resultado select 'coordenador Total vê só a equipe dele', 'bolsista@lab,coord.total@lab,leitor@lab',
+    (select string_agg(email, ',' order by email) from perfis);
+
+reset role;
+
+-- ---------- migração 019: conta sem vínculo (cadastro aberto) e usuário desativado
+set request.jwt.claim.sub = '';   -- como no SQL Editor: sem usuário logado na sessão
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000f', 'intruso@fora');
+update perfis set ativo = false where email = 'leitor@lab';
+set role authenticated;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000f';
+insert into resultado select 'sem vínculo não vê literatura', '0', (select count(*) from lit_dados_rda)::text;
+insert into resultado select 'sem vínculo não vê catálogos', '0', (select count(*) from sistemas_acidos)::text;
+insert into resultado select 'sem vínculo não vê publicações', '0', (select count(*) from publicacoes)::text;
+insert into resultado select 'sem vínculo não vê histórico', '0', (select count(*) from historico)::text;
+insert into resultado select 'sem vínculo só vê o próprio perfil', 'intruso@fora',
+    (select string_agg(email, ',') from perfis);
+do $$ begin
+  insert into litologias (nome) values ('Invenção');
+  insert into resultado values ('sem vínculo não grava catálogo', 'bloqueado', 'INSERIU');
+exception when insufficient_privilege then
+  insert into resultado values ('sem vínculo não grava catálogo', 'bloqueado', 'bloqueado');
+end $$;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+insert into resultado select 'desativado não vê amostras', '0', (select count(*) from amostras)::text;
+insert into resultado select 'desativado não vê literatura', '0', (select count(*) from lit_dados_rda)::text;
+
+reset role;
+insert into resultado select 'anon sem nenhuma permissão em tabela', '0',
+    (select count(*) from information_schema.role_table_grants where grantee = 'anon' and table_schema = 'public')::text;
+
+-- ---------- migração 020: cadastro pelo dashboard, aprovação do admin
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-000000000010', 'novo@fora', '{"nome": "Novo", "instituicao": "UFPA", "motivo": "TCC"}'),
+  ('00000000-0000-0000-0000-000000000011', 'recusado@fora', '{"nome": "Recusado"}');
+insert into resultado select 'cadastro novo nasce pendente', 'pendente|UFPA|TCC',
+    (select situacao || '|' || instituicao || '|' || motivo from perfis where email = 'novo@fora');
+set role authenticated;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000010';
+insert into resultado select 'pendente não vê amostras', '0', (select count(*) from amostras)::text;
+insert into resultado select 'pendente vê a própria situação', 'pendente', public.minha_situacao();
+update perfis set situacao = 'aprovado', administrador = true, ativo = true, nome = 'Novo Nome'
+ where id = '00000000-0000-0000-0000-000000000010';     -- tenta se aprovar e virar admin
+do $$ begin
+  perform public.decidir_acesso('00000000-0000-0000-0000-000000000010', true, null, '20000000-0000-0000-0000-00000000000a', 'editor');
+  insert into resultado values ('pendente não se aprova pela função', 'bloqueado', 'APROVOU');
+exception when insufficient_privilege then
+  insert into resultado values ('pendente não se aprova pela função', 'bloqueado', 'bloqueado');
+end $$;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';     -- editor da empresa, não admin
+do $$ begin
+  perform public.decidir_acesso('00000000-0000-0000-0000-000000000010', true, null, '20000000-0000-0000-0000-00000000000a', 'leitor');
+  insert into resultado values ('editor não aprova acesso', 'bloqueado', 'APROVOU');
+exception when insufficient_privilege then
+  insert into resultado values ('editor não aprova acesso', 'bloqueado', 'bloqueado');
+end $$;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';     -- admin
+select public.decidir_acesso('00000000-0000-0000-0000-000000000010', true, null, '20000000-0000-0000-0000-00000000000a', 'leitor');
+select public.decidir_acesso('00000000-0000-0000-0000-000000000011', false);
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000010';
+insert into resultado select 'aprovado vê o projeto escolhido', 'IL900',
+    (select string_agg(codigo, ',' order by codigo) from v_amostras);
+do $$ begin
+  insert into analise_petrofisica (amostra_id, porosidade_pct) values ('30000000-0000-0000-0000-000000000001', 10);
+  insert into resultado values ('aprovado como leitor não grava', 'bloqueado', 'INSERIU');
+exception when insufficient_privilege then
+  insert into resultado values ('aprovado como leitor não grava', 'bloqueado', 'bloqueado');
+end $$;
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000011';
+insert into resultado select 'recusado não vê nada', '0', (select count(*) from amostras)::text;
+
+reset role;
+insert into resultado select 'usuário só mudou o próprio nome', 'Novo Nome|false|aprovado',
+    (select nome || '|' || administrador || '|' || situacao from perfis where email = 'novo@fora');
+insert into resultado select 'decisão registra quem aprovou', 'admin@lab',
+    (select a.email from perfis p join perfis a on a.id = p.decidido_por where p.email = 'novo@fora');
+
+-- ---------- migrações 015 e 018: etapas de permeabilidade e fases da acidificação seguem a amostra (IL900, Total A)
+set request.jwt.claim.sub = '';
+insert into permeabilidade_etapas (analise_id, ordem, vazao_ml_min, usada)
+select id, 1, 2, true from analise_petrofisica where amostra_id = '30000000-0000-0000-0000-000000000001' limit 1;
+insert into acidificacao_fases (analise_id, ordem, papel, rotulo)
+select c.id, 1, 'acido', 'BLEND @2' from analise_coreflooding c join amostras a on a.id = c.amostra_id
+where a.codigo = 'IL900' limit 1;
+create temp table cf_total as select c.id from analise_coreflooding c join amostras a on a.id = c.amostra_id where a.codigo = 'IL900';
+grant select on cf_total to authenticated;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';     -- bolsista do TOTAL-A
+insert into resultado select 'bolsista vê etapas e fases da IL900', '1|1',
+    (select count(*) from permeabilidade_etapas)::text || '|' || (select count(*) from acidificacao_fases)::text;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';     -- Petrobras
+insert into resultado select 'Petrobras não vê etapas nem fases da Total', '0|0',
+    (select count(*) from permeabilidade_etapas)::text || '|' || (select count(*) from acidificacao_fases)::text;
+do $$ begin
+  insert into acidificacao_fases (analise_id, ordem, papel)
+  select id, 9, 'outro' from cf_total;
+  insert into resultado values ('Petrobras não grava fase da Total', 'bloqueado', 'INSERIU');
+exception when insufficient_privilege then
+  insert into resultado values ('Petrobras não grava fase da Total', 'bloqueado', 'bloqueado');
+end $$;
 reset role;
 
 -- ---------- cálculos e histórico

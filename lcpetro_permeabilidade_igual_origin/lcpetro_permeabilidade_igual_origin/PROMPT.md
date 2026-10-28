@@ -1,7 +1,7 @@
 # Permeabilidade igual ao Origin do laboratório
 
 ## O que mudou e por quê
-Na planilha do Origin do laboratório, o k final ("Permeability (mD)") usa a **inclinação da reta ΔP × Q
+Na planilha do Origin do laboratório, o k final ("Permeability (mD)") usa a **inclinação da reta ΔP × Q e deixe o nome como permeabilidade (mD)
 ajustada com intercepto livre** (`FitLinear`), e não a reta forçada a passar no zero. O nosso cálculo usava
 a reta pela origem e dava um k diferente. Agora o padrão é igual ao do laboratório; a reta pela origem fica como opção.
 

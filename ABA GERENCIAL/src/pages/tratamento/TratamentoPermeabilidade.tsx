@@ -3,15 +3,18 @@ import { Link } from 'react-router-dom'
 import {
   CartesianGrid, ComposedChart, Line, LineChart, ReferenceArea, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, FileSpreadsheet, Loader2, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, FileSpreadsheet, Loader2, Plus, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { Alert, Card, Input, Select } from '../../components/UI'
 import { usePodeEditar } from '../../hooks/usePapel'
 import { lerArquivoBruto } from '../../importador/lerArquivo'
+import type { FonteDpDCI } from '../../importador/lerDCI'
+import { lerEnsaiosEquipamento } from '../../importador/lerEnsaioEquipamento'
 import { resultadoComEtapas } from '../../importador/permeabilidadeApoio'
 import {
-  gravarPermeabilidade, lerEnsaios, tratarPermeabilidade,
+  gravarPermeabilidade, tratarPermeabilidade,
   type Ensaio, type Etapa, type GravarPermeabilidade, type ModoAjuste,
 } from '../../importador/tratamentoPermeabilidade'
+import type { Equipamento } from '../../importador/tratamentoAcidificacao'
 import { supabase } from '../../lib/supabase'
 import { listarAmostras, type AmostraResumo } from '../../servicos/api'
 import {
@@ -20,6 +23,7 @@ import {
 import { useContexto } from '../../store/useContexto'
 import { fmt, fmtData, mensagemErro, numeroParaInput, paraNumero } from '../../utils/formatacao'
 import { AreaArquivo } from '../importador/comum'
+import { CadastroRapidoAmostra } from './CadastroRapidoAmostra'
 import { GraficosOrigin } from './GraficosOrigin'
 
 // Tratamento de permeabilidade: o arquivo do equipamento vira etapas de vazão, ΔP estável e k (Darcy).
@@ -34,6 +38,7 @@ const MAX_PONTOS_GRAFICO = 3000
 const MIGRACAO = 'banco/20261013000015_tratamento_permeabilidade.sql'
 const MIGRACAO_GRAFICOS = 'banco/20261013000016_config_graficos.sql'
 const MIGRACAO_AJUSTE = 'banco/20261014000017_ajuste_darcy_origin.sql'
+const MIGRACAO_EQUIPAMENTO = 'banco/20261020000018_acidificacao_jbv.sql'
 const MODOS_AJUSTE: { valor: ModoAjuste; texto: string }[] = [
   { valor: 'intercepto', texto: 'Com intercepto (como no Origin)' },
   { valor: 'origem', texto: 'Pela origem' },
@@ -51,7 +56,9 @@ const estiloDica = {
 interface Gravado { amostraId: string; codigo: string; k: number; metodo: Metodo }
 interface Arrasto { ordem: number; de: number; ate: number }
 
-export const TratamentoPermeabilidade: React.FC = () => {
+export const TratamentoPermeabilidade: React.FC<{ equipamento?: Equipamento; dpDCI?: FonteDpDCI; aoDetectar?: (e: Equipamento) => void }> = ({ equipamento = 'JBV', dpDCI, aoDetectar }) => {
+  // aviso quando o arquivo é do outro equipamento (o app leu pelo certo e troca o seletor)
+  const [avisoEquip, setAvisoEquip] = useState<string | null>(null)
   const empresaId = useContexto((s) => s.empresaId)
   const projetoId = useContexto((s) => s.projetoId)
 
@@ -67,6 +74,9 @@ export const TratamentoPermeabilidade: React.FC = () => {
   const [amostras, setAmostras] = useState<AmostraResumo[] | null>(null)
   const [amostraId, setAmostraId] = useState('')
   const [busca, setBusca] = useState('')
+  // cadastro rápido da amostra que não está no catálogo
+  const [cadastrando, setCadastrando] = useState(false)
+  const [versaoAmostras, setVersaoAmostras] = useState(0)
   const [comprimento, setComprimento] = useState('')
   const [diametro, setDiametro] = useState('')
   const [viscosidade, setViscosidade] = useState('')
@@ -89,6 +99,8 @@ export const TratamentoPermeabilidade: React.FC = () => {
   const [origemCfg, setOrigemCfg] = useState<string | null>(null)
 
   const ensaio: Ensaio | undefined = ensaios[iEnsaio]
+  // o tempo do DCI nasce em horas: mostra na unidade do equipamento (o cálculo segue em segundos por dentro)
+  const un = ensaio?.equipamento === 'DCI' ? { rot: 'h', div: 3600, casas: 3 } : { rot: 's', div: 1, casas: 1 }
 
   useEffect(() => {
     let vivo = true
@@ -97,7 +109,7 @@ export const TratamentoPermeabilidade: React.FC = () => {
       .then((a) => { if (vivo) setAmostras(a) })
       .catch((e) => { if (vivo) { setAmostras([]); setErro(`Não consegui carregar as amostras: ${mensagemErro(e)}`) } })
     return () => { vivo = false }
-  }, [empresaId, projetoId])
+  }, [empresaId, projetoId, versaoAmostras])
 
   // a amostra do cabeçalho do arquivo já vem selecionada (quando existe no projeto aberto)
   const codigoArquivo = ensaio?.metadados.amostra ?? null
@@ -151,18 +163,21 @@ export const TratamentoPermeabilidade: React.FC = () => {
     }
     setLendo(true)
     try {
-      const lida = await lerArquivoBruto(arquivo)
-      const lista = lerEnsaios(lida)
+      const lida = await lerArquivoBruto(arquivo, { textoSemConverter: true })
+      const { ensaios: lista, aviso, detectado } = lerEnsaiosEquipamento(lida, equipamento, { dpDCI })
       if (lista.length === 0) {
         setErro(`Não achei a tabela de leituras em "${arquivo.name}": nenhuma aba tem as colunas "Tempo (s)" e "Q (cm³/min)". `
           + 'Confira se é o arquivo exportado pelo equipamento de coreflooding.')
         return
       }
+      setAvisoEquip(aviso)
+      if (detectado && detectado !== equipamento) aoDetectar?.(detectado)
       setNomeArquivo(arquivo.name)
       setArquivoEnsaio(arquivo)
       setEnsaios(lista)
       setAmostraId('')
       setBusca('')
+      setCadastrando(false)
       setFracao(50)
       abrirEnsaio(lista, 0)
     } catch (e) {
@@ -205,7 +220,8 @@ export const TratamentoPermeabilidade: React.FC = () => {
   )
   const dadosGraficos = useMemo<DadosEnsaio | null>(
     () => (ensaio && resultado
-      ? { leituras: ensaio.leituras, etapas: resultado.etapas, usadas, comprimento_cm: L, diametro_cm: D, viscosidade_cp: mu, ajuste: modoAjuste }
+      ? { leituras: ensaio.leituras, etapas: resultado.etapas, usadas, comprimento_cm: L, diametro_cm: D, viscosidade_cp: mu, ajuste: modoAjuste,
+          tempoHoras: ensaio.equipamento === 'DCI' }
       : null),
     [ensaio, resultado, usadas, L, D, mu, modoAjuste],
   )
@@ -308,6 +324,7 @@ export const TratamentoPermeabilidade: React.FC = () => {
     try {
       const r = await gravarPermeabilidade(supabase, {
         amostraId: amostra.id, ensaio: ensaioCalc, resultado, metodo, etapasUsadas: [...usadas], arquivo: nomeArquivo,
+        equipamento: ensaioCalc.equipamento ?? equipamento,
         configGraficos: configParaGravar(cfgGraficos, resultado.etapas),
       })
       setGravado({ amostraId: amostra.id, codigo: amostra.codigo, k: r.k, metodo })
@@ -318,6 +335,8 @@ export const TratamentoPermeabilidade: React.FC = () => {
           ? 'Sem conexão com o Supabase. Confira a internet e, antes de gravar de novo, veja na ficha da amostra (1. Petrofísica) se o registro já entrou.'
           : /migração 017/.test(msg)
             ? `${msg}: rode ${MIGRACAO_AJUSTE} no SQL Editor do Supabase e grave de novo (nada foi gravado).`
+          : /migração 018/.test(msg)
+            ? `${msg}: rode ${MIGRACAO_EQUIPAMENTO} no SQL Editor do Supabase e grave de novo (nada foi gravado).`
           : /config_graficos/.test(msg)
             ? `${msg} O banco ainda não tem a coluna da configuração dos gráficos: rode ${MIGRACAO_GRAFICOS} no SQL Editor do Supabase e grave de novo (nada foi gravado).`
           : /does not exist|schema cache|Could not find/i.test(msg)
@@ -343,6 +362,8 @@ export const TratamentoPermeabilidade: React.FC = () => {
           k_md: e.k_md, usada: usadas.has(e.ordem),
         })),
         metodo_k: metodo, comprimento_cm: L, diametro_cm: D, viscosidade_cp: mu, ajuste: modoAjuste,
+        aba: ensaio?.aba ?? null,
+        dp_dci: dpDCI,
         // os gráficos vão como estão na tela (cores, rótulos, sequência/sobrepostas...)
         grafico: dadosGraficos ? montarPedido(dadosGraficos, cfgGraficos, 'combinado', 'png', 200) : undefined,
       })
@@ -378,7 +399,9 @@ export const TratamentoPermeabilidade: React.FC = () => {
             </p>
           ) : (
             <AreaArquivo aoEscolher={carregar}
-              dica={<>Arquivo do equipamento (.xlsx) · cabeçalho “Chave: valor” e tabela com “Tempo (s)” e “Q (cm³/min)”</>} />
+              dica={equipamento === 'DCI'
+                ? <>Log do DCI (.xlsx) · colunas “Timestamp (hours)”, “VPA n Flow Rate” e “Core B Differential Pressure”</>
+                : <>Arquivo do JBV (.xlsx) · cabeçalho “Chave: valor” e tabela com “Tempo (s)” e “Q (cm³/min)”</>} />
           )
         ) : (
           <div className="flex flex-col gap-4">
@@ -418,6 +441,7 @@ export const TratamentoPermeabilidade: React.FC = () => {
       </Card>
 
       {erro && <Alert tipo="erro" mensagem={erro} onClose={() => setErro(null)} />}
+      {avisoEquip && <Alert tipo="info" mensagem={avisoEquip} onClose={() => setAvisoEquip(null)} />}
 
       {ensaio && base && resultado && (
         <>
@@ -437,9 +461,27 @@ export const TratamentoPermeabilidade: React.FC = () => {
                   </Select>
                 </div>
               </div>
-              {amostras && codigoArquivo && !doArquivo && (
-                <Alert tipo="info" mensagem={`A amostra ${codigoArquivo} do cabeçalho do arquivo não está no projeto aberto. `
-                  + 'Cadastre-a em Amostras e ensaios (ou troque de projeto) ou escolha outra amostra acima.'} />
+              {amostras && codigoArquivo && !doArquivo && !cadastrando && (
+                <div className="aviso aviso-info flex flex-wrap items-center gap-3" role="status">
+                  <span className="min-w-[260px] flex-1">
+                    A amostra <strong>{codigoArquivo}</strong> do cabeçalho do arquivo não está no catálogo do projeto aberto. Cadastre-a aqui ou escolha outra amostra acima.
+                  </span>
+                  <button type="button" className="btn btn-blue" disabled={gravando} onClick={() => setCadastrando(true)}>
+                    <Plus size={14} /> Cadastrar {codigoArquivo}
+                  </button>
+                </div>
+              )}
+              {!cadastrando && !(amostras && codigoArquivo && !doArquivo) && (
+                <div>
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={gravando} onClick={() => setCadastrando(true)}>
+                    <Plus size={13} /> Amostra não está na lista? Cadastrar
+                  </button>
+                </div>
+              )}
+              {cadastrando && (
+                <CadastroRapidoAmostra codigo={doArquivo ? null : codigoArquivo} comprimento_cm={L} diametro_cm={D}
+                  aoFechar={() => setCadastrando(false)}
+                  aoCadastrar={(id) => { setCadastrando(false); setAmostraId(id); setGravado(null); setVersaoAmostras((v) => v + 1) }} />
               )}
               {outraAmostra && (
                 <Alert tipo="erro" mensagem={`A amostra escolhida (${amostra?.codigo}) não é a do arquivo (${codigoArquivo}). Confira antes de gravar.`} />
@@ -518,20 +560,20 @@ export const TratamentoPermeabilidade: React.FC = () => {
                           fill="var(--color-red)" fillOpacity={0.18} stroke="var(--color-red)" />
                       )}
                       <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tick={eixo} tickLine={false}
-                        axisLine={{ stroke: 'var(--color-neutral-300)' }} tickFormatter={(v) => fmt(v, 0)} />
+                        axisLine={{ stroke: 'var(--color-neutral-300)' }} tickFormatter={(v) => fmt(v / un.div, un.div > 1 ? 2 : 0)} />
                       <YAxis width={56} domain={[0, 'auto']} tick={eixo} tickLine={false} axisLine={{ stroke: 'var(--color-neutral-300)' }}
                         tickFormatter={(v) => fmt(v, 2)}
                         label={{ value: 'ΔP (psi)', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--grafico-texto)', fontWeight: 600, style: { textAnchor: 'middle' } }} />
                       <Tooltip contentStyle={estiloDica} labelStyle={{ fontWeight: 800, marginBottom: 4 }}
                         cursor={{ stroke: 'var(--color-neutral-400)', strokeDasharray: '3 3' }}
-                        labelFormatter={(t) => `t = ${fmt(t, 1)} s`}
+                        labelFormatter={(t) => `t = ${fmt(Number(t) / un.div, un.casas)} ${un.rot}`}
                         formatter={(v, nome) => [`${fmt(v, 3)} psi`, nome === 'estavel' ? 'no trecho estável' : 'ΔP']} />
                       <Line dataKey="dp" type="linear" stroke="var(--grafico-serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
                       <Line dataKey="estavel" type="linear" stroke="var(--grafico-serie-2)" strokeWidth={4} dot={false}
                         isAnimationActive={false} connectNulls={false} activeDot={false} />
                     </LineChart>
                   </ResponsiveContainer>
-                  <p className="m-0 mt-1 text-center text-[11px] font-semibold text-[var(--grafico-texto)]">Tempo (s)</p>
+                  <p className="m-0 mt-1 text-center text-[11px] font-semibold text-[var(--grafico-texto)]">{`Tempo (${un.rot})`}</p>
                 </div>
               )}
             </div>
@@ -539,12 +581,12 @@ export const TratamentoPermeabilidade: React.FC = () => {
 
           {/* 4. etapas */}
           <Card titulo="4. Etapas de vazão" subtitulo="Estável = CV do ΔP no trecho usado até 5%. Marque em “usar” as etapas que entram no k da amostra.">
-            <div className="-mx-6 -my-6 overflow-x-auto">
+            <div className="-mx-6 -my-6 overflow-x-auto px-6">
               <table className="table text-[12px]">
                 <thead>
                   <tr>
-                    <th>#</th><th className="text-right">Q (cm³/min)</th><th className="text-right">Duração (s)</th>
-                    <th>Trecho usado (s)</th><th className="text-right">Pontos</th>
+                    <th>#</th><th className="text-right">Q (cm³/min)</th><th className="text-right">{`Duração (${un.rot})`}</th>
+                    <th>{`Trecho usado (${un.rot})`}</th><th className="text-right">Pontos</th>
                     <th className="text-right">ΔP médio ± desvio (psi)</th><th className="text-right">CV (%)</th>
                     <th className="text-right" title="Q × duração">V injetado (cm³)</th>
                     <th className="text-right" title="Variação do volume da garrafa, lida pela bomba">V bombeado (cm³)</th>
@@ -557,14 +599,14 @@ export const TratamentoPermeabilidade: React.FC = () => {
                     <tr key={e.ordem} className="lcp-row">
                       <td className="!py-2 font-semibold">{e.ordem}</td>
                       <td className="!py-2 text-right tabular-nums">{fmt(e.q, 2)}</td>
-                      <td className="!py-2 text-right tabular-nums">{fmt(e.t_fim_s - e.t_inicio_s, 0)}</td>
+                      <td className="!py-2 text-right tabular-nums">{fmt((e.t_fim_s - e.t_inicio_s) / un.div, un.div > 1 ? 3 : 0)}</td>
                       <td className="!py-2">
                         <span className="flex items-center gap-1.5 whitespace-nowrap">
-                          <CampoTempo valor={e.j_inicio_s} rotulo={`Início do trecho estável da etapa ${e.ordem} (s)`}
-                            desabilitado={gravando} aoMudar={(v) => mudarJanela(e, 0, v)} />
+                          <CampoTempo valor={e.j_inicio_s / un.div} casas={un.div > 1 ? 4 : 1} rotulo={`Início do trecho estável da etapa ${e.ordem} (${un.rot})`}
+                            desabilitado={gravando} aoMudar={(v) => mudarJanela(e, 0, v * un.div)} />
                           –
-                          <CampoTempo valor={e.j_fim_s} rotulo={`Fim do trecho estável da etapa ${e.ordem} (s)`}
-                            desabilitado={gravando} aoMudar={(v) => mudarJanela(e, 1, v)} />
+                          <CampoTempo valor={e.j_fim_s / un.div} casas={un.div > 1 ? 4 : 1} rotulo={`Fim do trecho estável da etapa ${e.ordem} (${un.rot})`}
+                            desabilitado={gravando} aoMudar={(v) => mudarJanela(e, 1, v * un.div)} />
                           {janelas[e.ordem] && (
                             <button type="button" className="btn-icone" title="Voltar à fração final estável"
                               onClick={() => definirJanela(e.ordem, null)}>
@@ -736,9 +778,10 @@ const Dado: React.FC<{ rotulo: string; children: React.ReactNode }> = ({ rotulo,
   </div>
 )
 
-/** Campo de tempo (s) do trecho estável: só aplica ao sair do campo ou no Enter. */
-function CampoTempo(p: { valor: number; rotulo: string; desabilitado?: boolean; aoMudar: (v: number) => void }) {
-  const original = numeroParaInput(Math.round(p.valor * 10) / 10)
+/** Campo de tempo do trecho estável (na unidade mostrada: s ou h): só aplica ao sair do campo ou no Enter. */
+function CampoTempo(p: { valor: number; rotulo: string; casas?: number; desabilitado?: boolean; aoMudar: (v: number) => void }) {
+  const f = 10 ** (p.casas ?? 1)
+  const original = numeroParaInput(Math.round(p.valor * f) / f)
   const [texto, setTexto] = useState(original)
   useEffect(() => { setTexto(original) }, [original])
   function aplicar() {
@@ -749,7 +792,7 @@ function CampoTempo(p: { valor: number; rotulo: string; desabilitado?: boolean; 
     setTexto(original)
   }
   return (
-    <input className="input !w-[76px] !px-2 !py-1 text-right tabular-nums" inputMode="decimal" aria-label={p.rotulo} title={p.rotulo}
+    <input className="input !w-[88px] !px-2 !py-1 text-right tabular-nums" inputMode="decimal" aria-label={p.rotulo} title={p.rotulo}
       value={texto} disabled={p.desabilitado}
       onChange={(e) => setTexto(e.target.value)} onBlur={aplicar}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />

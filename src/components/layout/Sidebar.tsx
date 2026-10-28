@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { LogoEmpresa } from "../LogoEmpresa";
 import { useContexto } from "../../store/useContexto";
+import logoLcPetro from "../../assets/lcpetro-logo.png";
+import iconeLcPetro from "../../assets/lcpetro-icone.png";
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -37,10 +39,10 @@ export function Sidebar() {
       <div className="bg-white p-5 border-b-4 border-[var(--color-orange)] flex items-center justify-center relative cursor-pointer group"
         onClick={alternarMenu} title={recolhido ? "Expandir menu" : "Recolher menu"}>
         {recolhido ? (
-          <img src="/lab-logo-2.png" alt="LC PETRO" className="w-[32px] h-auto object-contain" />
+          <img src={iconeLcPetro} alt="LC PETRO" className="w-[32px] h-[32px] object-contain" />
         ) : (
           <div className="flex flex-col items-start w-full">
-            <img src="/lab-logo-1.png" alt="LC PETRO" className="w-[180px] h-auto object-contain" />
+            <img src={logoLcPetro} alt="LC PETRO" className="w-[180px] h-auto object-contain" />
             <p className="mt-2.5 text-[10px] tracking-[0.07em] uppercase font-semibold text-[var(--color-red)]">
               Memória Experimental
             </p>

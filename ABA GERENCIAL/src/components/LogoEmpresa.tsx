@@ -1,10 +1,12 @@
+import logoLcPetro from "../assets/lcpetro-logo.png";
+
 // Logo da empresa pelo código (sigla). Empresas sem arquivo de logo ganham um
 // selo com as iniciais nas cores do laboratório.
 const LOGOS: Record<string, string> = {
   TOTAL: "/total-energies-256.png",
   TOTALENERGIES: "/total-energies-256.png",
   PETROBRAS: "/logo-petrobras-1536.png",
-  LCPETRO: "/lab-logo-1.png",
+  LCPETRO: logoLcPetro,
 };
 
 const CORES = ["var(--color-blue)", "var(--color-red)", "var(--color-orange-600)"];

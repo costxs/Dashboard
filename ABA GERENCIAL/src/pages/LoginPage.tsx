@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { enviarRecuperacaoSenha } from '../servicos/api'
 
 // Visual: docs/referencia/painel-cadastro/src/pages/LoginPage.tsx (telas/dashboard_01_login.png)
 export const LoginPage: React.FC = () => {
@@ -11,6 +12,25 @@ export const LoginPage: React.FC = () => {
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [aviso, setAviso] = useState<string | null>(null)
+
+  async function esqueciSenha() {
+    setErro(null)
+    setAviso(null)
+    if (!email.trim()) {
+      setErro('Digite seu e-mail no campo acima e clique em "Esqueci minha senha".')
+      return
+    }
+    setLoading(true)
+    try {
+      await enviarRecuperacaoSenha(email.trim())
+      setAviso('Enviamos um link de redefinição para o seu e-mail. Verifique também o spam.')
+    } catch (err: any) {
+      setErro(err.message || 'Não foi possível enviar o e-mail de recuperação')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,7 +90,15 @@ export const LoginPage: React.FC = () => {
               />
             </div>
 
+            <button
+              type="button" onClick={esqueciSenha} disabled={loading}
+              className="self-end -mt-2 text-[13px] text-[var(--color-blue-700)] hover:underline cursor-pointer bg-transparent border-0 p-0 disabled:opacity-60"
+            >
+              Esqueci minha senha
+            </button>
+
             {erro && <div className="aviso aviso-erro" role="alert">{erro}</div>}
+            {aviso && <div className="aviso" role="status">{aviso}</div>}
 
             <button
               type="submit"

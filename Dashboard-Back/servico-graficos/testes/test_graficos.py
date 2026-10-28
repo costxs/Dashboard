@@ -138,3 +138,118 @@ def test_ajuste_igual_ao_origin():
     assert abs(a - 13.5) < 1e-9 and abs(b - 3) < 1e-9 and abs(r2 - 1) < 1e-12
     a0, b0, *_ = ajuste_darcy([(2, 30.0), (4, 57.0), (6, 84.0)], "origem")
     assert b0 == 0 and abs(a0 - 14.1428571) < 1e-6
+
+
+# ------------------------------------------------------------------ acidificação (dados fictícios)
+PEDIDO_ACID = {"amostra": "TESTE-A", "comprimento_cm": 7.3, "diametro_cm": 3.8, "porosidade_pct": 14,
+               "volume_morto_cm3": 0.5, "temperatura_rotulo": "T40"}
+
+
+def _post_acid(cliente, rota, pedido=None, arquivo: bytes | None = None, **form):
+    conteudo = arquivo if arquivo is not None else (AQUI / "acidificacao_ficticio.xlsx").read_bytes()
+    return cliente.post(rota, files={"arquivo": ("ensaio.xls", conteudo)}, data={"pedido": json.dumps(pedido or PEDIDO_ACID), **form})
+
+
+def test_acid_detecta_fases_sem_ajuda():
+    from graficos.acidificacao import Dados, detectar_fases
+    d = Dados((AQUI / "acidificacao_ficticio.xlsx").read_bytes())
+    fs = detectar_fases(d)
+    assert [(f.fluido, f.q, f.papel) for f in fs] == [("KCl 2%", 2, "pre_fluxo"), ("BLEND", 2, "acido"),
+                                                     ("AUP", 2, "pos_fluxo"), ("AUP", 4, "pos_fluxo"), ("AUP", 6, "pos_fluxo")]
+
+
+def test_acid_planilha_igual_ao_origin(cliente):
+    r = _post_acid(cliente, "/acidificacao/planilha")
+    assert r.status_code == 200, r.text
+    wb = load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames == ["0- Initial Data", "1 - Water Injection - Before ac", "2 - Acidizing",
+                             "3 - Experiment general View", "4 - Temperature", "5 - Water Injection - After aci", "Gráficos"]
+    ini = wb["0- Initial Data"]
+    assert ini["B8"].value == "=PI()*((B4^2)/4)*B5*B6" and ini["B10"].value == "=B3/(B9*B6)"
+    ac = wb["2 - Acidizing"]
+    assert [ac.cell(row=1, column=c).value for c in range(2, 7)] == ["Time", "Volume injetado Total", "Injected Volume", "Pore Volume (PV)", "DP"]
+    assert ac["C5"].value.endswith("*(B5-$B$5)/60") and ac["D5"].value.endswith("!$B$7") and ac["E5"].value.endswith("!$B$8")
+    assert ac["F3"].value == "BLEND @2 ml/min T40"
+    depois = wb["5 - Water Injection - After aci"]
+    assert [depois.cell(row=3, column=c).value for c in (3, 5, 7)] == ["AUP 2.0 ml/min (after)", "AUP 4.0 ml/min (after)", "AUP 6.0 ml/min (after)"]
+    assert len(wb["Gráficos"]._images) == 3
+
+
+def test_acid_pv_igual_formula_do_origin():
+    import math
+    from graficos.acidificacao import Dados, PedidoAcid, detectar_fases, serie_acido
+    d = Dados((AQUI / "acidificacao_ficticio.xlsx").read_bytes())
+    p = PedidoAcid(**PEDIDO_ACID)
+    fa = next(f for f in detectar_fases(d) if f.papel == "acido")
+    s = serie_acido(d, fa, p)
+    vp = math.pi * 3.8 ** 2 / 4 * 7.3 * 0.14
+    t0 = s[0][0]
+    for t, vt, vi, pv, _ in s[::10]:
+        assert abs(vt - 2 * (t - t0) / 60) < 1e-12 and abs(vi - (vt - 0.5)) < 1e-12 and abs(pv - vi / vp) < 1e-12
+    assert abs(s[0][3] + 0.5 / vp) < 1e-12
+
+
+@pytest.mark.parametrize("qual", ["geral", "pv", "apos"])
+def test_acid_graficos(cliente, qual):
+    r = _post_acid(cliente, "/acidificacao/grafico", qual=qual)
+    assert r.status_code == 200, r.text
+    assert r.content[:4] == b"\x89PNG"
+
+
+# ------------------------------------------------------------------ formatos do arquivo do equipamento
+# o mesmo ensaio fictício salvo como .xls antigo (BIFF8), HTML, XML 2003 e CSV com ";" e vírgula decimal,
+# todos com extensão .xls: o serviço reconhece pelo conteúdo e dá o mesmo resultado do .xlsx
+@pytest.mark.parametrize("nome", ["biff8.xls", "html.xls", "xml2003.xls", "csv_pt.xls"])
+def test_acid_le_outros_formatos(cliente, nome):
+    from graficos.acidificacao import Dados, detectar_fases
+    ref = [(f.fluido, f.q, f.papel) for f in detectar_fases(Dados((AQUI / "acidificacao_ficticio.xlsx").read_bytes()))]
+    conteudo = (AQUI / "formatos" / nome).read_bytes()
+    assert [(f.fluido, f.q, f.papel) for f in detectar_fases(Dados(conteudo))] == ref
+    r = _post_acid(cliente, "/acidificacao/planilha", arquivo=conteudo)
+    assert r.status_code == 200, r.text
+    assert len(load_workbook(io.BytesIO(r.content)).sheetnames) == 7
+
+
+def test_arquivo_que_nao_e_planilha_da_422(cliente):
+    r = _post_acid(cliente, "/acidificacao/planilha", arquivo=b"isto nao e uma planilha")
+    assert r.status_code == 422, r.text
+
+
+def _copia_fict(numeros_como_texto=False, aba_antes=False) -> bytes:
+    """O ensaio fictício com números gravados como texto ("12,5") e/ou outra aba de leituras antes da bruta."""
+    wb = load_workbook(AQUI / "acidificacao_ficticio.xlsx")
+    ws = wb.worksheets[0]
+    if numeros_como_texto:
+        for row in ws.iter_rows():
+            for c in row:
+                if isinstance(c.value, (int, float)) and not isinstance(c.value, bool):
+                    c.value = str(c.value).replace(".", ",")
+    if aba_antes:
+        outra = wb.create_sheet("Separada", 0)          # tabela já separada, com tempos que não batem com a bruta
+        outra.append(["Tempo (s)", "Q (cm³/min)", "dPH1 (psi)"])
+        for t in range(0, 50, 5):
+            outra.append([t, 2, 10])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("texto,antes", [(True, False), (False, True), (True, True)])
+def test_acid_mesmas_leituras_que_o_gerencial(cliente, texto, antes):
+    from graficos.acidificacao import Dados, detectar_fases
+    ref = Dados((AQUI / "acidificacao_ficticio.xlsx").read_bytes())
+    fases = detectar_fases(ref)
+    conteudo = _copia_fict(texto, antes)
+    d = Dados(conteudo, ref.aba)                        # a aba que o gerencial manda
+    assert len(d.linhas) == len(ref.linhas)
+    pedido = {**PEDIDO_ACID, "aba": ref.aba, "fases": [f.model_dump() for f in fases]}
+    r = _post_acid(cliente, "/acidificacao/planilha", pedido=pedido, arquivo=conteudo)
+    assert r.status_code == 200, r.text
+    # sem o nome da aba, prefere a exportação bruta (com o cabeçalho), como o gerencial
+    assert Dados(conteudo).aba == ref.aba
+
+
+def test_acid_fase_fora_do_arquivo_explica(cliente):
+    pedido = {**PEDIDO_ACID, "fases": [{"ordem": 1, "papel": "acido", "q": 2, "t_inicio": 99999, "t_fim": 99999.5}]}
+    r = _post_acid(cliente, "/acidificacao/planilha", pedido=pedido)
+    assert r.status_code == 422 and "aba" in r.text and "leituras" in r.text, r.text

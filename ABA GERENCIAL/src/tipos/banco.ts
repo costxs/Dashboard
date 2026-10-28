@@ -431,6 +431,11 @@ export interface Perfil {
   administrador: boolean
   ativo: boolean
   criado_em?: string
+  // migração 020: cadastro pelo dashboard com aprovação do administrador
+  situacao?: 'pendente' | 'aprovado' | 'recusado'
+  instituicao?: string | null
+  motivo?: string | null
+  decidido_em?: string | null
 }
 
 export type Empresa = Linha<'empresas'>

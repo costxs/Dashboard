@@ -78,6 +78,20 @@ export async function logout() {
   await supabase.auth.signOut()
 }
 
+/** Envia o e-mail com o link de redefinição de senha. */
+export async function enviarRecuperacaoSenha(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/redefinir-senha`,
+  })
+  if (error) throw new Error(tratarErro(error))
+}
+
+/** Define a nova senha do usuário com sessão ativa (login normal ou link de recuperação). */
+export async function definirNovaSenha(novaSenha: string) {
+  const { error } = await supabase.auth.updateUser({ password: novaSenha })
+  if (error) throw new Error(tratarErro(error))
+}
+
 export async function buscarPerfilAtual(): Promise<Perfil | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -191,6 +205,25 @@ export async function removerMembro(id: number): Promise<void> {
 
 export async function listarPerfis(): Promise<Perfil[]> {
   return conferirLeitura<Perfil>(await supabase.from('perfis').select('*').order('email'))
+}
+
+/**
+ * Aprova (dando o vínculo a uma empresa OU a um projeto) ou recusa quem se registrou no dashboard.
+ * Função do banco (migração 020): só o administrador consegue; o banco recusa os demais.
+ */
+export async function decidirAcesso(p: {
+  usuarioId: string; aprovar: boolean; empresaId?: string | null; projetoId?: string | null; papel?: Papel
+}): Promise<void> {
+  const { error } = await supabase.rpc('decidir_acesso', {
+    p_usuario: p.usuarioId, p_aprovar: p.aprovar,
+    p_empresa: p.empresaId ?? null, p_projeto: p.projetoId ?? null, p_papel: p.papel ?? 'leitor',
+  })
+  if (error) {
+    if (/decidir_acesso|schema cache|Could not find/i.test(error.message)) {
+      throw new Error('O banco ainda não tem a aprovação de acessos: rode a migração 020 no Supabase.')
+    }
+    throw new Error(error.code === '42501' ? 'Só o administrador aprova acessos.' : error.message)
+  }
 }
 
 // ==========================================
@@ -351,6 +384,11 @@ export async function salvarAmostra(amostra: Partial<Gravavel['amostras']> & { i
 
   if (amostra.id) return atualizar('amostras', 'id', amostra.id, linha, `salvar a amostra ${linha.codigo}`)
   return inserir('amostras', linha as Gravavel['amostras'], `cadastrar a amostra ${linha.codigo}`)
+}
+
+/** Apaga uma referência/publicação. Se há dados de PVbt ou de taxa de reação ligados a ela, o banco recusa. */
+export async function excluirPublicacao(id: string): Promise<void> {
+  await apagar('publicacoes', 'id_referencia', id, `excluir a publicação ${id}`)
 }
 
 export async function excluirAmostra(id: string): Promise<void> {

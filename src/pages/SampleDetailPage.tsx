@@ -21,6 +21,7 @@ import { ANALISES } from "../config/analises";
 import { useConsulta } from "../hooks/useConsulta";
 import { obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
 import { rotuloFinalidade } from "../utils/controleRochas";
+import { ensaiosDaFinalidade } from "../utils/finalidade";
 import type { AmostraResumo } from "../tipos/banco";
 import { OverviewTab } from "./sample-tabs/VisaoGeralTab";
 import { OrigemTexto } from "./SamplesListPage";
@@ -69,14 +70,15 @@ export function SampleDetailPage() {
     icon: ICONES[cfg.chave],
     n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
   }));
-  // só aparecem as abas dos ensaios que foram realizados nesta amostra. Os ensaios são lançados no painel gerencial:
-  // aqui as abas são só de consulta
+  // só aparecem as abas dos ensaios realizados nesta amostra: os marcados no cadastro (gerencial) e os que já têm registro.
+  // Os ensaios são lançados no painel gerencial: aqui as abas são só de consulta
+  const marcados = ensaiosDaFinalidade(a.finalidade);
   const abas: { key: string; label: string; icon: LucideIcon; n?: number }[] = [
     { key: "geral", label: "Visão Geral", icon: ClipboardList },
-    ...todas.filter((t) => t.n > 0),
+    ...todas.filter((t) => t.n > 0 || marcados.includes(t.key)),
   ];
   const cfgAtiva = abas.some((t) => t.key === activeTab) ? ANALISES.find((c) => c.chave === activeTab) : undefined;
-  const semEnsaio = todas.every((t) => t.n === 0);
+  const semEnsaio = marcados.length === 0 && todas.every((t) => t.n === 0);
 
   return (
     <div>

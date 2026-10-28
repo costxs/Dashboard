@@ -259,8 +259,8 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
       {/* Seção de Membros e Acessos */}
       {secao !== 'empresas' && (
       <Card
-        titulo="Membros e Permissões de Acesso (RLS)"
-        subtitulo="Defina quem pode ler ou editar cada empresa ou projeto"
+        titulo="Vínculos de acesso"
+        subtitulo="Quem pode ler ou editar cada empresa ou projeto"
         icone={<Users size={18} />}
         acoes={
           <Button size="sm" variant="primary" icon={<UserPlus size={14} />} onClick={() => setModalMembro(true)}>

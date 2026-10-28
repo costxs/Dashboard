@@ -250,7 +250,16 @@ function SistemasAcidos() {
           <Campo rotulo="Categoria">
             <input className="input !py-2" list="categorias-sistema" value={s.categoria} onChange={set("categoria")} />
             <datalist id="categorias-sistema">
-              <option value="HCl" /><option value="HCl + IC" /><option value="retardado" /><option value="comercial" /><option value="orgânico" /><option value="quelante" />
+              <option value="HCl" />
+              <option value="HCl + IC" />
+              <option value="Blend" />
+              <option value="Mistura Ácida" />
+              <option value="Mistura Ácida / HCl" />
+              <option value="retardado" />
+              <option value="comercial" />
+              <option value="orgânico" />
+              <option value="quelante" />
+              <option value="emulsionado" />
             </datalist>
           </Campo>
           <Campo rotulo="Nome comercial"><input className="input !py-2" value={s.nome_comercial} onChange={set("nome_comercial")} /></Campo>

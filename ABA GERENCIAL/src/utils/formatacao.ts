@@ -45,3 +45,10 @@ export function numeroParaInput(v: unknown): string {
 export function mensagemErro(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
+
+export function fmtExato(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 12 });
+}

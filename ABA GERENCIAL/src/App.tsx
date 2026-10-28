@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { useContexto } from './store/useContexto'
 import { Shell } from './components/layout/Shell'
 import { LoginPage } from './pages/LoginPage'
+import { RedefinirSenhaPage } from './pages/RedefinirSenhaPage'
 import { ProjectSelectionPage } from './pages/ProjectSelectionPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { AmostrasPage } from './pages/AmostrasPage'
@@ -34,7 +35,35 @@ const RequerLogin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return <Navigate to="/login" replace />
   }
 
-  return <>{children}</>
+  return <RequerNivelElevado>{children}</RequerNivelElevado>
+}
+
+const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
+
+/**
+ * O painel gerencial é só de administradores e editores. Leitores e quem se registrou pelo dashboard
+ * usam o dashboard de visualização. É navegação: o que cada um lê ou grava, quem decide é o banco.
+ */
+const RequerNivelElevado: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { editor, isAdmin, perfil, sair } = useAuth()
+  if (editor || isAdmin) return <>{children}</>
+  const pendente = perfil?.situacao === 'pendente'
+  return (
+    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center p-6">
+      <div className="cartao max-w-md p-8 text-center">
+        <h1 className="m-0 text-[22px] text-[var(--color-blue-800)]">Acesso ao painel gerencial</h1>
+        <p className="mt-3 text-[14px] text-[var(--color-neutral-700)]">
+          {pendente
+            ? 'Seu cadastro ainda aguarda a aprovação do administrador.'
+            : 'Este painel é para administradores e editores. Sua conta tem acesso ao dashboard de visualização.'}
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {URL_DASHBOARD && !pendente && <a className="btn btn-blue" href={URL_DASHBOARD}>Abrir o dashboard</a>}
+          <button type="button" className="btn btn-secondary" onClick={() => { void sair() }}>Sair</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /** As páginas de lançamento precisam de uma empresa escolhida. */
@@ -57,6 +86,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
           <Route path="/projetos" element={<RequerLogin><ProjectSelectionPage /></RequerLogin>} />
 
           <Route element={<RequerLogin><Shell /></RequerLogin>}>

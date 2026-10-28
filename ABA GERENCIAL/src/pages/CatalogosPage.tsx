@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Plus, FlaskConical, Layers, Info } from 'lucide-react'
+import { Database, Plus, FlaskConical, Layers, Info, Filter } from 'lucide-react'
 import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge , SeloContexto } from '../components/UI'
 import { listarLitologias, criarLitologia, listarSistemasAcidos, criarSistemaAcido, montarAditivos } from '../servicos/api'
 import type { Gravavel, Litologia, SistemaAcido } from '../tipos/banco'
@@ -18,7 +18,18 @@ interface FormAcido {
   componentes: [ComponenteForm, ComponenteForm, ComponenteForm, ComponenteForm]
 }
 
-const CATEGORIAS_ACIDO = ['HCl', 'HCl + IC', 'retardado', 'comercial']
+const CATEGORIAS_PADRAO = [
+  'HCl',
+  'HCl + IC',
+  'Blend',
+  'Mistura Ácida',
+  'Mistura Ácida / HCl',
+  'Ácido Retardado',
+  'Ácido Orgânico',
+  'Quelante',
+  'Emulsionado',
+  'Comercial',
+]
 
 const formAcidoInicial = (): FormAcido => ({
   id_sistema: '',
@@ -70,6 +81,19 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
   const [sistemas, setSistemas] = useState<SistemaAcido[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Categorias extras cadastradas pelo usuário (persistidas no localStorage)
+  const [categoriasExtras, setCategoriasExtras] = useState<string[]>(() => {
+    try {
+      const salvo = localStorage.getItem('lcpetro_categorias_acido_extras')
+      return salvo ? JSON.parse(salvo) : []
+    } catch {
+      return []
+    }
+  })
+  const [criandoNovaCategoria, setCriandoNovaCategoria] = useState(false)
+  const [textoNovaCategoria, setTextoNovaCategoria] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
+
   // Modais
   const [modalLit, setModalLit] = useState(false)
   const [modalAcido, setModalAcido] = useState(false)
@@ -77,6 +101,37 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
   // Formulários
   const [formLit, setFormLit] = useState<Litologia>({ nome: '', tipo: 'Carbonato', descricao: '' })
   const [formAcido, setFormAcido] = useState<FormAcido>(formAcidoInicial)
+
+  // Lista unificada de categorias (Padrão + Banco + Extras + Atual do form)
+  const todasCategorias = useMemo(() => {
+    const doBanco = sistemas.map((s) => s.categoria).filter(Boolean) as string[]
+    const atual = formAcido.categoria ? [formAcido.categoria] : []
+    const unicas = Array.from(new Set([...CATEGORIAS_PADRAO, ...doBanco, ...categoriasExtras, ...atual]))
+    const ordemPadrao = CATEGORIAS_PADRAO
+    const extras = unicas.filter((c) => !ordemPadrao.includes(c)).sort((a, b) => a.localeCompare('pt-BR'))
+    return [...ordemPadrao, ...extras]
+  }, [sistemas, categoriasExtras, formAcido.categoria])
+
+  function handleAdicionarNovaCategoria(e?: React.FormEvent) {
+    if (e) e.preventDefault()
+    const nova = textoNovaCategoria.trim()
+    if (!nova) return
+    if (!categoriasExtras.includes(nova) && !CATEGORIAS_PADRAO.includes(nova)) {
+      const atualizadas = [...categoriasExtras, nova]
+      setCategoriasExtras(atualizadas)
+      try {
+        localStorage.setItem('lcpetro_categorias_acido_extras', JSON.stringify(atualizadas))
+      } catch {}
+    }
+    setFormAcido((prev) => ({ ...prev, categoria: nova }))
+    setTextoNovaCategoria('')
+    setCriandoNovaCategoria(false)
+  }
+
+  const sistemasFiltrados = useMemo(() => {
+    if (filtroCategoria === 'todas') return sistemas
+    return sistemas.filter((s) => s.categoria === filtroCategoria)
+  }, [sistemas, filtroCategoria])
 
   function mudarComponente(i: number, campo: keyof ComponenteForm, valor: string) {
     const componentes = formAcido.componentes.map((c, k) => (k === i ? { ...c, [campo]: valor } : c)) as FormAcido['componentes']
@@ -142,9 +197,19 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
     e.preventDefault()
     setSalvando(true)
     try {
+      const cat = formAcido.categoria?.trim()
+      if (cat && !CATEGORIAS_PADRAO.includes(cat) && !categoriasExtras.includes(cat)) {
+        const atualizadas = [...categoriasExtras, cat]
+        setCategoriasExtras(atualizadas)
+        try {
+          localStorage.setItem('lcpetro_categorias_acido_extras', JSON.stringify(atualizadas))
+        } catch {}
+      }
       const gravado = await criarSistemaAcido(formParaSistemaAcido(formAcido))
       setFeedback({ tipo: 'sucesso', msg: `Sistema ácido ${gravado.id_sistema} cadastrado com sucesso!` })
       setModalAcido(false)
+      setCriandoNovaCategoria(false)
+      setTextoNovaCategoria('')
       setFormAcido(formAcidoInicial())
       await carregar()
     } catch (err: any) {
@@ -234,11 +299,51 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
             </Button>
           }
         >
-          {sistemas.length === 0 ? (
-            <p className="py-4 text-center text-[13px] text-[var(--color-neutral-500)]">Nenhum sistema ácido cadastrado.</p>
+          {sistemas.length > 0 && (
+            <div className="pb-3 mb-2 border-b border-[var(--color-neutral-200)] flex items-center gap-1.5 overflow-x-auto text-xs py-1">
+              <span className="text-[var(--color-neutral-500)] flex items-center gap-1 font-medium mr-1 shrink-0">
+                <Filter size={12} /> Categoria:
+              </span>
+              <button
+                type="button"
+                onClick={() => setFiltroCategoria('todas')}
+                className={`px-2.5 py-1 rounded-full text-xs transition-colors shrink-0 ${
+                  filtroCategoria === 'todas'
+                    ? 'bg-[var(--color-blue-800)] text-white font-medium'
+                    : 'bg-[var(--color-neutral-100)] text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-200)]'
+                }`}
+              >
+                Todas ({sistemas.length})
+              </button>
+              {todasCategorias
+                .filter((cat) => sistemas.some((s) => s.categoria === cat))
+                .map((cat) => {
+                  const cont = sistemas.filter((s) => s.categoria === cat).length
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setFiltroCategoria(filtroCategoria === cat ? 'todas' : cat)}
+                      className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-colors shrink-0 ${
+                        filtroCategoria === cat
+                          ? 'bg-[var(--color-blue-800)] text-white font-medium'
+                          : 'bg-[var(--color-neutral-100)] text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-200)]'
+                      }`}
+                    >
+                      {cat} ({cont})
+                    </button>
+                  )
+                })}
+            </div>
+          )}
+
+          {sistemasFiltrados.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-[var(--color-neutral-500)]">
+              {sistemas.length === 0 ? 'Nenhum sistema ácido cadastrado.' : 'Nenhum sistema ácido nesta categoria.'}
+            </p>
           ) : (
             <div className="divide-y divide-[var(--color-neutral-200)]">
-              {sistemas.map((sis) => (
+              {sistemasFiltrados.map((sis) => (
                 <div key={sis.id_sistema} className="py-3 flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
@@ -335,16 +440,80 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Categoria"
-              placeholder="HCl, HCl + IC, retardado, comercial..."
-              list="categorias-acido"
-              value={formAcido.categoria}
-              onChange={(e) => setFormAcido({ ...formAcido, categoria: e.target.value })}
-            />
-            <datalist id="categorias-acido">
-              {CATEGORIAS_ACIDO.map((c) => <option key={c} value={c} />)}
-            </datalist>
+            <div>
+              {criandoNovaCategoria ? (
+                <div className="field w-full">
+                  <div className="flex items-center justify-between">
+                    <span className="rotulo">Nova Categoria *</span>
+                    <button
+                      type="button"
+                      onClick={() => setCriandoNovaCategoria(false)}
+                      className="text-xs text-[var(--color-blue-700)] hover:underline"
+                    >
+                      Voltar para lista
+                    </button>
+                  </div>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      className="input !py-2 flex-1"
+                      placeholder="Ex.: Blend, Mistura Ácida / HCl"
+                      value={textoNovaCategoria}
+                      onChange={(e) => setTextoNovaCategoria(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAdicionarNovaCategoria()
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleAdicionarNovaCategoria()}
+                      disabled={!textoNovaCategoria.trim()}
+                    >
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="field w-full">
+                  <div className="flex items-center justify-between">
+                    <span className="rotulo">Categoria</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCriandoNovaCategoria(true)
+                        setTextoNovaCategoria('')
+                      }}
+                      className="text-xs text-[var(--color-blue-700)] hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <Plus size={12} /> Nova categoria
+                    </button>
+                  </div>
+                  <select
+                    className="input !py-2 mt-1 w-full"
+                    value={formAcido.categoria}
+                    onChange={(e) => {
+                      if (e.target.value === '__NOVA__') {
+                        setCriandoNovaCategoria(true)
+                        setTextoNovaCategoria('')
+                      } else {
+                        setFormAcido({ ...formAcido, categoria: e.target.value })
+                      }
+                    }}
+                  >
+                    <option value="">Selecione uma categoria...</option>
+                    {todasCategorias.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="__NOVA__">+ Cadastrar outra categoria...</option>
+                  </select>
+                </div>
+              )}
+            </div>
             <Input
               label="Nome Comercial (se houver)"
               placeholder="Ex.: nome do produto do fornecedor"
@@ -375,34 +544,55 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
               onChange={(e) => mudarComponente(0, 'unidade', e.target.value)}
             >
               <option value="wt%">wt% (massa)</option>
+              <option value="vol%">vol% (volume)</option>
               <option value="M">M (mol/L)</option>
               <option value="N">N (normal)</option>
             </Select>
           </div>
 
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label={`Componente ${i + 1} (aditivo, opcional)`}
-                placeholder="Ex.: inibidor de corrosão, surfactante, quelante"
-                value={formAcido.componentes[i].nome}
-                onChange={(e) => mudarComponente(i, 'nome', e.target.value)}
-              />
-              <Input
-                label={`Valor ${i + 1}`}
-                inputMode="decimal"
-                placeholder="ex.: 0,5"
-                value={formAcido.componentes[i].valor}
-                onChange={(e) => mudarComponente(i, 'valor', e.target.value)}
-              />
-              <Input
-                label={`Unidade ${i + 1}`}
-                placeholder="wt%, vol%, M, gpt..."
-                value={formAcido.componentes[i].unidade}
-                onChange={(e) => mudarComponente(i, 'unidade', e.target.value)}
-              />
-            </div>
-          ))}
+          {[1, 2, 3].map((i) => {
+            const ehBlend = formAcido.categoria?.toLowerCase().includes('blend') || formAcido.categoria?.toLowerCase().includes('mistura')
+            const labelComponente = i === 1 && ehBlend
+              ? 'Componente 2 (segundo ácido ou aditivo, opcional)'
+              : `Componente ${i + 1} (aditivo, opcional)`
+            const placeholderComponente = i === 1 && ehBlend
+              ? 'Ex.: HF, ácido acético, ácido fórmico, inibidor...'
+              : 'Ex.: inibidor de corrosão, surfactante, quelante'
+
+            return (
+              <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Input
+                  label={labelComponente}
+                  placeholder={placeholderComponente}
+                  value={formAcido.componentes[i].nome}
+                  onChange={(e) => mudarComponente(i, 'nome', e.target.value)}
+                />
+                <Input
+                  label={`Valor ${i + 1}`}
+                  inputMode="decimal"
+                  placeholder="ex.: 0,5"
+                  value={formAcido.componentes[i].valor}
+                  onChange={(e) => mudarComponente(i, 'valor', e.target.value)}
+                />
+                <Input
+                  label={`Unidade ${i + 1}`}
+                  placeholder="wt%, vol%, M, gpt..."
+                  list="unidades-aditivos"
+                  value={formAcido.componentes[i].unidade}
+                  onChange={(e) => mudarComponente(i, 'unidade', e.target.value)}
+                />
+              </div>
+            )
+          })}
+
+          <datalist id="unidades-aditivos">
+            <option value="vol%" />
+            <option value="wt%" />
+            <option value="gpt" />
+            <option value="M" />
+            <option value="g/L" />
+            <option value="ppm" />
+          </datalist>
 
           <p className="text-[11px] text-[var(--color-neutral-600)]">
             Aditivos (montados a partir dos componentes 2 a 4):{' '}

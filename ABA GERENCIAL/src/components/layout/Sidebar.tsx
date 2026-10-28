@@ -16,6 +16,8 @@ import {
 import { LogoEmpresa } from '../LogoEmpresa'
 import { useAuth } from '../../context/AuthContext'
 import { useContexto } from '../../store/useContexto'
+import logoLcPetro from '../../assets/lcpetro-logo.png'
+import iconeLcPetro from '../../assets/lcpetro-icone.png'
 
 // Base: docs/referencia/painel-cadastro/src/components/layout/Sidebar.tsx
 const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
@@ -37,7 +39,7 @@ export function Sidebar() {
     { to: '/', label: 'Visão Geral', icon: LayoutDashboard },
     { to: '/amostras', label: 'Amostras e ensaios', icon: Database },
     { to: '/work-packages', label: 'Work packages', icon: ListChecks },
-    { to: '/publicacoes', label: 'Publicações LC PETRO', icon: BookOpen },
+    { to: '/publicacoes', label: 'Literatura', icon: BookOpen },
     ...(editor ? [{ to: '/importar', label: 'Importar planilha', icon: FileSpreadsheet }] : []),
     ...(editor || isAdmin ? [{ to: '/tratamento-coreflood', label: 'Tratamento de dados de coreflood', icon: Activity }] : []),
   ]
@@ -65,10 +67,10 @@ export function Sidebar() {
       <div className="bg-white p-5 border-b-4 border-[var(--color-orange)] flex items-center justify-center relative cursor-pointer group"
         onClick={alternarMenu} title={recolhido ? 'Expandir menu' : 'Recolher menu'}>
         {recolhido ? (
-          <img src="/lab-logo-2.png" alt="LC PETRO" className="w-[32px] h-auto object-contain" />
+          <img src={iconeLcPetro} alt="LC PETRO" className="w-[32px] h-[32px] object-contain" />
         ) : (
           <div className="flex flex-col items-start w-full">
-            <img src="/lab-logo-1.png" alt="LC PETRO" className="w-[180px] h-auto object-contain" />
+            <img src={logoLcPetro} alt="LC PETRO" className="w-[180px] h-auto object-contain" />
             <p className="mt-2.5 text-[10px] tracking-[0.07em] uppercase font-semibold text-[var(--color-red)]">
               Painel de Cadastro
             </p>

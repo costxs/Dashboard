@@ -201,6 +201,9 @@ export interface AcidificacaoGravada {
   volume_acido_bt_cm3?: number | null
   criterio_bt?: string | null           // 'ΔP caiu 95 % do inicial (...) até o patamar (...)'
   pvbt_equipamento?: number | null      // o que o próprio equipamento calculou
+  /** migração 019: valem também SEM breakthrough */
+  pv_acido_injetado?: number | null     // PV de ácido injetado até o fim da fase de ácido (volume morto descontado)
+  razao_dp_depois_antes?: number | null // ΔP depois do ácido ÷ ΔP antes, mesma vazão: < 0,5 abriu caminho; ≥ 0,8 não abriu
   arquivo_origem?: string | null
 }
 

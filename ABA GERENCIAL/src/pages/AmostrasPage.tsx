@@ -15,6 +15,9 @@ import {
   type FiltrosBanco,
 } from '../utils/bancoAmostras'
 import { fmt, fmtFaixaMd, numeroParaInput, paraNumero } from '../utils/formatacao'
+import { LISTA_ANALISES } from '../config/analises'
+// a finalidade da amostra guarda os ensaios em que ela foi usada (mesmo vocabulário do controle de rochas)
+import { ensaiosDaFinalidade, finalidadeDosEnsaios } from '../utils/finalidade'
 import { classeStatus, rotuloStatus, STATUS_ROTULO } from '../utils/status'
 
 // campos numéricos do formulário: ficam como texto para aceitar vírgula decimal (0,5) e 5,2e-7
@@ -87,6 +90,10 @@ export const AmostrasPage: React.FC = () => {
   const [numeros, setNumeros] = useState<Partial<Record<CampoNumerico, string>>>({})
   // litologia que ainda não está no catálogo: é criada junto com a amostra
   const [novaLitologia, setNovaLitologia] = useState<string | null>(null)
+  // ensaios em que a amostra foi usada (ao menos um quando o status é "utilizada"); ficam na finalidade da amostra
+  const [ensaiosUsados, setEnsaiosUsados] = useState<string[]>([])
+  const alternarEnsaio = (chave: string) =>
+    setEnsaiosUsados((atual) => (atual.includes(chave) ? atual.filter((c) => c !== chave) : [...atual, chave]))
 
   /** Abre o formulário com os números em texto (vírgula decimal). */
   function preencherForm(a: Partial<Amostra>) {
@@ -100,6 +107,7 @@ export const AmostrasPage: React.FC = () => {
       permeabilidade_fabricante_max_md: kAte != null && kAte !== k ? numeroParaInput(kAte) : '',
     })
     setNovaLitologia(null)
+    setEnsaiosUsados(ensaiosDaFinalidade(a.finalidade))
   }
 
   const [feedback, setFeedback] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null)
@@ -150,9 +158,9 @@ export const AmostrasPage: React.FC = () => {
     e.preventDefault()
     setSalvando(true)
 
-    // Validação de regra do banco: Testemunho exige Poço
-    if (formAmostra.tipo_origem === 'testemunho' && !formAmostra.poco?.trim()) {
-      setFeedback({ tipo: 'erro', msg: 'Para amostras do tipo testemunho, o nome/número do Poço é obrigatório!' })
+    // amostra utilizada precisa estar ligada aos ensaios em que foi usada
+    if (formAmostra.status === 'utilizada' && ensaiosUsados.length === 0) {
+      setFeedback({ tipo: 'erro', msg: 'Para marcar a amostra como utilizada, marque os ensaios em que ela foi usada (um ou mais).' })
       setSalvando(false)
       return
     }
@@ -180,10 +188,14 @@ export const AmostrasPage: React.FC = () => {
         if (!existente) await criarLitologia({ nome })
         dados.litologia = existente?.nome ?? nome
       }
+      const utilizada = dados.status === 'utilizada' && ensaiosUsados.length > 0
+      if (utilizada) dados.finalidade = finalidadeDosEnsaios(ensaiosUsados)
       const gravada = await salvarAmostra(dados)
       setModalAmostra(false)
       if (nova) {
-        navigate(`/amostras/${gravada.id}`)   // segue para a ficha, onde se lançam os ensaios
+        // segue para a ficha, já na aba do primeiro ensaio marcado (ou na visão geral), onde se lançam os ensaios
+        const primeiro = LISTA_ANALISES.find((c) => ensaiosUsados.includes(c.chave))?.chave
+        navigate(`/amostras/${gravada.id}${utilizada && primeiro ? `?aba=${primeiro}` : ''}`)
         return
       }
       setFeedback({ tipo: 'sucesso', msg: `Amostra ${gravada.codigo} salva com sucesso!` })
@@ -545,7 +557,7 @@ export const AmostrasPage: React.FC = () => {
                     : 'bg-white border-[var(--color-neutral-300)] text-[var(--color-neutral-600)] hover:border-[var(--color-blue-200)]'
                 }`}
               >
-                Afloramento (Outcrop)
+                Afloramento
               </button>
               <button
                 type="button"
@@ -556,61 +568,9 @@ export const AmostrasPage: React.FC = () => {
                     : 'bg-white border-[var(--color-neutral-300)] text-[var(--color-neutral-600)] hover:border-[var(--color-blue-200)]'
                 }`}
               >
-                Testemunho de Sondagem (Poço)
+                Testemunho de Sondagem
               </button>
             </div>
-
-            {formAmostra.tipo_origem === 'afloramento' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                <Input
-                  label="Local do Afloramento"
-                  placeholder="Ex.: Pedreira Guaratuba, PR"
-                  value={formAmostra.afloramento_local || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, afloramento_local: e.target.value })}
-                />
-                <Input
-                  label="Fornecedor da Rocha"
-                  placeholder="Ex.: Kocurek Industries"
-                  value={formAmostra.fornecedor || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, fornecedor: e.target.value })}
-                />
-                <Input
-                  label="Bloco / Identificador"
-                  placeholder="Ex.: Bloco B-04"
-                  value={formAmostra.bloco || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, bloco: e.target.value })}
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-                <Input
-                  label="Poço *"
-                  placeholder="Ex.: 3-BRSA-1284-RJS"
-                  value={formAmostra.poco || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, poco: e.target.value })}
-                  obrigatorio
-                />
-                <Input
-                  label="Campo"
-                  placeholder="Ex.: Búzios, Mero, Tupi"
-                  value={formAmostra.campo || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, campo: e.target.value })}
-                />
-                <Input
-                  label="Bacia Sedimentar"
-                  placeholder="Ex.: Bacia de Santos"
-                  value={formAmostra.bacia || ''}
-                  onChange={(e) => setFormAmostra({ ...formAmostra, bacia: e.target.value })}
-                />
-                <Input
-                  label="Profundidade (m)"
-                  inputMode="decimal"
-              placeholder="Ex,: 5234.5"
-              value={numeros.profundidade_m ?? ''}
-              onChange={(e) => setNumeros({ ...numeros, profundidade_m: e.target.value })}
-                />
-              </div>
-            )}
           </div>
 
           {/* Dimensões Físicas */}
@@ -676,6 +636,27 @@ export const AmostrasPage: React.FC = () => {
               onChange={(e) => setFormAmostra({ ...formAmostra, data_coleta: e.target.value })}
             />
           </div>
+
+          {/* amostra utilizada: os ensaios em que foi usada (um ou mais) viram as abas da ficha */}
+          {formAmostra.status === 'utilizada' && (
+            <fieldset className="m-0 min-w-0 rounded-[10px] border border-[var(--color-neutral-300)] bg-[var(--color-neutral-50)] p-4">
+              <legend className="rotulo px-1">Ensaios em que foi utilizada * ({ensaiosUsados.length} marcado(s))</legend>
+              <div className="flex flex-wrap gap-2">
+                {LISTA_ANALISES.map((c) => {
+                  const marcado = ensaiosUsados.includes(c.chave)
+                  return (
+                    <button type="button" key={c.chave} onClick={() => alternarEnsaio(c.chave)} aria-pressed={marcado}
+                      className={`tag cursor-pointer !py-1.5 ${marcado ? 'tag-orange' : 'tag-neutral'}`}>
+                      {c.numero}. {c.titulo}
+                    </button>
+                  )
+                })}
+              </div>
+              <span className="ajuda mt-2 block">
+                Marque todos os ensaios feitos com esta amostra: eles aparecem como abas na ficha da amostra do dashboard de visualização.
+              </span>
+            </fieldset>
+          )}
 
           <Textarea
             label="Observações Físicas / Geológicas"

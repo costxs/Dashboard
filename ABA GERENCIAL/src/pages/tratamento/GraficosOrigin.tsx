@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, FileArchive, FileSpreadsheet, LineChart, Loader2, RotateCcw } from 'lucide-react'
 import { Alert, Card, Input, Select } from '../../components/UI'
 import {
-  CONFIG_PADRAO, FONTES, MARCADORES, baixarArquivo, etapaGrafico, guardarPreferencias, montarPedido, pedirAoServico,
-  type ConfigGraficos, type DadosEnsaio, type EtapaGrafico, type Formato, type Modo,
+  CONFIG_PADRAO, FONTES, MARCADORES, baixarArquivo, etapaGrafico, guardarPreferencias, montarPedido, pedirAoServico, unidadeTempo,
+  type ConfigGraficos, type DadosEnsaio, type EtapaGrafico, type Formato, type Modo, type UnidadeTempo,
 } from '../../servicos/graficos'
 import { fmt, mensagemErro, numeroParaInput, paraNumero } from '../../utils/formatacao'
 import { montarZip } from '../../utils/zip'
@@ -206,6 +206,12 @@ export const GraficosOrigin: React.FC<{
               <option value="dentro">para dentro (Origin)</option>
               <option value="fora">para fora</option>
             </Select>
+            <Select label="Unidade do tempo (eixo X)" value={unidadeTempo(c, dados)}
+              onChange={(e) => { const u = e.target.value as UnidadeTempo; mudar({ unidade_tempo: u, tempo_em_minutos: u === 'min' }) }}>
+              <option value="s">segundos (s)</option>
+              <option value="min">minutos (min)</option>
+              <option value="h">horas (h) — ex.: 0,90</option>
+            </Select>
             <div className="grid grid-cols-2 gap-3">
               <CampoNumero rotulo="X mínimo" valor={c.xlim[0]} opcional aoMudar={(v) => mudar({ xlim: [v, c.xlim[1]] })} />
               <CampoNumero rotulo="X máximo" valor={c.xlim[1]} opcional aoMudar={(v) => mudar({ xlim: [c.xlim[0], v] })} />
@@ -215,7 +221,6 @@ export const GraficosOrigin: React.FC<{
             <div className="flex flex-col gap-1.5">
               <Marcar rotulo="Tempo de cada etapa começando em zero (planilha para o Origin)" valor={c.tempo_relativo}
                 aoMudar={(v) => mudar({ tempo_relativo: v })} />
-              <Marcar rotulo="Tempo em minutos" valor={c.tempo_em_minutos} aoMudar={(v) => mudar({ tempo_em_minutos: v })} />
               <Marcar rotulo="Mostrar trecho estável" valor={c.mostrar_janela} aoMudar={(v) => mudar({ mostrar_janela: v })} />
               <Marcar rotulo="Mostrar ΔP médio" valor={c.mostrar_media} aoMudar={(v) => mudar({ mostrar_media: v })} />
               <Marcar rotulo="Mostrar k" valor={c.mostrar_k} aoMudar={(v) => mudar({ mostrar_k: v })} />

@@ -173,10 +173,3 @@ export type GraficoAcid = "geral" | "pv" | "apos";
 export function pedirGraficoAcidificacao(analiseId: number, qual: GraficoAcid, formato: Formato, dpi: number, sinal?: AbortSignal): Promise<Blob> {
   return pedirGrafico(JSON.stringify({ analise_id: analiseId, qual, formato, dpi }), sinal, "acidificacao/grafico-salvo");
 }
-
-// ---- comparação de resultados (PVbt): o backend desenha, com os dados que a pessoa pode ver (RLS) ----
-export type VisaoComparacao = "barras" | "velocidade";
-
-export function pedirComparacaoPvbt(amostras: string[], visao: VisaoComparacao, formato: Formato, dpi: number, sinal?: AbortSignal): Promise<Blob> {
-  return pedirGrafico(JSON.stringify({ amostras, visao, formato, dpi }), sinal, "comparacao/pvbt");
-}

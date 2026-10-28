@@ -51,6 +51,14 @@ export interface Leitura {
   k_equipamento: number | null;
   volumes: Record<string, { atual: number | null; parcial: number | null }>; // por nome do fluido
   rotulo?: string | null;   // separação do pesquisador ("Permeabilidade 1"), se vier
+  /** por número da garrafa (1..8), mesmo sem nome — a planilha nem sempre diz o fluido */
+  garrafas?: Record<number, { nome: string | null; atual: number | null; parcial: number | null }>;
+  /** coluna "Set Point" do JBV: acompanha o ΔP (é o ΔP filtrado pelo equipamento), não é um limite */
+  dp_filtrado?: number | null;
+  /** colunas de PVbt do equipamento JBV, quando vierem */
+  recidivas?: number | null;
+  volume_poroso_eq_cm3?: number | null;
+  pvbt_total_eq?: number | null;
 }
 
 export interface Ensaio {
@@ -59,6 +67,17 @@ export interface Ensaio {
   holder: "H1" | "H2";
   leituras: Leitura[];
   avisos: string[];
+  /** equipamento que gerou o arquivo (o leitor do DCI marca "DCI") */
+  equipamento?: "JBV" | "DCI";
+}
+
+/** Vazão suavizada (mediana móvel): o DCI mede Q com ~1–5 % de ruído em vazões baixas. */
+export function suavizarQ(ls: Leitura[], janela = 15): number[] {
+  const h = Math.floor(janela / 2);
+  return ls.map((_, i) => {
+    const v = ls.slice(Math.max(0, i - h), i + h + 1).map((l) => l.q).sort((a, b) => a - b);
+    return v[Math.floor(v.length / 2)];
+  });
 }
 
 export interface Etapa {
@@ -133,7 +152,7 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
     const iQ = idx((s) => s.startsWith("q cm"));
     const iHora = idx((s) => s === "hora");
     const iHolder = idx((s) => s.startsWith("selecao do holder"));
-    const iRot = cab.findIndex((c, j) => /^coluna ?\d+$/i.test(c) && m.slice(iCab + 1).some((l) => typeof l?.[j] === "string" && /permeab/i.test(l[j] as string)));
+    const iRot = cab.findIndex((c, j) => /^(coluna ?\d+|etapa|fase)$/i.test(c) && m.slice(iCab + 1).some((l) => typeof l?.[j] === "string" && /permeab|@/i.test(l[j] as string)));
     // holder: o que mais aparece na coluna de seleção (padrão H1)
     let holder: "H1" | "H2" = "H1";
     if (iHolder >= 0) {
@@ -149,11 +168,15 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
     const iT = idx((s) => s.startsWith("t estufa"));
     const iK = idx((s) => s === `permeabilidade ${h} md`);
     // garrafas: "Nome Gn" + "Volume atual Gn" + "Volume bomb. parcial Gn"
-    const garrafas: { nome: number; atual: number; parcial: number }[] = [];
+    const garrafas: { n: number; nome: number; atual: number; parcial: number }[] = [];
     k.forEach((s, j) => {
       const g = /^nome g(\d)$/.exec(s);
-      if (g) garrafas.push({ nome: j, atual: idx((x) => x === `volume atual g${g[1]} cm3` || x === `volume atual g${g[1]} cm`), parcial: idx((x) => x.startsWith(`volume bomb parcial g${g[1]}`)) });
+      if (g) garrafas.push({ n: Number(g[1]), nome: j, atual: idx((x) => x === `volume atual g${g[1]} cm3` || x === `volume atual g${g[1]} cm`), parcial: idx((x) => x.startsWith(`volume bomb parcial g${g[1]}`)) });
     });
+    const iSP = idx((s) => s === "set point");
+    const iRec = idx((s) => s.startsWith("numero de recidivas"));
+    const iVP = idx((s) => s.startsWith("volume poroso"));
+    const iPvbtT = idx((s) => s.startsWith("pvbt total"));
     const avisos: string[] = [];
     if (iDp < 0) avisos.push(`coluna dP${holder} (psi) não encontrada`);
     const leituras: Leitura[] = [];
@@ -163,10 +186,12 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
       const t = num(l[iTempo]); const q = num(l[iQ]);
       if (t == null || q == null) continue;
       const volumes: Leitura["volumes"] = {};
+      const porGarrafa: Leitura["garrafas"] = {};
       for (const g of garrafas) {
         const nome = String(l[g.nome] ?? "").trim();
-        if (!nome) continue;
-        volumes[nome] = { atual: g.atual >= 0 ? num(l[g.atual]) : null, parcial: g.parcial >= 0 ? num(l[g.parcial]) : null };
+        const v = { atual: g.atual >= 0 ? num(l[g.atual]) : null, parcial: g.parcial >= 0 ? num(l[g.parcial]) : null };
+        porGarrafa[g.n] = { nome: nome || null, ...v };
+        if (nome) volumes[nome] = v;
       }
       leituras.push({
         linha: i + 1, tempo_s: t, q,
@@ -174,10 +199,12 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
         dp: iDp >= 0 ? num(l[iDp]) : null, dp_abs: iDpAbs >= 0 ? num(l[iDpAbs]) : null,
         p_confinamento: iPC >= 0 ? num(l[iPC]) : null, p_backpressure: iPB >= 0 ? num(l[iPB]) : null,
         temperatura: iT >= 0 ? num(l[iT]) : null, k_equipamento: iK >= 0 ? num(l[iK]) : null,
-        volumes, rotulo: iRot >= 0 ? (l[iRot] as string | null) : null,
+        volumes, garrafas: porGarrafa, rotulo: iRot >= 0 ? (l[iRot] as string | null) : null,
+        dp_filtrado: iSP >= 0 ? num(l[iSP]) : null, recidivas: iRec >= 0 ? num(l[iRec]) : null,
+        volume_poroso_eq_cm3: iVP >= 0 ? num(l[iVP]) : null, pvbt_total_eq: iPvbtT >= 0 ? num(l[iPvbtT]) : null,
       });
     }
-    if (leituras.length) ensaios.push({ aba, metadados: meta, holder, leituras, avisos });
+    if (leituras.length) ensaios.push({ aba, metadados: meta, holder, leituras, avisos, equipamento: "JBV" });
   }
   // exportação bruta (tem metadados) primeiro
   return ensaios.sort((a, b) => Number(!!b.metadados.amostra) - Number(!!a.metadados.amostra));
@@ -207,13 +234,19 @@ export interface OpcoesTratamento {
 }
 
 export function separarEtapas(e: Ensaio, op: OpcoesTratamento = {}): { inicio: number; fim: number; q: number }[] {
-  const tol = op.toleranciaQ ?? 0.02, minP = op.minPontos ?? 5;
+  const dci = e.equipamento === "DCI";
+  const tol = op.toleranciaQ ?? (dci ? 0.05 : 0.02), minP = op.minPontos ?? 5;
+  const qs = dci ? suavizarQ(e.leituras) : e.leituras.map((l) => l.q);
+  const zero = dci ? 0.02 : 0;          // abaixo disso a bomba está parada (ruído do DCI)
   const blocos: { inicio: number; fim: number; q: number }[] = [];
-  e.leituras.forEach((l, i) => {
+  qs.forEach((q0, i) => {
+    const q = q0 <= zero ? 0 : q0;
     const b = blocos[blocos.length - 1];
-    if (b && Math.abs(l.q - b.q) <= tol * Math.max(Math.abs(b.q), 1e-9)) b.fim = i;
-    else blocos.push({ inicio: i, fim: i, q: l.q });
+    if (b && Math.abs(q - b.q) <= tol * Math.max(Math.abs(b.q), 1e-9)) b.fim = i;
+    else blocos.push({ inicio: i, fim: i, q });
   });
+  // vazão nominal da etapa = mediana do trecho (não o 1º valor, que é ruidoso)
+  for (const b of blocos) { const v = qs.slice(b.inicio, b.fim + 1).sort((x, y) => x - y); if (b.q > 0) b.q = v[Math.floor(v.length / 2)]; }
   // vazão zero (pausa) e trechos curtos de transição não são etapas
   const etapas = blocos.filter((b) => b.q > 0 && b.fim - b.inicio + 1 >= minP);
   // duas etapas seguidas com a mesma vazão (separadas por ruído) viram uma
@@ -326,6 +359,8 @@ export interface GravarPermeabilidade {
   pressaoConfinamentoPsi?: number | null;
   /** configuração dos gráficos padrão Origin (cores por etapa, títulos, eixos...) -> analise_petrofisica.config_graficos */
   configGraficos?: unknown;
+  /** equipamento que gerou o arquivo (migração 018). Padrão JBV, o único com leitor por enquanto */
+  equipamento?: "JBV" | "DCI";
 }
 
 /** "02/09/2026 15:05:46" -> "2026-09-02" */
@@ -343,6 +378,7 @@ export async function gravarPermeabilidade(sb: SupabaseClient, g: GravarPermeabi
   const erro = (e: { code?: string; message: string }, t: string) =>
     new Error(e.code === "42501" ? `Sem permissão para gravar em ${t}: é preciso ser editor do projeto da amostra.`
       : /ajuste_(modo|inclinacao|intercepto_psi|r2)/.test(e.message) ? "Rode a migração 017 no Supabase"
+      : /equipamento_aquisicao/.test(e.message) ? "Rode a migração 018 no Supabase"
       : `${t}: ${e.message}`);
 
   const { data: a, error: e1 } = await sb.from("analise_petrofisica").insert({
@@ -356,6 +392,8 @@ export async function gravarPermeabilidade(sb: SupabaseClient, g: GravarPermeabi
     ajuste_inclinacao: g.resultado.ajuste?.inclinacao ?? null,
     ajuste_intercepto_psi: g.resultado.ajuste?.intercepto ?? null,
     ajuste_r2: g.resultado.ajuste?.r2 ?? null,
+    // coluna da migração 018
+    equipamento_aquisicao: g.equipamento ?? "JBV",
     observacoes: `Tratamento automático: ${g.resultado.etapas.length} etapa(s) de vazão; k por ${g.metodo}` +
       (g.resultado.ajuste ? ` (reta ${g.resultado.ajuste.modo === "origem" ? "pela origem" : "com intercepto, como no Origin"}; R² = ${g.resultado.ajuste.r2.toFixed(4)})` : ""),
     // coluna da migração 016; só vai no pedido quando há configuração

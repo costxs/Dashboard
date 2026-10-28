@@ -41,7 +41,17 @@ export function AcidificacaoFases({ r }: { r: RegistroAnalise }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-6 p-7">
-        <Valor rotulo="PVbt" destaque>{fmt(r.pvbt, 3)}</Valor>
+        {r.breakthrough === false ? (
+          <>
+            <Valor rotulo="Resultado" destaque>Sem breakthrough</Valor>
+            <Valor rotulo="PV de ácido injetado">{fmt(g.pv_acido_injetado, 3)}</Valor>
+            <Valor rotulo="ΔP depois ÷ antes">
+              {g.razao_dp_depois_antes != null ? `${fmt(g.razao_dp_depois_antes, 2)} (${g.razao_dp_depois_antes >= 1 ? `${fmt(g.razao_dp_depois_antes, 1)}× maior` : `${fmt(1 / g.razao_dp_depois_antes, 1)}× menor`})` : "—"}
+            </Valor>
+          </>
+        ) : (
+          <Valor rotulo="PVbt" destaque>{fmt(r.pvbt, 3)}</Valor>
+        )}
         <Valor rotulo="Equipamento">{fmt(g.equipamento_aquisicao)}</Valor>
         <Valor rotulo="Ácido até o breakthrough (cm³)">{fmt(g.volume_acido_bt_cm3, 3)}</Valor>
         <Valor rotulo="Volume poroso usado (cm³)">{fmt(g.volume_poroso_usado_cm3, 3)}</Valor>

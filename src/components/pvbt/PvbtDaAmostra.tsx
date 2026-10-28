@@ -64,7 +64,7 @@ export function PvbtDaAmostra({ amostraId, codigo }: { amostraId: string; codigo
                   {ensaios.map((e) => (
                     <tr key={e.id_experimento} className="lcp-row">
                       <td className="whitespace-nowrap font-bold text-[var(--color-blue-800)]">{e.id_experimento}</td>
-                      <td className="text-right tabular-nums">{fmtExato(e.pvbt)}</td>
+                      <td className="text-right tabular-nums">{e.breakthrough === false ? "sem breakthrough" : fmtExato(e.pvbt)}</td>
                       {CALCULADOS.map(([k, , casas]) => <td key={k} className="text-right tabular-nums">{fmt(e[k], casas)}</td>)}
                     </tr>
                   ))}

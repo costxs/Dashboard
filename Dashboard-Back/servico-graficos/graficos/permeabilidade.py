@@ -13,6 +13,7 @@ import math
 from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from pydantic import BaseModel, Field
 
 from .estilo import CORES_ORIGIN, acabamento, estilo_origin
@@ -78,6 +79,7 @@ class ConfigGrafico(BaseModel):
     eixo_y: str = "ΔP (psi)"
     tempo_relativo: bool = True                   # cada etapa começa em t = 0
     tempo_em_minutos: bool = False
+    tempo_em_horas: bool = False                  # DCI: o tempo do equipamento é em horas
     xlim: Optional[tuple[Optional[float], Optional[float]]] = None
     ylim: Optional[tuple[Optional[float], Optional[float]]] = None
     mostrar_janela: bool = True                   # sombreia o trecho estável
@@ -90,6 +92,10 @@ class ConfigGrafico(BaseModel):
     diametro_cm: Optional[float] = None
     viscosidade_cp: Optional[float] = None
     ajuste: Literal["intercepto", "origem"] = "intercepto"   # reta ΔP × Q (intercepto = como o Origin do laboratório)
+
+    def div_tempo(self) -> float:
+        """Segundos por unidade do eixo de tempo: h (DCI) = 3600, min = 60, s = 1."""
+        return 3600.0 if self.tempo_em_horas else 60.0 if self.tempo_em_minutos else 1.0
 
 
 class PedidoGrafico(BaseModel):
@@ -121,7 +127,7 @@ def _desenhar_etapa(ax, leituras: list[Leitura], e: EtapaCfg, cor: str, cfg: Con
         return ligar_em
     if t0 is None:
         t0 = e.t_inicio if deslocar else 0.0
-    div = 60.0 if cfg.tempo_em_minutos else 1.0
+    div = cfg.div_tempo()
     xs = [(p.t - t0) / div for p in pts]
     ys = [p.dp for p in pts]
     if ligar_em is not None:
@@ -142,9 +148,18 @@ def _limites(ax, cfg: ConfigGrafico):
         ax.set_ylim(bottom=cfg.ylim[0], top=cfg.ylim[1])
 
 
+def _formato_tempo(ax, cfg: ConfigGrafico):
+    """Tempo em horas: números do eixo X com 2 casas e vírgula (0,90; 1,80...)."""
+    if cfg.tempo_em_horas and cfg.eixo_x == "Tempo (s)":
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.2f}".replace(".", ",")))
+
+
 def _eixo_x(cfg: ConfigGrafico) -> str:
-    if cfg.tempo_em_minutos and cfg.eixo_x == "Tempo (s)":
-        return "Tempo (min)"
+    if cfg.eixo_x == "Tempo (s)":
+        if cfg.tempo_em_horas:
+            return "Tempo (h)"
+        if cfg.tempo_em_minutos:
+            return "Tempo (min)"
     return cfg.eixo_x
 
 
@@ -164,7 +179,7 @@ def gerar_grafico(p: PedidoGrafico) -> tuple[bytes, str]:
             ax.set_title(cfg.titulo or _rotulo(e))
             if cfg.mostrar_k and e.k_md is not None:
                 ax.text(0.97, 0.06, f"k = {_num(e.k_md)} mD", transform=ax.transAxes, ha="right", va="bottom")
-            _limites(ax, cfg); acabamento(ax)
+            _limites(ax, cfg); acabamento(ax); _formato_tempo(ax, cfg)
             if cfg.mostrar_legenda and cfg.titulo:   # sem título próprio, o título já diz a vazão
                 ax.legend(loc="best")
         elif cfg.modo == "painel":
@@ -183,7 +198,7 @@ def gerar_grafico(p: PedidoGrafico) -> tuple[bytes, str]:
                     ax.set_xlabel(_eixo_x(cfg))
                 if j % cols == 0:
                     ax.set_ylabel(cfg.eixo_y)
-                _limites(ax, cfg); acabamento(ax)
+                _limites(ax, cfg); acabamento(ax); _formato_tempo(ax, cfg)
             for j in range(n, linhas * cols):
                 eixos[j // cols][j % cols].axis("off")
             if cfg.titulo:
@@ -191,7 +206,7 @@ def gerar_grafico(p: PedidoGrafico) -> tuple[bytes, str]:
         elif cfg.modo == "combinado":
             # todas as vazões num gráfico só: em sequência no tempo do ensaio, ou sobrepostas (t = 0)
             fig, ax = plt.subplots(figsize=tam)
-            div = 60.0 if cfg.tempo_em_minutos else 1.0
+            div = cfg.div_tempo()
             acumulado = 0.0                  # tempo já desenhado (modo contínuo)
             ultimo: Optional[tuple[float, float]] = None
             for e in etapas:
@@ -218,7 +233,7 @@ def gerar_grafico(p: PedidoGrafico) -> tuple[bytes, str]:
             if cfg.titulo:
                 ax.set_title(cfg.titulo)
             ax.margins(y=0.12)
-            _limites(ax, cfg); acabamento(ax)
+            _limites(ax, cfg); acabamento(ax); _formato_tempo(ax, cfg)
             if cfg.mostrar_legenda:
                 ax.legend(loc="upper left" if not cfg.sobrepor else "center right")
         else:  # darcy

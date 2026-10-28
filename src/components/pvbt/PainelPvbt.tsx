@@ -170,7 +170,7 @@ function Grupo({ g, serie, aberto, onAlternar, destacada, onDestacar, aoAbrirAmo
                   <td className="!py-1.5 tabular-nums">{fmt(l.k_inicial_md, 3)}</td>
                   <td className="!py-1.5 tabular-nums">{fmt(l.vazao_ml_min, 3)}</td>
                   <td className="!py-1.5 tabular-nums">{fmt(l.vel_intersticial_cm_min, 4)}</td>
-                  <td className="!py-1.5 tabular-nums font-bold">{fmtExato(l.pvbt)}</td>
+                  <td className="!py-1.5 tabular-nums font-bold">{l.breakthrough === false ? <span className="font-normal text-[var(--color-neutral-600)]">sem breakthrough</span> : fmtExato(l.pvbt)}</td>
                   <td className="!py-1.5">{l.pvbt_condicao ?? '—'}</td>
                   <td className="!py-1.5 tabular-nums whitespace-nowrap">{l.comprimento_wormhole_uct_cm != null || l.comprimento_wormhole_cm != null
                     ? `${fmt(l.comprimento_wormhole_uct_cm ?? l.comprimento_wormhole_cm, 2)}${l.lwh_referencia ? ` (${l.lwh_referencia})` : ''}` : '—'}</td>

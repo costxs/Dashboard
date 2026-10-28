@@ -11,6 +11,7 @@ import { EmptyState } from "../EmptyState";
 import { Aviso, Carregando, Valor } from "../ui/base";
 import { fmt, fmtData } from "../../utils/formatacao";
 import { AcidificacaoFases } from "./AcidificacaoFases";
+import { PermeabilidadeEtapas } from "./PermeabilidadeEtapas";
 import { Arquivos } from "./Arquivos";
 import { Curvas } from "./Curvas";
 import { FormularioAnalise } from "./FormularioAnalise";
@@ -177,9 +178,7 @@ function Detalhe(p: {
         ))}
       </div>
 
-      {cfg.chave === "petrofisica" && r.metodo_k != null && (
-        <Aviso tipo="info">Este k veio do tratamento de coreflood: as etapas de vazão, o ajuste ΔP × Q e os gráficos estão na aba 3. Coreflooding.</Aviso>
-      )}
+      {cfg.chave === "petrofisica" && <PermeabilidadeEtapas r={r} amostra={p.amostra} />}
       {cfg.chave === "coreflooding" && <AcidificacaoFases r={r} />}
 
       {cfg.filha && !!filhos.dados?.length && (

@@ -9,6 +9,8 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000d', 'petro@lab',        '{"nome": "Pesquisador Petrobras"}'),
   ('00000000-0000-0000-0000-00000000000e', 'leitor@lab',       '{"nome": "Leitor projeto A"}');
 update perfis set administrador = true where email = 'admin@lab';
+-- usuários que já existiam quando a 020 rodou ficam aprovados (cadastro novo nasce pendente)
+update perfis set situacao = 'aprovado';
 
 insert into empresas (id, sigla, nome) values
   ('10000000-0000-0000-0000-000000000001', 'TOTAL', 'TotalEnergies'),

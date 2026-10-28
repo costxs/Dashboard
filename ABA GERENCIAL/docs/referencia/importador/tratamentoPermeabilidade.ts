@@ -51,6 +51,14 @@ export interface Leitura {
   k_equipamento: number | null;
   volumes: Record<string, { atual: number | null; parcial: number | null }>; // por nome do fluido
   rotulo?: string | null;   // separação do pesquisador ("Permeabilidade 1"), se vier
+  /** por número da garrafa (1..8), mesmo sem nome — a planilha nem sempre diz o fluido */
+  garrafas?: Record<number, { nome: string | null; atual: number | null; parcial: number | null }>;
+  /** coluna "Set Point" do JBV: acompanha o ΔP (é o ΔP filtrado pelo equipamento), não é um limite */
+  dp_filtrado?: number | null;
+  /** colunas de PVbt do equipamento JBV, quando vierem */
+  recidivas?: number | null;
+  volume_poroso_eq_cm3?: number | null;
+  pvbt_total_eq?: number | null;
 }
 
 export interface Ensaio {
@@ -133,7 +141,7 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
     const iQ = idx((s) => s.startsWith("q cm"));
     const iHora = idx((s) => s === "hora");
     const iHolder = idx((s) => s.startsWith("selecao do holder"));
-    const iRot = cab.findIndex((c, j) => /^coluna ?\d+$/i.test(c) && m.slice(iCab + 1).some((l) => typeof l?.[j] === "string" && /permeab/i.test(l[j] as string)));
+    const iRot = cab.findIndex((c, j) => /^(coluna ?\d+|etapa|fase)$/i.test(c) && m.slice(iCab + 1).some((l) => typeof l?.[j] === "string" && /permeab|@/i.test(l[j] as string)));
     // holder: o que mais aparece na coluna de seleção (padrão H1)
     let holder: "H1" | "H2" = "H1";
     if (iHolder >= 0) {
@@ -149,11 +157,15 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
     const iT = idx((s) => s.startsWith("t estufa"));
     const iK = idx((s) => s === `permeabilidade ${h} md`);
     // garrafas: "Nome Gn" + "Volume atual Gn" + "Volume bomb. parcial Gn"
-    const garrafas: { nome: number; atual: number; parcial: number }[] = [];
+    const garrafas: { n: number; nome: number; atual: number; parcial: number }[] = [];
     k.forEach((s, j) => {
       const g = /^nome g(\d)$/.exec(s);
-      if (g) garrafas.push({ nome: j, atual: idx((x) => x === `volume atual g${g[1]} cm3` || x === `volume atual g${g[1]} cm`), parcial: idx((x) => x.startsWith(`volume bomb parcial g${g[1]}`)) });
+      if (g) garrafas.push({ n: Number(g[1]), nome: j, atual: idx((x) => x === `volume atual g${g[1]} cm3` || x === `volume atual g${g[1]} cm`), parcial: idx((x) => x.startsWith(`volume bomb parcial g${g[1]}`)) });
     });
+    const iSP = idx((s) => s === "set point");
+    const iRec = idx((s) => s.startsWith("numero de recidivas"));
+    const iVP = idx((s) => s.startsWith("volume poroso"));
+    const iPvbtT = idx((s) => s.startsWith("pvbt total"));
     const avisos: string[] = [];
     if (iDp < 0) avisos.push(`coluna dP${holder} (psi) não encontrada`);
     const leituras: Leitura[] = [];
@@ -163,10 +175,12 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
       const t = num(l[iTempo]); const q = num(l[iQ]);
       if (t == null || q == null) continue;
       const volumes: Leitura["volumes"] = {};
+      const porGarrafa: Leitura["garrafas"] = {};
       for (const g of garrafas) {
         const nome = String(l[g.nome] ?? "").trim();
-        if (!nome) continue;
-        volumes[nome] = { atual: g.atual >= 0 ? num(l[g.atual]) : null, parcial: g.parcial >= 0 ? num(l[g.parcial]) : null };
+        const v = { atual: g.atual >= 0 ? num(l[g.atual]) : null, parcial: g.parcial >= 0 ? num(l[g.parcial]) : null };
+        porGarrafa[g.n] = { nome: nome || null, ...v };
+        if (nome) volumes[nome] = v;
       }
       leituras.push({
         linha: i + 1, tempo_s: t, q,
@@ -174,7 +188,9 @@ export function lerEnsaios(bruta: PlanilhaBruta): Ensaio[] {
         dp: iDp >= 0 ? num(l[iDp]) : null, dp_abs: iDpAbs >= 0 ? num(l[iDpAbs]) : null,
         p_confinamento: iPC >= 0 ? num(l[iPC]) : null, p_backpressure: iPB >= 0 ? num(l[iPB]) : null,
         temperatura: iT >= 0 ? num(l[iT]) : null, k_equipamento: iK >= 0 ? num(l[iK]) : null,
-        volumes, rotulo: iRot >= 0 ? (l[iRot] as string | null) : null,
+        volumes, garrafas: porGarrafa, rotulo: iRot >= 0 ? (l[iRot] as string | null) : null,
+        dp_filtrado: iSP >= 0 ? num(l[iSP]) : null, recidivas: iRec >= 0 ? num(l[iRec]) : null,
+        volume_poroso_eq_cm3: iVP >= 0 ? num(l[iVP]) : null, pvbt_total_eq: iPvbtT >= 0 ? num(l[iPvbtT]) : null,
       });
     }
     if (leituras.length) ensaios.push({ aba, metadados: meta, holder, leituras, avisos });
@@ -326,6 +342,8 @@ export interface GravarPermeabilidade {
   pressaoConfinamentoPsi?: number | null;
   /** configuração dos gráficos padrão Origin (cores por etapa, títulos, eixos...) -> analise_petrofisica.config_graficos */
   configGraficos?: unknown;
+  /** equipamento que gerou o arquivo (migração 018). Padrão JBV, o único com leitor por enquanto */
+  equipamento?: "JBV" | "DCI";
 }
 
 /** "02/09/2026 15:05:46" -> "2026-09-02" */
@@ -343,6 +361,7 @@ export async function gravarPermeabilidade(sb: SupabaseClient, g: GravarPermeabi
   const erro = (e: { code?: string; message: string }, t: string) =>
     new Error(e.code === "42501" ? `Sem permissão para gravar em ${t}: é preciso ser editor do projeto da amostra.`
       : /ajuste_(modo|inclinacao|intercepto_psi|r2)/.test(e.message) ? "Rode a migração 017 no Supabase"
+      : /equipamento_aquisicao/.test(e.message) ? "Rode a migração 018 no Supabase"
       : `${t}: ${e.message}`);
 
   const { data: a, error: e1 } = await sb.from("analise_petrofisica").insert({
@@ -356,6 +375,8 @@ export async function gravarPermeabilidade(sb: SupabaseClient, g: GravarPermeabi
     ajuste_inclinacao: g.resultado.ajuste?.inclinacao ?? null,
     ajuste_intercepto_psi: g.resultado.ajuste?.intercepto ?? null,
     ajuste_r2: g.resultado.ajuste?.r2 ?? null,
+    // coluna da migração 018
+    equipamento_aquisicao: g.equipamento ?? "JBV",
     observacoes: `Tratamento automático: ${g.resultado.etapas.length} etapa(s) de vazão; k por ${g.metodo}` +
       (g.resultado.ajuste ? ` (reta ${g.resultado.ajuste.modo === "origem" ? "pela origem" : "com intercepto, como no Origin"}; R² = ${g.resultado.ajuste.r2.toFixed(4)})` : ""),
     // coluna da migração 016; só vai no pedido quando há configuração

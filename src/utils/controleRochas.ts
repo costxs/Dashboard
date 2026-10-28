@@ -57,18 +57,24 @@ export function descreverCondicoes(c: CondicoesRda): string {
   ].filter(Boolean).join(" · ");
 }
 
+/** Ensaios da finalidade: um ou vários, separados por vírgula ("Petrofísica, coreflooding"; aceita ; e +). */
+function partesDaFinalidade(finalidade: string | null | undefined): string[] {
+  return (finalidade ?? "").split(/\s*[,;+]\s*/).map((s) => s.trim()).filter(Boolean);
+}
+
 /** Amostra de coreflooding que o controle marca como já usada: "utilizada", "acidificada" ou as duas. null = não é o caso. */
 export function marcasDeCoreflooding(a: { finalidade?: string | null; status?: string | null }, observacoes: string | null | undefined): string | null {
-  if ((a.finalidade ?? "").trim().toLowerCase() !== "coreflooding") return null;
+  if (!partesDaFinalidade(a.finalidade).some((p) => p.toLowerCase() === "coreflooding")) return null;
   const marcas = [a.status === "utilizada" && "utilizada", /acidificad/i.test(observacoes ?? "") && "acidificada"].filter(Boolean);
   return marcas.length > 0 ? marcas.join("/") : null;
 }
 
 /** "Disco · RDA" / "Plug · coreflooding" */
 export function rotuloFinalidade(finalidade: string | null | undefined): string | null {
-  const f = (finalidade ?? "").trim();
-  if (!f) return null;
-  if (f.toLowerCase() === "rda") return "Disco · RDA";
-  if (f.toLowerCase() === "coreflooding") return "Plug · coreflooding";
-  return f;
+  const partes = partesDaFinalidade(finalidade).map((f) => {
+    if (f.toLowerCase() === "rda") return "Disco · RDA";
+    if (f.toLowerCase() === "coreflooding") return "Plug · coreflooding";
+    return f;
+  });
+  return partes.length ? partes.join(", ") : null;
 }

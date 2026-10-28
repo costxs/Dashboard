@@ -10,3 +10,11 @@ dist
 .venv/
 __pycache__/
 .pytest_cache/
+
+# Exclusões
+Dashboard-Back/supabase/migrations/
+Dashboard-Back/supabase/MIGRACAO_COMPLETA.sql
+lcpetro_dci/
+lcpetro_acidificacao_jbv/
+*.xls
+

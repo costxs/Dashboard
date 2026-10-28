@@ -2,3 +2,8 @@
 __pycache__/
 .pytest_cache/
 .env
+.env.*
+!.env.example
+relatorio_validacao.xlsx
+supabase/migrations/
+supabase/MIGRACAO_COMPLETA.sql
