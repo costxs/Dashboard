@@ -4,7 +4,7 @@
 import type { Etapa, Leitura, ModoAjuste } from '../importador/tratamentoPermeabilidade'
 import { supabase } from '../lib/supabase'
 
-export const URL_GRAFICOS: string = String(import.meta.env.VITE_URL_GRAFICOS ?? '').replace(/\/+$/, '')
+export const URL_GRAFICOS: string = String(import.meta.env.VITE_URL_GRAFICOS || 'https://dashboard-back.lcpetro.io').replace(/\/+$/, '')
 
 /** sequência de cores do Origin (a mesma de graficos/estilo.py) */
 export const CORES_ORIGIN = ['#000000', '#FF0000', '#0000FF', '#008000', '#FF00FF', '#808000', '#000080', '#800080', '#008080', '#800000']
@@ -254,7 +254,14 @@ export interface PedidoAcid {
   /** só DCI: ΔP = DP1+DP2+DP3 ('total') ou só DP1+DP2, o mesmo da tela */
   dp_dci?: 'total' | 'dp1_dp2'
   fases: FaseAcid[]
-  config?: { formato?: Formato; dpi?: number; fonte?: string; mostrar_pvbt?: boolean }
+  config?: {
+    formato?: Formato; dpi?: number; fonte?: string; mostrar_pvbt?: boolean
+    /** Graph 0: vazão tracejada no eixo da direita */
+    mostrar_vazao?: boolean
+    /** limites do ΔP em psi (vazio = ajusta aos dados) */
+    dp_max?: number | null; dp_min?: number
+    espessura_linha?: number
+  }
 }
 export type GraficoAcid = 'geral' | 'pv' | 'apos'
 

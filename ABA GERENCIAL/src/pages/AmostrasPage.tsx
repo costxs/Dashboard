@@ -5,7 +5,7 @@ import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge, CabecalhoPa
 import { useAuth } from '../context/AuthContext'
 import { usePapeis } from '../hooks/usePapel'
 import {
-  listarAmostras, buscarAmostraPorId, salvarAmostra, excluirAmostra,
+  listarAmostras, buscarAmostraPorId, buscarAmostraPorCodigo, moverAmostraParaProjeto, salvarAmostra, excluirAmostra,
   listarProjetos, listarLitologias, criarLitologia, type AmostraResumo
 } from '../servicos/api'
 import { useContexto } from '../store/useContexto'
@@ -190,6 +190,24 @@ export const AmostrasPage: React.FC = () => {
       }
       const utilizada = dados.status === 'utilizada' && ensaiosUsados.length > 0
       if (utilizada) dados.finalidade = finalidadeDosEnsaios(ensaiosUsados)
+      // código que já existe em outro projeto/empresa: oferece trazer a amostra para este projeto
+      if (nova && dados.codigo?.trim() && dados.projeto_id) {
+        const existente = await buscarAmostraPorCodigo(dados.codigo)
+        if (existente) {
+          if (existente.projeto_id === dados.projeto_id) throw new Error(`A amostra ${existente.codigo} já está cadastrada neste projeto.`)
+          const destino = projetos.find((p) => p.id === dados.projeto_id)
+          const onde = `${existente.empresa ?? '?'} · ${existente.projeto ?? '?'}`
+          if (!confirm(`A amostra ${existente.codigo} já está cadastrada em ${onde}.\n\nDeseja trazer essa amostra para este projeto${destino ? ` (${destino.codigo})` : ''}? `
+            + 'Ela sai do projeto atual e leva junto todos os ensaios.')) {
+            setFeedback({ tipo: 'erro', msg: `O código ${existente.codigo} já existe em ${onde}. Use outro código ou traga a amostra para este projeto.` })
+            return
+          }
+          const movida = await moverAmostraParaProjeto(existente.id, dados.projeto_id, existente.codigo)
+          setModalAmostra(false)
+          navigate(`/amostras/${movida.id}`)
+          return
+        }
+      }
       const gravada = await salvarAmostra(dados)
       setModalAmostra(false)
       if (nova) {

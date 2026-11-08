@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL || 'https://haybihlhhdgyiemafmhf.supabase.co'
-const chave = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_q9cJ_EGu1_dBtpmGT9UZ_g_xyaD5X-g'
+const url = import.meta.env.VITE_SUPABASE_URL || 'https://dashboard-subapase.lcpetro.io'
+const chave = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc5NDA5NDUwMCwiZXhwIjo0OTQ5NzY4MTAwLCJyb2xlIjoiYW5vbiJ9.9Wc-sv33y1EG_2HYsr-HelAyfbpIqyve4lfx82PjvVQ'
 
 export const supabase = createClient(url, chave, {
   auth: {

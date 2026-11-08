@@ -20,8 +20,18 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [baixando, setBaixando] = useState<Formato | null>(null)
+  // ajustes do desenho (não mudam os dados): vazão, escala do ΔP e espessura da linha
+  const [vazao, setVazao] = useState(true)
+  const [dpMax, setDpMax] = useState('')
+  const [dpMin, setDpMin] = useState('')
+  const [espessura, setEspessura] = useState('1.2')
+  const num = (t: string) => { const v = parseFloat(t.replace(',', '.')); return Number.isFinite(v) ? v : null }
+  const ajustes = {
+    mostrar_vazao: vazao, dp_max: num(dpMax) && num(dpMax)! > 0 ? num(dpMax) : null, dp_min: num(dpMin) ?? 0,
+    espessura_linha: Math.min(8, Math.max(0.1, num(espessura) ?? 1.2)),
+  }
   // a prévia só muda quando o pedido muda de verdade (não a cada render)
-  const chave = useMemo(() => JSON.stringify(pedido), [pedido])
+  const chave = useMemo(() => JSON.stringify({ ...pedido, config: ajustes }), [pedido, vazao, dpMax, dpMin, espessura]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // troca a imagem e libera a anterior; ao fechar o painel, libera a última
   const trocarUrl = (nova: string | null) => setUrl((velha) => { if (velha) URL.revokeObjectURL(velha); return nova })
@@ -33,7 +43,7 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
     setErro(null)
     // espera a pessoa parar de digitar (400 ms) e cancela o pedido anterior
     const t = setTimeout(() => {
-      pedirGraficoAcidificacao(arquivo, { ...JSON.parse(chave), config: { formato: 'png', dpi: DPI_PREVIA, mostrar_pvbt: false } }, qual, ctl.signal)
+      pedirGraficoAcidificacao(arquivo, { ...JSON.parse(chave), config: { ...ajustes, formato: 'png', dpi: DPI_PREVIA, mostrar_pvbt: false } }, qual, ctl.signal)
         .then((b) => { if (!ctl.signal.aborted) trocarUrl(URL.createObjectURL(b)) })
         .catch((e) => { if (!ctl.signal.aborted) { trocarUrl(null); setErro(mensagemErro(e)) } })
         .finally(() => { if (!ctl.signal.aborted) setGerando(false) })
@@ -45,7 +55,7 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
     setBaixando(formato)
     setErro(null)
     try {
-      const b = await pedirGraficoAcidificacao(arquivo, { ...pedido, config: { formato, dpi: DPI_DOWNLOAD, mostrar_pvbt: false } }, qual)
+      const b = await pedirGraficoAcidificacao(arquivo, { ...pedido, config: { ...ajustes, formato, dpi: DPI_DOWNLOAD, mostrar_pvbt: false } }, qual)
       baixarArquivo(b, `${nomeBase}_acidificacao_${qual}.${formato}`)
     } catch (e) {
       setErro(`Não consegui baixar: ${mensagemErro(e)}`)
@@ -64,6 +74,27 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
       </div>
       <div className="flex flex-col gap-4 p-5">
         <p className="m-0 text-[12px] text-[var(--color-neutral-600)]">{aba.descricao}</p>
+        {qual !== 'pv' && (
+          <div className="flex flex-wrap items-end gap-4 text-[12px] text-[var(--color-neutral-700)]">
+            {qual === 'geral' && (
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={vazao} onChange={(e) => setVazao(e.target.checked)} /> Mostrar vazão (flow rate)
+              </label>
+            )}
+            {([['ΔP máx. (psi)', dpMax, setDpMax, 'auto'], ['ΔP mín. (psi)', dpMin, setDpMin, '0']] as const).map(([rot, val, set, ph]) => (
+              <label key={rot} className="flex flex-col gap-1">
+                {rot}
+                <input type="text" inputMode="decimal" value={val} placeholder={ph} onChange={(e) => set(e.target.value)}
+                  className="w-24 rounded-[8px] border border-[var(--color-neutral-300)] px-2 py-1" />
+              </label>
+            ))}
+            <label className="flex flex-col gap-1">
+              Espessura da linha
+              <input type="text" inputMode="decimal" value={espessura} onChange={(e) => setEspessura(e.target.value)}
+                className="w-24 rounded-[8px] border border-[var(--color-neutral-300)] px-2 py-1" />
+            </label>
+          </div>
+        )}
         {erro && <Alert tipo="erro" mensagem={erro} onClose={() => setErro(null)} />}
         <div className="relative flex min-h-[260px] items-center justify-center rounded-[10px] bg-[var(--color-neutral-100)]">
           {url && <img src={url} alt={aba.descricao} className={`max-h-[560px] max-w-full ${gerando ? 'opacity-50' : ''}`} />}

@@ -37,9 +37,10 @@ from acidificacao_salva import router as rotas_acid_salva
 from comparacao import router as rotas_comparacao
 
 _ORIGENS = [o.strip() for o in os.getenv("ORIGENS_PERMITIDAS", "http://localhost:5173,http://localhost:5174,http://localhost:5175").split(",") if o.strip()]
-# o computador local e os endereços da conta do LC PETRO na Vercel (cada deploy ganha um endereço de preview novo,
-# do tipo dashboard-aba-gerencial-<hash>-lcpetro1.vercel.app: não dá para listar um por um em ORIGENS_PERMITIDAS)
-_ORIGEM_LOCAL = r"^(?:https?://(?:localhost|127\.0\.0\.1)(?::\d+)?|https://dashboard[a-z0-9-]*-lcpetro1\.vercel\.app)$"
+# o computador local, os domínios *.lcpetro.io (Coolify) e os endereços da conta do LC PETRO na Vercel
+# (cada deploy ganha um endereço de preview novo, do tipo dashboard-aba-gerencial-<hash>-lcpetro1.vercel.app:
+# não dá para listar um por um em ORIGENS_PERMITIDAS)
+_ORIGEM_LOCAL = r"^(?:https?://(?:localhost|127\.0\.0\.1)(?::\d+)?|https://dashboard[a-z0-9-]*-lcpetro1\.vercel\.app|https?://(?:[a-z0-9-]+\.)?lcpetro\.io(?::\d+)?)$"
 
 app = FastAPI(title="LC PETRO · gráficos", version="1.0")
 app.add_middleware(
@@ -78,11 +79,11 @@ def _token_valido(token: str) -> bool:
     if _aceitos.get(token, 0) > agora:
         return True
     url = os.getenv("SUPABASE_URL")
-    chave = os.getenv("SUPABASE_ANON_KEY_JWT") or os.getenv("SUPABASE_ANON_KEY", "")
+    chave = os.getenv("SUPABASE_ANON_KEY", "")
     if not url:
         return False
     try:
-        r = httpx.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": chave}, timeout=10)
+        r = httpx.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": chave}, timeout=10, verify=False)
     except httpx.HTTPError:
         return False
     if r.status_code != 200:

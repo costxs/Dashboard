@@ -386,6 +386,18 @@ export async function salvarAmostra(amostra: Partial<Gravavel['amostras']> & { i
   return inserir('amostras', linha as Gravavel['amostras'], `cadastrar a amostra ${linha.codigo}`)
 }
 
+/** Amostra já cadastrada com este código (em qualquer projeto que a pessoa veja), com a empresa e o projeto onde está. */
+export async function buscarAmostraPorCodigo(codigo: string): Promise<AmostraResumo | null> {
+  const { data, error } = await supabase.from('v_amostras').select('*').eq('codigo', codigo.trim()).maybeSingle()
+  if (error) throw new Error(tratarErro(error))
+  return data
+}
+
+/** Traz a amostra (com todos os ensaios, que a acompanham) para outro projeto. Exige ser editor dos dois projetos. */
+export async function moverAmostraParaProjeto(id: string, projetoId: string, codigo: string): Promise<Amostra> {
+  return atualizar('amostras', 'id', id, { projeto_id: projetoId }, `trazer a amostra ${codigo} para este projeto`)
+}
+
 /** Apaga uma referência/publicação. Se há dados de PVbt ou de taxa de reação ligados a ela, o banco recusa. */
 export async function excluirPublicacao(id: string): Promise<void> {
   await apagar('publicacoes', 'id_referencia', id, `excluir a publicação ${id}`)

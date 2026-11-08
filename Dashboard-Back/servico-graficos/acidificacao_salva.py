@@ -62,11 +62,11 @@ def _ler(token: str, caminho: str, params: dict) -> list[dict]:
     linhas: list[dict] = []
     while True:
         r = httpx.get(f"{url}/rest/v1/{caminho}", params=params,
-                      headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20)
+                      headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20, verify=False)
         if r.status_code == 401 and sec and auth_header != f"Bearer {sec}":
             cab = {"apikey": sec, "Authorization": f"Bearer {sec}"}
             r = httpx.get(f"{url}/rest/v1/{caminho}", params=params,
-                          headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20)
+                          headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20, verify=False)
         if r.status_code == 401:
             raise HTTPException(401, "sessão inválida ou expirada")
         if r.status_code >= 300:

@@ -6,3 +6,6 @@
 !**/.env.example
 **/testes
 dados_teste
+supabase/backup_dados
+supabase/migrations
+supabase/*.sql

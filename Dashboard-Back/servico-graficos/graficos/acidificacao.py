@@ -59,6 +59,9 @@ class ConfigAcid(BaseModel):
     tamanho_fonte: float = Field(12, ge=6, le=40)
     espessura_linha: float = Field(2.0, gt=0, le=8)
     mostrar_pvbt: bool = True
+    mostrar_vazao: bool = True                    # Graph 0: vazão tracejada no eixo da direita (desligada, o ΔP ocupa o gráfico todo)
+    dp_max: Optional[float] = Field(None, gt=0)   # limite superior do ΔP (psi); vazio = ajusta aos dados
+    dp_min: float = 0.0                           # limite inferior do ΔP (psi)
 
 
 class PedidoAcid(BaseModel):
@@ -298,22 +301,30 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
                 jan = d.janela(f)
                 ax.plot([l[d.c["t"]] / d.div_t for l in jan], [d.v(l, "dp") for l in jan], color=cores[f.ordem], lw=lw,
                         label=_legenda(f, p.temperatura_rotulo))
-            ax2 = ax.twinx()
-            ts = [l[d.c["t"]] / d.div_t for l in d.linhas]
-            ax2.plot(ts, [d.v(l, "q") for l in d.linhas], color=COR_VAZAO, ls="--", lw=lw * 0.75, label="Flow rate")
-            ax2.set_ylabel("Flow rate (ml/min)", fontweight="bold")
             ax.set_xlabel(f"Time ({d.rot_t})", fontweight="bold"); ax.set_ylabel("DP (psi)", fontweight="bold")
             dps = [(d.v(l, "dp") or 0) for f in fases for l in d.janela(f)]
             dpmax = max(dps) if dps else 1.0
-            ax.set_xlim(left=0); ax.set_ylim(0, (dpmax * 2.1) if dpmax > 0 else 1.0)
-            qs = [(d.v(l, "q") or 0) for l in d.linhas]
-            qmax = max(qs) if qs else 1.0
-            ax2.set_ylim(0, (qmax * 1.15) if qmax > 0 else 1.0)
-            acabamento(ax); ax.tick_params(right=False)
-            ax2.tick_params(direction="in", which="both")
-            _eixos_virgula(ax); _eixos_virgula(ax2)
-            h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
-            ax.legend(h1 + h2, l1 + l2, loc="upper center", frameon=True, edgecolor="black", fancybox=False)
+            xs = [l[d.c["t"]] / d.div_t for f in fases for l in d.janela(f)]
+            # com a vazão sobra espaço em cima para a legenda; sem ela, o ΔP fecha logo acima do pico (como no Origin)
+            topo = cfg.dp_max or ((dpmax * 1.9) if cfg.mostrar_vazao else dpmax * 1.08)
+            ax.set_xlim(0, max(xs) if xs else 1.0)
+            ax.set_ylim(cfg.dp_min, topo if topo > cfg.dp_min else cfg.dp_min + 1.0)
+            acabamento(ax)
+            h2, l2 = [], []
+            if cfg.mostrar_vazao:
+                ax2 = ax.twinx()
+                ax2.plot([l[d.c["t"]] / d.div_t for l in d.linhas], [d.v(l, "q") for l in d.linhas], color=COR_VAZAO, ls="--", lw=lw * 0.75, label="Flow rate")
+                ax2.set_ylabel("Flow rate (ml/min)", fontweight="bold")
+                qs = [(d.v(l, "q") or 0) for l in d.linhas]
+                qmax = max(qs) if qs else 1.0
+                ax2.set_ylim(0, (qmax * 1.15) if qmax > 0 else 1.0)
+                ax.tick_params(right=False)
+                ax2.tick_params(direction="in", which="both")
+                _eixos_virgula(ax2)
+                h2, l2 = ax2.get_legend_handles_labels()
+            _eixos_virgula(ax)
+            h1, l1 = ax.get_legend_handles_labels()
+            ax.legend(h1 + h2, l1 + l2, loc="upper center" if cfg.mostrar_vazao else "upper left", frameon=True, edgecolor="black", fancybox=False)
         elif qual == "pv":
             fa = next((f for f in fases if f.papel == "acido"), None)
             if not fa:
@@ -353,6 +364,10 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
                 ax.plot([l[d.c["t"]] / d.div_t for l in jan], [d.v(l, "dp") for l in jan], color=cores[f.ordem], lw=lw * 0.6,
                         label=_legenda(f, p.temperatura_rotulo))
             ax.set_xlabel(f"Time ({d.rot_t})"); ax.set_ylabel("DP (psi)")
+            if cfg.dp_max:
+                ax.set_ylim(cfg.dp_min, cfg.dp_max)
+            elif cfg.dp_min:
+                ax.set_ylim(bottom=cfg.dp_min)
             acabamento(ax); _eixos_virgula(ax)
             ax.legend(loc="upper right", frameon=True, edgecolor="black", fancybox=False)
         fig.tight_layout()

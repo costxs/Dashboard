@@ -7,3 +7,5 @@ __pycache__/
 relatorio_validacao.xlsx
 supabase/migrations/
 supabase/MIGRACAO_COMPLETA.sql
+supabase/SCHEMA_COMPLETO_ATUALIZADO.sql
+supabase/backup_dados/

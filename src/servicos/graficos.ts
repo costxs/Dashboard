@@ -4,7 +4,7 @@
 import { supabase } from "../lib/supabase";
 import type { PermeabilidadeEtapa, PontoCurva } from "../tipos/banco";
 
-export const URL_GRAFICOS: string = String(import.meta.env.VITE_URL_GRAFICOS ?? "").replace(/\/+$/, "");
+export const URL_GRAFICOS: string = String(import.meta.env.VITE_URL_GRAFICOS || "https://dashboard-back.lcpetro.io").replace(/\/+$/, "");
 
 const CORES_ORIGIN = ["#000000", "#FF0000", "#0000FF", "#008000", "#FF00FF", "#808000", "#000080", "#800080", "#008080", "#800000"];
 

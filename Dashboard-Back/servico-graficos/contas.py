@@ -76,14 +76,14 @@ def _supabase(metodo: str, caminho: str, **kw) -> httpx.Response:
     """Chamada ao Supabase com a chave secreta (passa por cima do RLS: só depois de conferir o admin)."""
     url, secreta, _ = _config()
     cab = {"apikey": secreta, "Authorization": f"Bearer {secreta}", **kw.pop("headers", {})}
-    return httpx.request(metodo, f"{url}{caminho}", headers=cab, timeout=15, **kw)
+    return httpx.request(metodo, f"{url}{caminho}", headers=cab, timeout=15, verify=False, **kw)
 
 
 def usuario_do_token(token: str) -> Optional[str]:
     """id do usuário dono do token, perguntando ao próprio Supabase; None se inválido."""
     url, _, anon = _config()
     try:
-        r = httpx.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": anon}, timeout=10)
+        r = httpx.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": anon}, timeout=10, verify=False)
     except httpx.HTTPError:
         return None
     return r.json().get("id") if r.status_code == 200 else None
