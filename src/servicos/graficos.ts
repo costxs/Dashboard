@@ -106,7 +106,7 @@ export function montarPedido(d: DadosEnsaio, c: ConfigGraficos, modo: Modo, form
  *  nesse intervalo falham no navegador. Chama /saude até responder (só fora do computador local) e lembra por 10 min. */
 let acordadoAte = 0
 async function acordarServico(url: string, sinal?: AbortSignal): Promise<void> {
-  if (/\/\/(localhost|127\.0\.0\.1)/.test(url) || Date.now() < acordadoAte) return
+  if (/\/\/(localhost|127\.0\.0\.1)|\.lcpetro\.io/.test(url) || Date.now() < acordadoAte) return
   for (let i = 0; i < 12; i++) {
     try {
       const r = await fetch(`${url}/saude`, { signal: sinal })

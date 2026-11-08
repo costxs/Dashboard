@@ -21,6 +21,7 @@ são detectadas aqui pela garrafa cujo "Volume atual" está caindo + a vazão.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import math
 from typing import Literal, Optional
@@ -76,6 +77,8 @@ class PedidoAcid(BaseModel):
     volume_poroso_cm3: Optional[float] = Field(None, gt=0)   # VP já calculado (gráficos do que foi gravado); senão, das dimensões
     houve_breakthrough: Optional[bool] = None   # o gerencial manda o que a pessoa confirmou; vazio = o serviço confere
     dp_dci: Literal["total", "dp1_dp2"] = "total"   # só DCI: ΔP = DP1+DP2+DP3 (total) ou só DP1+DP2
+    equipamento: Optional[Literal["JBV", "DCI"]] = None
+    leituras: Optional[list[tuple[float, float, Optional[float]]]] = None   # (tempo_s, q, dp) já lidos no navegador
     fases: list[FaseAcid] = []
     config: ConfigAcid = ConfigAcid()
 
@@ -119,6 +122,21 @@ class Dados:
                 n = int("".join(ch for ch in k.split("volume atual g")[1] if ch.isdigit())[:1])
                 nome = self._col(lambda x, n=n: x == f"nome g{n}")
                 self.garrafas[n] = (j, nome)
+
+    @classmethod
+    def de_leituras(cls, leituras: list[tuple[float, float, Optional[float]]], equipamento: Optional[str] = None) -> "Dados":
+        """Monta Dados diretamente das leituras (t_s, q, dp) já extraídas no navegador, sem reabrir o .xlsx."""
+        obj = cls.__new__(cls)
+        obj.aba, obj.meta, obj.ks, obj.garrafas = "dados da tela", {}, [], {}
+        if equipamento == "DCI":
+            obj.equipamento, obj.nome_garrafa = "DCI", "acumulador"
+            obj.div_t, obj.rot_t = 3600.0, "h"
+        else:
+            obj.equipamento, obj.nome_garrafa = "JBV", "garrafa"
+            obj.div_t, obj.rot_t = 1.0, "s"
+        obj.c = {"t": 0, "q": 1, "dp": 2, "pb": -1, "pc": -1, "temp": -1}
+        obj.linhas = [(float(t), float(q), float(dp) if dp is not None else None) for t, q, dp in leituras]
+        return obj
 
     def _col(self, f) -> int:
         return next((j for j, k in enumerate(self.ks) if f(k)), -1)
@@ -284,8 +302,22 @@ def _eixos_virgula(ax, casas_x=2, casas_y=2):
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: _fmt(v, casas_y)))
 
 
+_CACHE_DADOS: dict[tuple[str, str, str], Dados] = {}
+
+
+def _obter_dados(conteudo: bytes, aba: str | None = None, dp_dci: str = "total") -> Dados:
+    chave_cache = (hashlib.sha1(conteudo).hexdigest(), aba or "", dp_dci)
+    if chave_cache in _CACHE_DADOS:
+        return _CACHE_DADOS[chave_cache]
+    d = Dados(conteudo, aba, dp_dci)
+    if len(_CACHE_DADOS) >= 8:
+        _CACHE_DADOS.pop(next(iter(_CACHE_DADOS)))
+    _CACHE_DADOS[chave_cache] = d
+    return d
+
+
 def grafico(conteudo: bytes, p: PedidoAcid, qual: Literal["geral", "pv", "apos"]) -> tuple[bytes, str]:
-    d = Dados(conteudo, p.aba, p.dp_dci)
+    d = Dados.de_leituras(p.leituras, p.equipamento) if p.leituras else _obter_dados(conteudo, p.aba, p.dp_dci)
     fases = sorted(p.fases or detectar_fases(d), key=lambda x: x.ordem)
     return _grafico(d, fases, p, qual, p.config.formato, p.config.dpi)
 
@@ -403,7 +435,7 @@ def _aba_origin(wb, titulo: str):
 
 
 def gerar_planilha(conteudo: bytes, p: PedidoAcid) -> bytes:
-    d = Dados(conteudo, p.aba, p.dp_dci)
+    d = _obter_dados(conteudo, p.aba, p.dp_dci)
     fases = sorted(p.fases or detectar_fases(d), key=lambda x: x.ordem)
     acido = next((f for f in fases if f.papel == "acido"), None)
     if not acido:

@@ -396,6 +396,8 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
       comprimento_cm: L, diametro_cm: D, porosidade_pct: phi,
       volume_morto_cm3: morto, temperatura_rotulo: temperaturaRotulo.trim() || null,
       aba: ensaio.aba,
+      equipamento: ensaio.equipamento,
+      leituras: ensaio.leituras.map((l) => [l.tempo_s, l.q, usarFiltrado ? (l.dp_filtrado ?? l.dp) : l.dp]),
       houve_breakthrough: resultado?.houve_breakthrough ?? null,
       dp_dci: dpDCI,
       // gráficos da planilha sem a marcação do PVbt
@@ -406,7 +408,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
     }
     // fluidoDe lê "fluidos" e "fases"
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, dpDCI])
+  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, dpDCI, usarFiltrado])
 
   async function baixarPlanilhaOrigin() {
     if (!arquivoOriginal || !pedidoOrigin) return

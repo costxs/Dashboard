@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { Alert } from '../../components/UI'
 import { baixarArquivo, pedirGraficoAcidificacao, type Formato, type GraficoAcid, type PedidoAcid } from '../../servicos/graficos'
@@ -20,6 +20,7 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [baixando, setBaixando] = useState<Formato | null>(null)
+  const cachePrevia = useRef<Map<string, Blob>>(new Map())
   // ajustes do desenho (não mudam os dados): vazão, escala do ΔP e espessura da linha
   const [vazao, setVazao] = useState(true)
   const [dpMax, setDpMax] = useState('')
@@ -30,24 +31,41 @@ export const GraficosOriginAcid: React.FC<{ arquivo: File; pedido: PedidoAcid; n
     mostrar_vazao: vazao, dp_max: num(dpMax) && num(dpMax)! > 0 ? num(dpMax) : null, dp_min: num(dpMin) ?? 0,
     espessura_linha: Math.min(8, Math.max(0.1, num(espessura) ?? 1.2)),
   }
-  // a prévia só muda quando o pedido muda de verdade (não a cada render)
-  const chave = useMemo(() => JSON.stringify({ ...pedido, config: ajustes }), [pedido, vazao, dpMax, dpMin, espessura]) // eslint-disable-line react-hooks/exhaustive-deps
+  // a prévia só muda quando o pedido muda de verdade (sem serializar milhares de pontos de leituras toda vez)
+  const chave = useMemo(() => {
+    const { leituras, ...resto } = pedido
+    return JSON.stringify({ ...resto, nLeituras: leituras?.length ?? 0, config: ajustes })
+  }, [pedido, vazao, dpMax, dpMin, espessura]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // troca a imagem e libera a anterior; ao fechar o painel, libera a última
   const trocarUrl = (nova: string | null) => setUrl((velha) => { if (velha) URL.revokeObjectURL(velha); return nova })
   useEffect(() => () => trocarUrl(null), [])
 
   useEffect(() => {
+    const chaveAba = `${qual}:${chave}`
+    const emCache = cachePrevia.current.get(chaveAba)
+    if (emCache) {
+      setErro(null)
+      setGerando(false)
+      trocarUrl(URL.createObjectURL(emCache))
+      return
+    }
     const ctl = new AbortController()
     setGerando(true)
     setErro(null)
-    // espera a pessoa parar de digitar (400 ms) e cancela o pedido anterior
+    // espera a pessoa parar de digitar (250 ms) e cancela o pedido anterior
     const t = setTimeout(() => {
-      pedirGraficoAcidificacao(arquivo, { ...JSON.parse(chave), config: { ...ajustes, formato: 'png', dpi: DPI_PREVIA, mostrar_pvbt: false } }, qual, ctl.signal)
-        .then((b) => { if (!ctl.signal.aborted) trocarUrl(URL.createObjectURL(b)) })
+      pedirGraficoAcidificacao(arquivo, { ...pedido, config: { ...ajustes, formato: 'png', dpi: DPI_PREVIA, mostrar_pvbt: false } }, qual, ctl.signal)
+        .then((b) => {
+          if (!ctl.signal.aborted) {
+            if (cachePrevia.current.size > 12) cachePrevia.current.clear()
+            cachePrevia.current.set(chaveAba, b)
+            trocarUrl(URL.createObjectURL(b))
+          }
+        })
         .catch((e) => { if (!ctl.signal.aborted) { trocarUrl(null); setErro(mensagemErro(e)) } })
         .finally(() => { if (!ctl.signal.aborted) setGerando(false) })
-    }, 400)
+    }, 250)
     return () => { clearTimeout(t); ctl.abort() }
   }, [arquivo, chave, qual])
 

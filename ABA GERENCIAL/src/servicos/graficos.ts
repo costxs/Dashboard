@@ -189,7 +189,7 @@ export function pedirPlanilhaEtapas(arquivo: File, pedido: {
  *  nesse intervalo falham no navegador. Chama /saude até responder (só fora do computador local) e lembra por 10 min. */
 let acordadoAte = 0
 async function acordarServico(url: string, sinal?: AbortSignal): Promise<void> {
-  if (/\/\/(localhost|127\.0\.0\.1)/.test(url) || Date.now() < acordadoAte) return
+  if (/\/\/(localhost|127\.0\.0\.1)|\.lcpetro\.io/.test(url) || Date.now() < acordadoAte) return
   for (let i = 0; i < 12; i++) {
     try {
       const r = await fetch(`${url}/saude`, { signal: sinal })
@@ -249,6 +249,9 @@ export interface PedidoAcid {
   volume_morto_cm3: number | null; temperatura_rotulo: string | null
   /** aba lida na tela: o serviço lê a mesma */
   aba?: string | null
+  equipamento?: 'JBV' | 'DCI'
+  /** leituras (tempo_s, q, dp) já lidas no navegador para gerar a prévia dos gráficos sem reenviar o .xlsx inteiro */
+  leituras?: [number, number, number | null][]
   /** true = houve breakthrough; false = não houve (os gráficos não marcam PVbt); null = incerto */
   houve_breakthrough?: boolean | null
   /** só DCI: ΔP = DP1+DP2+DP3 ('total') ou só DP1+DP2, o mesmo da tela */
@@ -267,16 +270,19 @@ export type GraficoAcid = 'geral' | 'pv' | 'apos'
 
 /** Pasta de trabalho do laboratório (abas 0 a 5 com fórmulas + Gráficos), montada a partir do arquivo ORIGINAL do JBV */
 export function pedirPlanilhaAcidificacao(arquivo: File, pedido: PedidoAcid): Promise<Blob> {
+  const { leituras: _ignorar, ...pedidoSemLeituras } = pedido
   const form = new FormData()
   form.append('arquivo', arquivo, arquivo.name)
-  form.append('pedido', JSON.stringify(pedido))
+  form.append('pedido', JSON.stringify(pedidoSemLeituras))
   return postar('acidificacao/planilha', form, {})
 }
 
 /** Graph 0 (geral), Graph 3 (ΔP × PV) ou Graph 4 (depois do ácido) */
 export function pedirGraficoAcidificacao(arquivo: File, pedido: PedidoAcid, qual: GraficoAcid, sinal?: AbortSignal): Promise<Blob> {
   const form = new FormData()
-  form.append('arquivo', arquivo, arquivo.name)
+  if (!pedido.leituras?.length) {
+    form.append('arquivo', arquivo, arquivo.name)
+  }
   form.append('pedido', JSON.stringify(pedido))
   form.append('qual', qual)
   return postar('acidificacao/grafico', form, {}, sinal)

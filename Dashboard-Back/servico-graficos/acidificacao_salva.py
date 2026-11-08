@@ -8,6 +8,7 @@ se a pessoa pode ver aquele ensaio. Sem login não há gráfico, nem com MODO_DE
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -24,6 +25,8 @@ from graficos import acidificacao as acid
 router = APIRouter(prefix="/acidificacao", tags=["acidificação"])
 
 CURVA_TEMPO = "ΔP × tempo (acidificação)"
+_http_salva = httpx.Client(verify=False, timeout=20)
+_cache_montar: dict[int, tuple[float, "DadosSalvos", list[acid.FaseAcid], acid.PedidoAcid]] = {}
 
 
 class PedidoSalvo(BaseModel):
@@ -61,12 +64,12 @@ def _ler(token: str, caminho: str, params: dict) -> list[dict]:
     
     linhas: list[dict] = []
     while True:
-        r = httpx.get(f"{url}/rest/v1/{caminho}", params=params,
-                      headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20, verify=False)
+        r = _http_salva.get(f"{url}/rest/v1/{caminho}", params=params,
+                            headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"})
         if r.status_code == 401 and sec and auth_header != f"Bearer {sec}":
             cab = {"apikey": sec, "Authorization": f"Bearer {sec}"}
-            r = httpx.get(f"{url}/rest/v1/{caminho}", params=params,
-                          headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"}, timeout=20, verify=False)
+            r = _http_salva.get(f"{url}/rest/v1/{caminho}", params=params,
+                                headers={**cab, "Range-Unit": "items", "Range": f"{len(linhas)}-{len(linhas) + 999}"})
         if r.status_code == 401:
             raise HTTPException(401, "sessão inválida ou expirada")
         if r.status_code >= 300:
@@ -78,6 +81,10 @@ def _ler(token: str, caminho: str, params: dict) -> list[dict]:
 
 
 def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid], acid.PedidoAcid]:
+    agora = time.monotonic()
+    em_cache = _cache_montar.get(analise_id)
+    if em_cache and em_cache[0] > agora:
+        return em_cache[1], em_cache[2], em_cache[3].model_copy(deep=True)
     cf = _ler(token, "analise_coreflooding", {"id": f"eq.{analise_id}",
               "select": "id,amostra_id,volume_poroso_usado_cm3,volume_morto_cm3,temperatura_c"})
     if not cf:
@@ -109,6 +116,9 @@ def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid
     )
     if not pedido.volume_poroso_cm3:
         raise HTTPException(404, "o ensaio não tem o volume poroso gravado")
+    if len(_cache_montar) >= 16:
+        _cache_montar.pop(next(iter(_cache_montar)))
+    _cache_montar[analise_id] = (agora + 120.0, dados, fases, pedido.model_copy(deep=True))
     return dados, fases, pedido
 
 

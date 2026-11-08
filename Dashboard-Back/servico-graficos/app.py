@@ -71,6 +71,7 @@ async def tratar_excecao_geral(request: Request, exc: Exception):
 # uma falha passageira (timeout, rede) não pode travar o token até o serviço reiniciar.
 _aceitos: dict[str, float] = {}
 _VALIDADE_S = 300
+_http = httpx.Client(verify=False, timeout=8)
 
 
 def _token_valido(token: str) -> bool:
@@ -83,7 +84,7 @@ def _token_valido(token: str) -> bool:
     if not url:
         return False
     try:
-        r = httpx.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": chave}, timeout=10, verify=False)
+        r = _http.get(f"{url}/auth/v1/user", headers={"Authorization": f"Bearer {token}", "apikey": chave})
     except httpx.HTTPError:
         return False
     if r.status_code != 200:
@@ -148,8 +149,8 @@ async def planilha_etapas(arquivo: UploadFile = File(...), pedido: str = Form(..
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
-async def _ler_pedido_acid(arquivo: UploadFile, pedido: str):
-    conteudo = await arquivo.read()
+async def _ler_pedido_acid(arquivo: UploadFile | None, pedido: str):
+    conteudo = await arquivo.read() if arquivo is not None else b""
     if len(conteudo) > 30 * 1024 * 1024:
         raise HTTPException(413, "arquivo grande demais (máx. 30 MB)")
     try:
@@ -178,11 +179,13 @@ async def acidificacao_planilha(arquivo: UploadFile = File(...), pedido: str = F
 
 
 @app.post("/acidificacao/grafico", dependencies=[Depends(exigir_login)])
-async def acidificacao_grafico(arquivo: UploadFile = File(...), pedido: str = Form(...), qual: str = Form("geral")):
+async def acidificacao_grafico(arquivo: UploadFile | None = File(default=None), pedido: str = Form(...), qual: str = Form("geral")):
     """qual = geral (ΔP e vazão × tempo) | pv (ΔP × PV do ácido) | apos (injeção depois do ácido)."""
     if qual not in ("geral", "pv", "apos"):
         raise HTTPException(422, "qual deve ser geral, pv ou apos")
     conteudo, p = await _ler_pedido_acid(arquivo, pedido)
+    if not conteudo and not p.leituras:
+        raise HTTPException(422, "envie o arquivo ou as leituras no pedido")
     try:
         img, tipo = acid.grafico(conteudo, p, qual)  # type: ignore[arg-type]
     except HTTPException:
