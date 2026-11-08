@@ -4,7 +4,8 @@
 import type { Etapa, Leitura, ModoAjuste } from '../importador/tratamentoPermeabilidade'
 import { supabase } from '../lib/supabase'
 
-export const URL_GRAFICOS: string = String(import.meta.env.VITE_URL_GRAFICOS || 'https://dashboard-back.lcpetro.io').replace(/\/+$/, '')
+const _urlBruta = String(import.meta.env.VITE_URL_GRAFICOS || 'https://dashboard-back.lcpetro.io').replace(/\/+$/, '')
+export const URL_GRAFICOS: string = _urlBruta.replace('//dashboard.lcpetro.io', '//dashboard-back.lcpetro.io')
 
 /** sequência de cores do Origin (a mesma de graficos/estilo.py) */
 export const CORES_ORIGIN = ['#000000', '#FF0000', '#0000FF', '#008000', '#FF00FF', '#808000', '#000080', '#800080', '#008080', '#800000']
