@@ -76,9 +76,12 @@ export const useContexto = create<EstadoContexto>()(
 /** Chamar uma vez no início do app (App.tsx). Devolve a função de limpeza. */
 export function iniciarAutenticacao() {
   supabase.auth.getSession().then(({ data }) => useContexto.getState().definirSessao(data.session));
-  const { data } = supabase.auth.onAuthStateChange((_evento, sessao) => {
+  const { data } = supabase.auth.onAuthStateChange((evento, sessao) => {
     useContexto.getState().definirSessao(sessao);
     if (!sessao) useContexto.getState().limpar();
+    if (evento === "PASSWORD_RECOVERY" && typeof window !== "undefined" && !window.location.pathname.startsWith("/redefinir-senha")) {
+      window.location.replace("/redefinir-senha");
+    }
   });
   return () => data.subscription.unsubscribe();
 }

@@ -1,16 +1,20 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import { definirSenha, sair } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
 
 // Aberta pelo link do e-mail do Supabase: convite feito pelo administrador no gerencial ou
 // "esqueci minha senha". O link traz uma sessão temporária; aqui a pessoa escolhe a senha.
-// Fica no dashboard porque é ele que está publicado (o gerencial roda só no laboratório).
+// Também permite validar pelo código de 6 dígitos enviado no e-mail.
 export function RedefinirSenhaPage() {
   const sessao = useContexto((s) => s.sessao);
   const carregada = useContexto((s) => s.sessaoCarregada);
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [email, setEmail] = useState(params.get("email") ?? "");
+  const [codigo, setCodigo] = useState("");
   const [senha, setSenha] = useState("");
   const [confirma, setConfirma] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -24,6 +28,17 @@ export function RedefinirSenhaPage() {
     if (senha !== confirma) return setErro("As senhas não conferem.");
     setSalvando(true);
     try {
+      if (!sessao) {
+        if (!email.trim() || !codigo.trim()) {
+          throw new Error("Informe o e-mail e o código de 6 dígitos recebido no e-mail.");
+        }
+        const { error: otpErr } = await supabase.auth.verifyOtp({
+          email: email.trim(),
+          token: codigo.trim(),
+          type: "recovery",
+        });
+        if (otpErr) throw new Error("Código inválido ou expirado. Peça um novo na tela de login.");
+      }
       await definirSenha(senha);
       await sair();
       setPronto(true);
@@ -47,14 +62,27 @@ export function RedefinirSenhaPage() {
             </div>
           ) : !carregada ? (
             <div className="flex items-center gap-2 text-sm"><Loader2 size={16} className="animate-spin" /> Verificando link…</div>
-          ) : !sessao ? (
-            <div className="flex flex-col gap-4">
-              <div className="aviso aviso-erro" role="alert">Link inválido ou expirado. Peça um novo na tela de login, em “Esqueci minha senha”.</div>
-              <button type="button" className="btn btn-secondary" onClick={() => navigate("/login")}>Voltar ao login</button>
-            </div>
           ) : (
             <form onSubmit={salvar} className="flex flex-col gap-4">
-              <p className="m-0 text-[13px] text-[var(--color-neutral-600)]">Conta: <strong>{sessao.user.email}</strong></p>
+              {sessao ? (
+                <p className="m-0 text-[13px] text-[var(--color-neutral-600)]">Conta: <strong>{sessao.user.email}</strong></p>
+              ) : (
+                <>
+                  <p className="m-0 text-[13px] text-[var(--color-neutral-600)]">
+                    Digite o seu e-mail e o <strong>código de 6 dígitos</strong> recebido no e-mail para escolher sua nova senha:
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="email-rec" className="text-sm text-[var(--color-neutral-600)]">E-mail</label>
+                    <input id="email-rec" type="email" required autoComplete="username" value={email}
+                      onChange={(e) => setEmail(e.target.value)} className="input h-11" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="codigo-rec" className="text-sm text-[var(--color-neutral-600)]">Código de 6 dígitos (do e-mail)</label>
+                    <input id="codigo-rec" type="text" required inputMode="numeric" maxLength={8} placeholder="Ex.: 437117" value={codigo}
+                      onChange={(e) => setCodigo(e.target.value)} className="input h-11 font-mono tracking-widest text-center text-lg" />
+                  </div>
+                </>
+              )}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="nova" className="text-sm text-[var(--color-neutral-600)]">Nova senha</label>
                 <input id="nova" type="password" required autoComplete="new-password" value={senha}
@@ -71,6 +99,7 @@ export function RedefinirSenhaPage() {
                 {salvando && <Loader2 size={16} className="animate-spin" />}
                 {salvando ? "Salvando…" : "Salvar senha"}
               </button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate("/login")}>Voltar ao login</button>
             </form>
           )}
         </div>

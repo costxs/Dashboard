@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { entrar, pedirNovaSenha, registrar } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
 
 export function LoginPage() {
   const sessao = useContexto((s) => s.sessao);
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -76,6 +77,12 @@ export function LoginPage() {
           {enviado ? (
             <div className="flex flex-col gap-4">
               <div className="aviso aviso-ok">{enviado}</div>
+              {modo === "entrar" && (
+                <button type="button" className="btn btn-blue"
+                  onClick={() => navigate(`/redefinir-senha?email=${encodeURIComponent(email.trim())}`)}>
+                  Digitar código de 6 dígitos recebido
+                </button>
+              )}
               <button type="button" className="btn btn-secondary"
                 onClick={() => { setEnviado(null); setModo("entrar"); setPassword(""); setConfirmar(""); }}>
                 Voltar para o login

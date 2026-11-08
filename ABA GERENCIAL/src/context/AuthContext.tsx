@@ -72,7 +72,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     carregarDados()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && typeof window !== 'undefined' && !window.location.pathname.startsWith('/redefinir-senha')) {
+        window.location.replace('/redefinir-senha')
+        return
+      }
       if (session?.user) {
         setUsuario(session.user)
         // fora do callback: chamar o Supabase de dentro dele pode travar o cliente de autenticação

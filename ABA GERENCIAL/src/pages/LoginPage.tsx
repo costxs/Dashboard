@@ -98,7 +98,18 @@ export const LoginPage: React.FC = () => {
             </button>
 
             {erro && <div className="aviso aviso-erro" role="alert">{erro}</div>}
-            {aviso && <div className="aviso" role="status">{aviso}</div>}
+            {aviso && (
+              <div className="flex flex-col gap-2">
+                <div className="aviso" role="status">{aviso}</div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/redefinir-senha?email=${encodeURIComponent(email.trim())}`)}
+                  className="btn btn-blue w-full"
+                >
+                  Digitar código de 6 dígitos recebido
+                </button>
+              </div>
+            )}
 
             <button
               type="submit"

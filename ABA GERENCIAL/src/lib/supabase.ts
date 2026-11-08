@@ -3,6 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL || 'https://dashboard-subapase.lcpetro.io'
 const chave = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc5NDA5NDUwMCwiZXhwIjo0OTQ5NzY4MTAwLCJyb2xlIjoiYW5vbiJ9.9Wc-sv33y1EG_2HYsr-HelAyfbpIqyve4lfx82PjvVQ'
 
+// Se o link de recuperação/convite do e-mail cair na raiz (/#access_token=...&type=recovery),
+// muda a rota para /redefinir-senha ANTES de o cliente do Supabase limpar o hash e do Router iniciar.
+if (typeof window !== 'undefined') {
+  const urlCompleta = window.location.hash + window.location.search
+  if (/(?:^|[?&#])type=(?:recovery|invite)(?:&|$)/.test(urlCompleta) && !window.location.pathname.startsWith('/redefinir-senha')) {
+    window.history.replaceState(null, '', '/redefinir-senha' + window.location.search + window.location.hash)
+  }
+}
+
 export const supabase = createClient(url, chave, {
   auth: {
     persistSession: true,
