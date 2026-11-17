@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check, Download, ExternalLink, Eye, Filter, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, X,
+  Check, Download, ExternalLink, Eye, Filter, FlaskConical, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, X,
 } from "lucide-react";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
 import {
   CORES_SERIE, GraficoComparacao, MARCADORES_SERIE, type ExportarComparacao, type SerieGrafico,
 } from "../components/pvbt/GraficoComparacao";
 import { useConsulta } from "../hooks/useConsulta";
+import { supabase } from "../lib/supabase";
+import { listarLitologias, listarSistemasAcidos, obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
 import { listarPvbt } from "../servicos/pvbt";
 import { useContexto } from "../store/useContexto";
-import type { PontoPvbt } from "../tipos/banco";
+import type { PontoPvbt, SistemaAcido } from "../tipos/banco";
 import { fmt, fmtExato, mensagemErro } from "../utils/formatacao";
+import { classeStatus, STATUS_ROTULO } from "../utils/status";
 
-// Comparação de resultados (PVbt × Q): a pessoa filtra e marca amostras que passaram por coreflooding e já têm PVbt,
-// pode clicar em qualquer amostra para inspecionar os dados do core (D, L, φ, VP, k, ácido, vazão, temperatura) e
-// selecioná-la direto do modal, criando séries comparativas no mesmo gráfico.
+// Comparação de resultados (PVbt × Q): filtra por litologia, fluidos/sistemas ácidos do catálogo, temperatura, vazão
+// e propriedades do core; permite clicar em qualquer amostra (na lista, nas selecionadas ou nas séries) para ver
+// todos os detalhes da rocha, petrofísica e coreflooding.
 
 interface AmostraPvbt {
   uuid: string;
@@ -79,13 +82,29 @@ function lerNum(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function rotuloAcido(e: PontoPvbt): string {
-  return (e.tratamento || e.acido || e.id_sistema || "").trim();
+/** Rótulo legível do sistema ácido/fluido do ensaio, usando o catálogo quando disponível. */
+function descreverSistemaEnsaio(e: PontoPvbt, porSistema: Map<string, SistemaAcido>): string {
+  const sis = e.id_sistema ? porSistema.get(e.id_sistema) : undefined;
+  if (sis) {
+    return `${sis.id_sistema} — ${sis.nome_sistema}`;
+  }
+  const partes: string[] = [];
+  if (e.acido) partes.push(e.acido);
+  if (e.conc_valor != null) partes.push(`${fmt(e.conc_valor, 2)}${e.conc_unidade ? ` ${e.conc_unidade}` : ""}`);
+  if (e.aditivo) partes.push(`+ ${e.aditivo}`);
+  if (partes.length > 0) return partes.join(" ");
+  return (e.tratamento || e.id_sistema || "").trim();
 }
 
 function tempDoEnsaio(e: PontoPvbt): number | null {
   const t = e.temperatura_nominal_c ?? e.temperatura_c;
   return t != null && Number.isFinite(Number(t)) ? Math.round(Number(t)) : null;
+}
+
+async function listarFluidosCatalogo(): Promise<string[]> {
+  const { data, error } = await supabase.from("fluidos_prop").select("componente").order("componente");
+  if (error || !data) return [];
+  return data.map((r: { componente: string }) => r.componente).filter(Boolean);
 }
 
 export function ComparacaoPage() {
@@ -100,10 +119,19 @@ export function ComparacaoPage() {
   const [editando, setEditando] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const grafico = useRef<ExportarComparacao>(null);
+  const painelDetalheRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => guardar(series), [series]);
 
   const base = useConsulta(() => listarPvbt({ fontes: ["LCPETRO"] }), []);
+  const litologiasCat = useConsulta(listarLitologias, []);
+  const sistemasCat = useConsulta(listarSistemasAcidos, []);
+  const fluidosCat = useConsulta(listarFluidosCatalogo, []);
+
+  const porSistema = useMemo(
+    () => new Map((sistemasCat.dados ?? []).map((s) => [s.id_sistema, s])),
+    [sistemasCat.dados],
+  );
 
   // amostras do laboratório com coreflooding e PVbt, dentro do projeto aberto
   const amostras = useMemo<AmostraPvbt[]>(() => {
@@ -125,27 +153,61 @@ export function ComparacaoPage() {
 
   const porUuid = useMemo(() => new Map(amostras.map((a) => [a.uuid, a])), [amostras]);
 
-  // Opções únicas para os selects de filtro
+  // Opções para os selects de filtro (puxando todos os ácidos, sistemas ácidos, fluidos e litologias do catálogo)
   const opcoesFiltro = useMemo(() => {
-    const litologias = new Set<string>();
-    const acidos = new Set<string>();
-    const temperaturas = new Set<number>();
-
+    const litologiasMap = new Map<string, string>();
+    for (const l of litologiasCat.dados ?? []) {
+      if (l.nome?.trim()) litologiasMap.set(l.nome.trim().toLowerCase(), l.nome.trim());
+    }
     for (const a of amostras) {
-      if (a.litologia?.trim()) litologias.add(a.litologia.trim());
+      if (a.litologia?.trim()) {
+        const k = a.litologia.trim().toLowerCase();
+        if (!litologiasMap.has(k)) litologiasMap.set(k, a.litologia.trim());
+      }
+    }
+
+    // Fluidos / componentes químicos do catálogo (fluidos_prop + componentes de sistemas_acidos + ácidos dos ensaios), sem duplicar maiúsculas/minúsculas (HCl vs HCL)
+    const fluidosMap = new Map<string, string>();
+    const addFluido = (nome: string | null | undefined) => {
+      const limpo = (nome ?? "").trim();
+      if (!limpo) return;
+      const chave = limpo.toLowerCase();
+      // Prefere grafia padrão "HCl" em vez de "HCL"
+      if (chave === "hcl") {
+        fluidosMap.set(chave, "HCl");
+        return;
+      }
+      if (!fluidosMap.has(chave)) fluidosMap.set(chave, limpo);
+    };
+
+    for (const f of fluidosCat.dados ?? []) addFluido(f);
+    for (const s of sistemasCat.dados ?? []) {
+      addFluido(s.componente_1);
+      addFluido(s.componente_2);
+    }
+    for (const a of amostras) {
+      for (const e of a.ensaios) addFluido(e.acido);
+    }
+
+    const sistemasLista = [...(sistemasCat.dados ?? [])].sort((a, b) =>
+      a.id_sistema.localeCompare(b.id_sistema, "pt-BR", { numeric: true }),
+    );
+
+    const temperaturas = new Set<number>();
+    for (const a of amostras) {
       for (const e of a.ensaios) {
-        const ac = rotuloAcido(e);
-        if (ac) acidos.add(ac);
         const t = tempDoEnsaio(e);
         if (t != null) temperaturas.add(t);
       }
     }
+
     return {
-      litologias: [...litologias].sort((a, b) => a.localeCompare(b, "pt-BR")),
-      acidos: [...acidos].sort((a, b) => a.localeCompare(b, "pt-BR")),
+      litologias: [...litologiasMap.values()].sort((a, b) => a.localeCompare(b, "pt-BR")),
+      fluidos: [...fluidosMap.values()].sort((a, b) => a.localeCompare(b, "pt-BR")),
+      sistemas: sistemasLista,
       temperaturas: [...temperaturas].sort((a, b) => a - b),
     };
-  }, [amostras]);
+  }, [amostras, litologiasCat.dados, sistemasCat.dados, fluidosCat.dados]);
 
   const qtdFiltrosAtivos = useMemo(
     () => Object.values(filtros).filter((v) => v.trim() !== "").length,
@@ -153,7 +215,28 @@ export function ComparacaoPage() {
   );
 
   const ensaioPassaNosFiltros = (e: PontoPvbt): boolean => {
-    if (filtros.acido && rotuloAcido(e) !== filtros.acido) return false;
+    if (filtros.acido) {
+      const sis = e.id_sistema ? porSistema.get(e.id_sistema) : undefined;
+      if (filtros.acido.startsWith("sis:")) {
+        const idAlvo = filtros.acido.slice(4);
+        if (e.id_sistema !== idAlvo) return false;
+      } else if (filtros.acido.startsWith("fluido:")) {
+        const fluidoAlvo = filtros.acido.slice(7).toLowerCase();
+        const candidatos = [
+          e.acido,
+          e.aditivo,
+          e.tratamento,
+          sis?.componente_1,
+          sis?.componente_2,
+          sis?.aditivos,
+          sis?.nome_sistema,
+        ]
+          .filter(Boolean)
+          .map((x) => String(x).toLowerCase());
+        if (!candidatos.some((c) => c === fluidoAlvo || c.includes(fluidoAlvo))) return false;
+      }
+    }
+
     if (filtros.temperatura) {
       const t = tempDoEnsaio(e);
       if (t == null || String(t) !== filtros.temperatura) return false;
@@ -179,12 +262,12 @@ export function ComparacaoPage() {
   const filtradas = useMemo(() => {
     const t = busca.trim().toLowerCase();
     return amostras.filter((a) => {
-      if (filtros.litologia && (a.litologia ?? "").trim() !== filtros.litologia) return false;
+      if (filtros.litologia && (a.litologia ?? "").trim().toLowerCase() !== filtros.litologia.toLowerCase()) return false;
       if (t) {
         const textoAmostra = [
           a.codigo,
           a.litologia ?? "",
-          ...a.ensaios.map((e) => `${rotuloAcido(e)} ${e.id_experimento ?? ""} ${tempDoEnsaio(e) ?? ""}C`),
+          ...a.ensaios.map((e) => `${descreverSistemaEnsaio(e, porSistema)} ${e.id_experimento ?? ""} ${tempDoEnsaio(e) ?? ""}C`),
         ]
           .join(" ")
           .toLowerCase();
@@ -197,7 +280,7 @@ export function ComparacaoPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amostras, busca, filtros, qtdFiltrosAtivos]);
+  }, [amostras, busca, filtros, qtdFiltrosAtivos, porSistema]);
 
   // séries prontas para o gráfico: PVbt × vazão de cada ensaio das amostras da série
   const { prontas, semVazao } = useMemo(() => {
@@ -210,7 +293,7 @@ export function ComparacaoPage() {
             sem++;
             return [];
           }
-          const ac = rotuloAcido(e);
+          const ac = descreverSistemaEnsaio(e, porSistema);
           return [
             {
               x: Number(e.vazao_ml_min),
@@ -230,15 +313,28 @@ export function ComparacaoPage() {
       };
     });
     return { prontas, semVazao: sem };
-  }, [series, porUuid]);
+  }, [series, porUuid, porSistema]);
+
+  const abrirDetalhesAmostra = (uuid: string) => {
+    setAmostraDetalheUuid(uuid);
+    setTimeout(() => {
+      painelDetalheRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+  };
 
   const alternar = (u: string) =>
     setMarcadas((s) => {
       const n = new Set(s);
-      if (n.has(u)) n.delete(u);
-      else n.add(u);
+      if (n.has(u)) {
+        n.delete(u);
+      } else {
+        n.add(u);
+        // Ao selecionar uma amostra, já abre os detalhes dela automaticamente para conferência
+        setAmostraDetalheUuid(u);
+      }
       return n;
     });
+
   const limparRascunho = () => {
     setMarcadas(new Set());
     setNome("");
@@ -256,7 +352,9 @@ export function ComparacaoPage() {
   function editar(s: Serie) {
     setEditando(s.id);
     setNome(s.nome);
-    setMarcadas(new Set(s.amostras.filter((u) => porUuid.has(u))));
+    const validas = s.amostras.filter((u) => porUuid.has(u));
+    setMarcadas(new Set(validas));
+    if (validas.length > 0) setAmostraDetalheUuid(validas[0]);
   }
   function apagar(s: Serie) {
     if (!confirm(`Apagar a série "${s.nome}"?`)) return;
@@ -266,19 +364,23 @@ export function ComparacaoPage() {
   const baixar = (f: "png" | "svg") => grafico.current?.baixar(f, "comparacao_pvbt_q").catch((e) => setErro(mensagemErro(e)));
 
   const amostraDetalhe = amostraDetalheUuid ? porUuid.get(amostraDetalheUuid) ?? null : null;
+  const listaMarcadas = useMemo(
+    () => [...marcadas].map((u) => porUuid.get(u)).filter((a): a is AmostraPvbt => Boolean(a)),
+    [marcadas, porUuid],
+  );
 
   return (
     <div>
       <CabecalhoPagina
         titulo="Comparação de resultados"
-        subtitulo="Filtre por ácido, temperatura, vazão ou propriedades do core, inspecione os dados da amostra e compare séries PVbt × Q"
+        subtitulo="Filtre pelos fluidos e sistemas ácidos do catálogo, clique nas amostras selecionadas para ver seus detalhes completos e compare PVbt × Q"
       />
 
-      <div className="px-7 pb-10 grid grid-cols-1 lg:grid-cols-[410px_1fr] gap-6 items-start">
+      <div className="px-7 pb-10 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
         <div className="flex flex-col gap-6">
           <Cartao
             titulo={editando ? "Editando série" : "Nova série"}
-            subtitulo={`${filtradas.length} de ${amostras.length} amostra(s) · ${marcadas.size} marcada(s)`}
+            subtitulo={`${filtradas.length} de ${amostras.length} amostra(s) · ${marcadas.size} selecionada(s)`}
           >
             <div className="p-4 flex flex-col gap-3">
               {/* Busca + Botão de Filtros */}
@@ -298,7 +400,7 @@ export function ComparacaoPage() {
                   className={`btn ${
                     mostrarFiltros || qtdFiltrosAtivos > 0 ? "btn-primary" : "btn-secondary"
                   } !px-3 flex items-center gap-1.5 shrink-0`}
-                  title="Filtrar amostras por ácido, temperatura, vazão, porosidade e permeabilidade"
+                  title="Filtrar amostras por ácido/fluido do catálogo, temperatura, vazão, porosidade e permeabilidade"
                 >
                   <SlidersHorizontal size={14} />
                   <span>Filtros</span>
@@ -330,7 +432,7 @@ export function ComparacaoPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-semibold text-[var(--color-neutral-600)]">Litologia</span>
+                      <span className="text-[11px] font-semibold text-[var(--color-neutral-600)]">Litologia (Catálogo)</span>
                       <select
                         className="input !h-8 !py-1 text-[12px]"
                         value={filtros.litologia}
@@ -363,18 +465,36 @@ export function ComparacaoPage() {
                   </div>
 
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold text-[var(--color-neutral-600)]">Sistema Ácido / Fluido</span>
+                    <span className="text-[11px] font-semibold text-[var(--color-neutral-600)]">
+                      Sistema Ácido / Fluido (Catálogo)
+                    </span>
                     <select
                       className="input !h-8 !py-1 text-[12px]"
                       value={filtros.acido}
                       onChange={(e) => setFiltros((f) => ({ ...f, acido: e.target.value }))}
                     >
-                      <option value="">Todos ({opcoesFiltro.acidos.length})</option>
-                      {opcoesFiltro.acidos.map((ac) => (
-                        <option key={ac} value={ac}>
-                          {ac}
-                        </option>
-                      ))}
+                      <option value="">
+                        Todos ({opcoesFiltro.fluidos.length} fluidos · {opcoesFiltro.sistemas.length} sistemas)
+                      </option>
+                      {opcoesFiltro.fluidos.length > 0 && (
+                        <optgroup label={`Fluidos e Ácidos (${opcoesFiltro.fluidos.length})`}>
+                          {opcoesFiltro.fluidos.map((fl) => (
+                            <option key={`fluido:${fl}`} value={`fluido:${fl}`}>
+                              {fl}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {opcoesFiltro.sistemas.length > 0 && (
+                        <optgroup label={`Sistemas Ácidos do Catálogo (${opcoesFiltro.sistemas.length})`}>
+                          {opcoesFiltro.sistemas.map((s) => (
+                            <option key={`sis:${s.id_sistema}`} value={`sis:${s.id_sistema}`}>
+                              {s.id_sistema} — {s.nome_sistema}
+                              {s.aditivos ? ` (${s.aditivos})` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </label>
 
@@ -464,7 +584,7 @@ export function ComparacaoPage() {
                     Desmarcar
                   </button>
                 </div>
-                <span className="text-[11px] text-[var(--color-neutral-500)]">Clique na amostra p/ ver dados</span>
+                <span className="text-[11px] text-[var(--color-neutral-500)]">Clique na amostra p/ detalhes</span>
               </div>
 
               {base.carregando && !base.dados ? (
@@ -478,10 +598,12 @@ export function ComparacaoPage() {
                     : "Ainda não há amostra com coreflooding e PVbt neste projeto."}
                 </p>
               ) : (
-                <ul className="m-0 p-0 list-none max-h-[420px] overflow-y-auto flex flex-col divide-y divide-[var(--color-neutral-200)] border border-[var(--color-neutral-200)] rounded-lg">
+                <ul className="m-0 p-0 list-none max-h-[380px] overflow-y-auto flex flex-col divide-y divide-[var(--color-neutral-200)] border border-[var(--color-neutral-200)] rounded-lg">
                   {filtradas.map((a) => {
                     const e0 = a.ensaios[0];
-                    const acidosUnicos = [...new Set(a.ensaios.map(rotuloAcido).filter(Boolean))];
+                    const sistemasUnicos = [
+                      ...new Set(a.ensaios.map((e) => descreverSistemaEnsaio(e, porSistema)).filter(Boolean)),
+                    ];
                     const tempsUnicas = [...new Set(a.ensaios.map(tempDoEnsaio).filter((x): x is number => x != null))];
                     const vazoesUnicas = [
                       ...new Set(
@@ -498,9 +620,9 @@ export function ComparacaoPage() {
                         key={a.uuid}
                         className={`flex items-start gap-2.5 px-3 py-2.5 transition-colors ${
                           emDetalhe
-                            ? "bg-[var(--color-blue-50)]"
+                            ? "bg-[var(--color-blue-50)] ring-1 ring-inset ring-[var(--color-blue)]"
                             : estaMarcada
-                            ? "bg-[var(--color-blue-50)]/40"
+                            ? "bg-[var(--color-blue-50)]/45"
                             : "hover:bg-[var(--color-neutral-100)]"
                         }`}
                       >
@@ -513,16 +635,17 @@ export function ComparacaoPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => setAmostraDetalheUuid(a.uuid)}
+                          onClick={() => abrirDetalhesAmostra(a.uuid)}
                           className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer group"
+                          title={`Clique para ver todos os detalhes da amostra ${a.codigo}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-heading font-bold text-[14px] text-[var(--color-red)] group-hover:underline">
                               {a.codigo}
                             </span>
-                            <span className="text-[11px] font-semibold text-[var(--color-blue-800)] flex items-center gap-1">
+                            <span className="text-[11px] font-semibold text-[var(--color-blue-800)] flex items-center gap-1 group-hover:text-[var(--color-blue)]">
                               <Eye size={12} className="text-[var(--color-blue)]" />
-                              {a.ensaios.length} ensaio(s)
+                              Ver detalhes ({a.ensaios.length})
                             </span>
                           </div>
                           <span className="block text-[12px] text-[var(--color-neutral-700)] truncate">
@@ -531,10 +654,10 @@ export function ComparacaoPage() {
                             {e0?.k_inicial_md != null ? ` · k ${fmt(e0.k_inicial_md, 2)} mD` : ""}
                           </span>
                           <div className="mt-1 flex flex-wrap gap-1">
-                            {acidosUnicos.slice(0, 2).map((ac) => (
+                            {sistemasUnicos.slice(0, 2).map((ac) => (
                               <span
                                 key={ac}
-                                className="inline-block rounded bg-[var(--color-neutral-200)]/80 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-neutral-800)] truncate max-w-[170px]"
+                                className="inline-block rounded bg-[var(--color-neutral-200)]/80 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-neutral-800)] truncate max-w-[200px]"
                               >
                                 {ac}
                               </span>
@@ -555,6 +678,52 @@ export function ComparacaoPage() {
                     );
                   })}
                 </ul>
+              )}
+
+              {/* Amostras Selecionadas Clicáveis */}
+              {listaMarcadas.length > 0 && (
+                <div className="rounded-lg border border-[var(--color-blue-200)] bg-[var(--color-blue-50)]/60 p-2.5 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--color-blue-800)]">
+                    <span>Amostras selecionadas ({listaMarcadas.length}) — clique para ver detalhes:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {listaMarcadas.map((a) => {
+                      const ativa = amostraDetalheUuid === a.uuid;
+                      return (
+                        <div
+                          key={a.uuid}
+                          className={`inline-flex items-center rounded-md border text-[12px] font-semibold transition-all ${
+                            ativa
+                              ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white shadow-sm"
+                              : "border-[var(--color-blue-200)] bg-white text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => abrirDetalhesAmostra(a.uuid)}
+                            className="flex items-center gap-1 px-2 py-1 bg-transparent border-0 cursor-pointer text-inherit"
+                            title={`Ver detalhes de ${a.codigo}`}
+                          >
+                            <Eye size={12} />
+                            <span>{a.codigo}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => alternar(a.uuid)}
+                            className={`px-1.5 py-1 border-l bg-transparent border-0 cursor-pointer ${
+                              ativa
+                                ? "border-white/30 text-white/90 hover:text-white"
+                                : "border-[var(--color-neutral-200)] text-[var(--color-neutral-500)] hover:text-[var(--color-red)]"
+                            }`}
+                            title={`Remover ${a.codigo} da seleção`}
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
               <div className="border-t border-[var(--color-neutral-200)] pt-3 flex flex-col gap-2">
@@ -611,39 +780,62 @@ export function ComparacaoPage() {
               )}
               {prontas.map((s) => {
                 const orig = series.find((x) => x.id === s.id)!;
-                const faltam = orig.amostras.filter((u) => !porUuid.has(u)).length;
+                const amostrasDaSerie = orig.amostras.map((u) => porUuid.get(u)).filter((a): a is AmostraPvbt => Boolean(a));
+                const faltam = orig.amostras.length - amostrasDaSerie.length;
                 return (
                   <li
                     key={s.id}
-                    className="flex items-center gap-3 px-5 py-3 border-t first:border-t-0 border-[var(--color-neutral-200)]"
+                    className="flex flex-col gap-2 px-5 py-3 border-t first:border-t-0 border-[var(--color-neutral-200)]"
                   >
-                    <svg width="34" height="14" aria-hidden>
-                      <line x1="0" x2="34" y1="7" y2="7" stroke="#000" />
-                      <circle cx="17" cy="7" r="5" fill={s.cor} />
-                    </svg>
-                    <span className="flex-1 min-w-0">
-                      <span className="block font-semibold text-[14px] text-[var(--color-blue-800)] truncate">{s.nome}</span>
-                      <span className="block text-[12px] text-[var(--color-neutral-600)]">
-                        {orig.amostras.length - faltam} amostra(s) · {s.pontos.length} ponto(s)
-                        {faltam ? ` · ${faltam} fora deste projeto` : ""}
+                    <div className="flex items-center gap-3">
+                      <svg width="34" height="14" aria-hidden>
+                        <line x1="0" x2="34" y1="7" y2="7" stroke="#000" />
+                        <circle cx="17" cy="7" r="5" fill={s.cor} />
+                      </svg>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-semibold text-[14px] text-[var(--color-blue-800)] truncate">{s.nome}</span>
+                        <span className="block text-[12px] text-[var(--color-neutral-600)]">
+                          {amostrasDaSerie.length} amostra(s) · {s.pontos.length} ponto(s)
+                          {faltam ? ` · ${faltam} fora deste projeto` : ""}
+                        </span>
                       </span>
-                    </span>
-                    <button
-                      type="button"
-                      title="Editar seleção e nome"
-                      className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-blue)]"
-                      onClick={() => editar(orig)}
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Apagar série"
-                      className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-red)]"
-                      onClick={() => apagar(orig)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      <button
+                        type="button"
+                        title="Editar seleção e nome"
+                        className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-blue)] cursor-pointer bg-transparent border-0"
+                        onClick={() => editar(orig)}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Apagar série"
+                        className="p-1 text-[var(--color-neutral-500)] hover:text-[var(--color-red)] cursor-pointer bg-transparent border-0"
+                        onClick={() => apagar(orig)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    {amostrasDaSerie.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pl-[46px]">
+                        {amostrasDaSerie.map((a) => (
+                          <button
+                            key={a.uuid}
+                            type="button"
+                            onClick={() => abrirDetalhesAmostra(a.uuid)}
+                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold cursor-pointer border transition-colors ${
+                              amostraDetalheUuid === a.uuid
+                                ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
+                                : "border-[var(--color-neutral-300)] bg-[var(--color-neutral-100)] text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
+                            }`}
+                            title={`Clique para ver os detalhes da amostra ${a.codigo}`}
+                          >
+                            <Eye size={11} />
+                            {a.codigo}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -651,11 +843,12 @@ export function ComparacaoPage() {
           </Cartao>
         </div>
 
-        <div className="flex flex-col gap-6">
-          {/* Painel de inspeção da amostra clicada (dados do core, temperatura, vazão, ácido e botão de seleção) */}
+        <div className="flex flex-col gap-6" ref={painelDetalheRef}>
+          {/* Painel completo de inspeção da amostra clicada */}
           {amostraDetalhe && (
             <ModalDetalheAmostraCore
               amostra={amostraDetalhe}
+              porSistema={porSistema}
               selecionada={marcadas.has(amostraDetalhe.uuid)}
               aoAlternarSelecao={() => alternar(amostraDetalhe.uuid)}
               aoFechar={() => setAmostraDetalheUuid(null)}
@@ -685,7 +878,7 @@ export function ComparacaoPage() {
               )}
               {!prontas.length ? (
                 <p className="m-0 py-20 text-center text-[13px] text-[var(--color-neutral-600)]">
-                  Crie uma série para plotar o gráfico, ou clique em qualquer amostra à esquerda para inspecionar seus dados de coreflooding.
+                  Crie uma série para plotar o gráfico, ou clique em qualquer amostra à esquerda para inspecionar todos os seus dados.
                 </p>
               ) : (
                 <>
@@ -705,56 +898,157 @@ export function ComparacaoPage() {
   );
 }
 
+interface CorefloodExtra {
+  id: number;
+  data_ensaio: string | null;
+  id_sistema: string | null;
+  vazao_ml_min: number | null;
+  temperatura_c: number | null;
+  pressao_confinamento_psi: number | null;
+  contrapressao_psi: number | null;
+  dp_inicial_psi: number | null;
+  dp_final_psi: number | null;
+  razao_dp: number | null;
+  volume_poroso_usado_cm3: number | null;
+  volume_morto_cm3: number | null;
+  equipamento_aquisicao: string | null;
+  pvbt: number | null;
+  breakthrough: boolean | null;
+  criterio_bt: string | null;
+  observacoes: string | null;
+}
+
 function ModalDetalheAmostraCore(p: {
   amostra: AmostraPvbt;
+  porSistema: Map<string, SistemaAcido>;
   selecionada: boolean;
   aoAlternarSelecao: () => void;
   aoFechar: () => void;
 }) {
-  const { amostra, selecionada, aoAlternarSelecao, aoFechar } = p;
+  const { amostra, porSistema, selecionada, aoAlternarSelecao, aoFechar } = p;
   const e0 = amostra.ensaios[0];
 
+  // Busca dados completos da amostra em v_amostras, observações do controle e registros detalhados de analise_coreflooding
+  const ficha = useConsulta(() => obterAmostra(amostra.uuid), [amostra.uuid]);
+  const controle = useConsulta(() => obterControleDaAmostra(amostra.uuid), [amostra.uuid]);
+  const corefloods = useConsulta(async () => {
+    const { data } = await supabase
+      .from("analise_coreflooding")
+      .select("*")
+      .eq("amostra_id", amostra.uuid)
+      .order("id", { ascending: true });
+    return (data ?? []) as CorefloodExtra[];
+  }, [amostra.uuid]);
+
+  const cfPorId = useMemo(
+    () => new Map((corefloods.dados ?? []).map((c) => [c.id, c])),
+    [corefloods.dados],
+  );
+
+  const resumo = ficha.dados;
+  const origemTxt = useMemo(() => {
+    if (!resumo) return null;
+    if (resumo.tipo_origem === "testemunho") {
+      return [
+        resumo.poco && `Poço ${resumo.poco}`,
+        resumo.campo && `Campo ${resumo.campo}`,
+        resumo.bacia && `Bacia ${resumo.bacia}`,
+        resumo.reservatorio && `Res. ${resumo.reservatorio}`,
+        resumo.profundidade_m != null && `${fmt(resumo.profundidade_m, 1)} m`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    return [resumo.afloramento_local, resumo.fornecedor].filter(Boolean).join(" · ");
+  }, [resumo]);
+
+  const diam = resumo?.diametro_cm ?? e0?.diametro_cm;
+  const comp = resumo?.comprimento_cm ?? e0?.comprimento_cm;
+  const phi = resumo?.porosidade_pct ?? e0?.porosidade_pct;
+  const vp = resumo?.volume_poroso_cm3 ?? e0?.volume_poroso_cm3;
+  const ki = e0?.k_inicial_md ?? resumo?.k_liquido_md ?? resumo?.k_gas_md;
+  const pConf = e0?.p_confinamento_psi ?? resumo?.pressao_confinamento_psi;
+
   const itensCore: { rotulo: string; valor: string }[] = [
-    { rotulo: "Litologia", valor: amostra.litologia ?? "—" },
+    { rotulo: "Litologia", valor: resumo?.litologia ?? amostra.litologia ?? "—" },
     {
-      rotulo: "Dimensões (D × L)",
+      rotulo: "Origem / Procedência",
+      valor: resumo ? `${resumo.tipo_origem}${origemTxt ? ` · ${origemTxt}` : ""}` : "—",
+    },
+    {
+      rotulo: "Dimensões do Core (D × L)",
       valor:
-        e0?.diametro_cm != null || e0?.comprimento_cm != null
-          ? `${fmt(e0?.diametro_cm, 2)} cm × ${fmt(e0?.comprimento_cm, 2)} cm${
-              e0?.dimensao_nominal_in ? ` (${e0.dimensao_nominal_in})` : ""
-            }`
+        diam != null || comp != null
+          ? `${fmt(diam, 2)} cm × ${fmt(comp, 2)} cm${e0?.dimensao_nominal_in ? ` (${e0.dimensao_nominal_in})` : ""}`
           : e0?.dimensao_nominal_in ?? "—",
     },
     {
+      rotulo: "Massa Seca",
+      valor: resumo?.massa_seca_g != null ? `${fmt(resumo.massa_seca_g, 2)} g` : "—",
+    },
+    {
       rotulo: "Porosidade (φ)",
-      valor:
-        e0?.porosidade_pct != null
-          ? `${fmt(e0.porosidade_pct, 2)} %${e0.faixa_porosidade ? ` (${e0.faixa_porosidade})` : ""}`
-          : "—",
+      valor: phi != null ? `${fmt(phi, 2)} %${e0?.faixa_porosidade ? ` (${e0.faixa_porosidade})` : ""}` : "—",
     },
     {
       rotulo: "Volume Poroso (VP)",
-      valor: e0?.volume_poroso_cm3 != null ? `${fmt(e0.volume_poroso_cm3, 2)} cm³` : "—",
+      valor: vp != null ? `${fmt(vp, 2)} cm³` : "—",
+    },
+    {
+      rotulo: "Permeabilidade ao Gás (k_gás)",
+      valor: resumo?.k_gas_md != null ? `${fmt(resumo.k_gas_md, 3)} mD` : "—",
     },
     {
       rotulo: "Permeabilidade Inicial (kᵢ)",
+      valor: ki != null ? `${fmt(ki, 3)} mD${e0?.faixa_permeabilidade ? ` (${e0.faixa_permeabilidade})` : ""}` : "—",
+    },
+    {
+      rotulo: "Permeabilidade Pós-Ácido",
+      valor: resumo?.k_liquido_depois_md != null ? `${fmt(resumo.k_liquido_depois_md, 3)} mD` : "—",
+    },
+    {
+      rotulo: "Perm. Fabricante",
       valor:
-        e0?.k_inicial_md != null
-          ? `${fmt(e0.k_inicial_md, 3)} mD${e0.faixa_permeabilidade ? ` (${e0.faixa_permeabilidade})` : ""}`
+        resumo?.permeabilidade_fabricante_min_md != null &&
+        resumo?.permeabilidade_fabricante_max_md != null &&
+        resumo.permeabilidade_fabricante_min_md !== resumo.permeabilidade_fabricante_max_md
+          ? `${fmt(resumo.permeabilidade_fabricante_min_md, 1)}–${fmt(resumo.permeabilidade_fabricante_max_md, 1)} mD`
+          : resumo?.permeabilidade_fabricante_md != null
+          ? `${fmt(resumo.permeabilidade_fabricante_md, 1)} mD`
           : "—",
     },
     {
       rotulo: "Pressão de Confinamento",
-      valor: e0?.p_confinamento_psi != null ? `${fmt(e0.p_confinamento_psi, 0)} psi` : "—",
+      valor: pConf != null ? `${fmt(pConf, 0)} psi` : "—",
+    },
+    {
+      rotulo: "Outras Análises na Ficha",
+      valor: resumo
+        ? [
+            resumo.n_petrofisica > 0 && `${resumo.n_petrofisica} Petrofísica`,
+            resumo.n_coreflooding > 0 && `${resumo.n_coreflooding} Coreflooding`,
+            resumo.n_microct > 0 && `${resumo.n_microct} Micro-CT`,
+            resumo.n_drx > 0 && `${resumo.n_drx} DRX`,
+            resumo.n_petrografia > 0 && `${resumo.n_petrografia} Petrografia`,
+            resumo.n_mev > 0 && `${resumo.n_mev} MEV`,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "—"
+        : "—",
     },
   ];
 
   return (
     <Cartao
-      titulo={`Dados da Amostra · ${amostra.codigo}`}
-      subtitulo="Propriedades físicas do core e parâmetros dos ensaios de acidificação"
+      titulo={`Detalhes da Amostra · ${amostra.codigo}`}
+      subtitulo={
+        resumo
+          ? `${resumo.empresa} · ${resumo.projeto} · Status: ${STATUS_ROTULO[resumo.status] ?? resumo.status}`
+          : "Propriedades físicas do core, petrofísica e parâmetros dos ensaios de acidificação"
+      }
       acoes={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {resumo && <span className={classeStatus(resumo.status)}>{STATUS_ROTULO[resumo.status]}</span>}
           <button
             type="button"
             onClick={aoAlternarSelecao}
@@ -775,7 +1069,7 @@ function ModalDetalheAmostraCore(p: {
             className="btn btn-secondary !py-1.5 no-underline flex items-center gap-1.5"
             title="Abrir ficha completa da amostra"
           >
-            <ExternalLink size={14} /> Ver ficha
+            <ExternalLink size={14} /> Abrir ficha completa
           </Link>
           <button
             type="button"
@@ -789,12 +1083,12 @@ function ModalDetalheAmostraCore(p: {
       }
     >
       <div className="p-5 flex flex-col gap-5">
-        {/* Propriedades do Core */}
+        {/* Propriedades do Core e Petrofísica */}
         <div>
           <h4 className="m-0 mb-2.5 text-[12px] font-bold uppercase tracking-wider text-[var(--color-blue-800)] flex items-center gap-1.5">
             <Layers size={14} /> Propriedades do Core (Rocha & Petrofísica)
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {itensCore.map((item) => (
               <div
                 key={item.rotulo}
@@ -807,39 +1101,68 @@ function ModalDetalheAmostraCore(p: {
               </div>
             ))}
           </div>
+          {controle.dados?.observacoes && (
+            <p className="m-0 mt-2.5 rounded-lg border border-[var(--color-neutral-200)] bg-amber-50/60 px-3 py-2 text-[12px] text-[var(--color-neutral-700)]">
+              <strong>Observações do Controle de Rochas:</strong> {controle.dados.observacoes}
+            </p>
+          )}
         </div>
 
-        {/* Tabela de Ensaios (Temperatura, Vazão, Ácido, PVbt, Wormhole) */}
+        {/* Tabela Completa de Ensaios (Temperatura, Vazão, Sistema Ácido do Catálogo, ΔP, PVbt, Wormhole) */}
         <div>
-          <h4 className="m-0 mb-2.5 text-[12px] font-bold uppercase tracking-wider text-[var(--color-blue-800)]">
-            Ensaios de Coreflooding / Acidificação ({amostra.ensaios.length})
+          <h4 className="m-0 mb-2.5 text-[12px] font-bold uppercase tracking-wider text-[var(--color-blue-800)] flex items-center gap-1.5">
+            <FlaskConical size={14} /> Ensaios de Coreflooding / Acidificação ({amostra.ensaios.length})
           </h4>
           <div className="overflow-x-auto rounded-lg border border-[var(--color-neutral-200)]">
             <table className="tabela w-full text-[12px]">
               <thead>
                 <tr>
                   <th>Ensaio</th>
-                  <th>Sistema Ácido / Fluido</th>
+                  <th>Sistema Ácido / Fluido (Catálogo)</th>
                   <th>Temp. (°C)</th>
                   <th>Vazão Q (mL/min)</th>
                   <th>Vel. Intersticial (cm/min)</th>
+                  <th>ΔP inic. → final (psi)</th>
                   <th>PVbt</th>
                   <th>Wormhole (cm)</th>
                 </tr>
               </thead>
               <tbody>
                 {amostra.ensaios.map((e) => {
-                  const ac = rotuloAcido(e) || "—";
-                  const temp = e.temperatura_c ?? e.temperatura_nominal_c;
+                  const sis = e.id_sistema ? porSistema.get(e.id_sistema) : undefined;
+                  const cf = e.analise_id != null ? cfPorId.get(e.analise_id) : undefined;
+                  const temp = e.temperatura_c ?? e.temperatura_nominal_c ?? cf?.temperatura_c;
                   const lwh = e.comprimento_wormhole_uct_cm ?? e.comprimento_wormhole_cm;
+                  const dpTxt =
+                    cf?.dp_inicial_psi != null || cf?.dp_final_psi != null
+                      ? `${fmt(cf?.dp_inicial_psi, 1)} → ${fmt(cf?.dp_final_psi, 1)}${
+                          cf?.razao_dp != null ? ` (${fmt(cf.razao_dp, 1)}×)` : ""
+                        }`
+                      : "—";
+
                   return (
                     <tr key={e.id_experimento}>
                       <td className="font-semibold text-[var(--color-blue-800)] whitespace-nowrap">
                         {e.id_experimento}
+                        {cf?.equipamento_aquisicao && (
+                          <span className="block text-[10px] font-normal text-[var(--color-neutral-500)]">
+                            Eq.: {cf.equipamento_aquisicao}
+                          </span>
+                        )}
                       </td>
                       <td>
-                        <span className="font-medium text-[var(--color-neutral-900)]">{ac}</span>
-                        {e.aditivo && (
+                        <span className="font-semibold text-[var(--color-neutral-900)]">
+                          {descreverSistemaEnsaio(e, porSistema) || "—"}
+                        </span>
+                        {sis && (
+                          <span className="block text-[11px] text-[var(--color-neutral-600)]">
+                            {sis.componente_1}
+                            {sis.valor_1 != null ? ` ${fmt(sis.valor_1, 2)} ${sis.unidade_1 ?? ""}` : ""}
+                            {sis.conc_m != null ? ` (${fmt(sis.conc_m, 2)} M)` : ""}
+                            {sis.aditivos ? ` · Aditivos: ${sis.aditivos}` : ""}
+                          </span>
+                        )}
+                        {!sis && e.aditivo && (
                           <span className="block text-[11px] text-[var(--color-neutral-500)]">
                             Aditivo: {e.aditivo}
                           </span>
@@ -854,11 +1177,12 @@ function ModalDetalheAmostraCore(p: {
                       <td className="tabular-nums whitespace-nowrap">
                         {e.vel_intersticial_cm_min != null ? fmt(e.vel_intersticial_cm_min, 4) : "—"}
                       </td>
+                      <td className="tabular-nums whitespace-nowrap">{dpTxt}</td>
                       <td className="tabular-nums font-bold text-[var(--color-red)] whitespace-nowrap">
                         {e.breakthrough === false ? "Sem BT" : fmtExato(e.pvbt)}
-                        {e.pvbt_condicao && (
+                        {(e.pvbt_condicao || cf?.criterio_bt) && (
                           <span className="block font-normal text-[10px] text-[var(--color-neutral-500)]">
-                            {e.pvbt_condicao}
+                            {e.pvbt_condicao ?? cf?.criterio_bt}
                           </span>
                         )}
                       </td>
