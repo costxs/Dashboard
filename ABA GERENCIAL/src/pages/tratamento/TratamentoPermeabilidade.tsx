@@ -311,14 +311,6 @@ export const TratamentoPermeabilidade: React.FC<{ equipamento?: Equipamento; dpD
 
   async function gravar() {
     if (!ensaioCalc || !resultado || !amostra || kEscolhido == null) return
-    const confirmacao = [
-      `Gravar k = ${fmt(kEscolhido, 2)} mD (${metodo}) na amostra ${amostra.codigo}?`,
-      outraAmostra && `• ATENÇÃO: o arquivo é da amostra ${codigoArquivo}, não de ${amostra.codigo}.`,
-      '• Será criada uma petrofísica "antes" com k em fluxo, '
-        + `${resultado.etapas.length} etapa(s) de vazão (${usadas.size} usada(s)) e a curva ΔP × tempo.`,
-      'Nada é apagado: se este ensaio já foi gravado antes, ficará em duplicidade.',
-    ].filter(Boolean).join('\n')
-    if (!confirm(confirmacao)) return
     setErroGravar(null)
     setGravando(true)
     try {
@@ -590,7 +582,7 @@ export const TratamentoPermeabilidade: React.FC<{ equipamento?: Equipamento; dpD
                     <th className="text-right">ΔP médio ± desvio (psi)</th><th className="text-right">CV (%)</th>
                     <th className="text-right" title="Q × duração">V injetado (cm³)</th>
                     <th className="text-right" title="Variação do volume da garrafa, lida pela bomba">V bombeado (cm³)</th>
-                    <th className="text-right">k da etapa (mD)</th><th className="text-right">k do equipamento (mD)</th>
+                    <th className="text-right">k da etapa (mD)</th><th className="text-right">{ensaio?.saturados?.length ? "k do equipamento (usa ΔP saturado — não usar)" : "k do equipamento (mD)"}</th>
                     <th>Situação</th><th>Usar</th>
                   </tr>
                 </thead>

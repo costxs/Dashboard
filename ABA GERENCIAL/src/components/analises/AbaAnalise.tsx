@@ -1,3 +1,4 @@
+import { confirmar } from '../Confirmar'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -237,7 +238,7 @@ export const AbaAnalise: React.FC<{
   }
 
   async function handleExcluirEnsaio(id: number) {
-    if (!confirm('Deseja realmente excluir este ensaio?')) return
+    if (!(await confirmar('Deseja realmente excluir este ensaio?'))) return
     try {
       await excluirEnsaio(cfg, id)
       setFeedback({ tipo: 'sucesso', msg: 'Ensaio excluído.' })
@@ -331,7 +332,7 @@ export const AbaAnalise: React.FC<{
   }
 
   async function handleApagarCurva(c: CurvaResumo) {
-    if (!confirm(`Apagar a curva "${c.nome}" e todos os pontos dela?`)) return
+    if (!(await confirmar(`Apagar a curva "${c.nome}" e todos os pontos dela?`))) return
     try {
       await apagarCurva(c.id)
       setFeedback({ tipo: 'sucesso', msg: `Curva "${c.nome}" apagada.` })
@@ -364,7 +365,7 @@ export const AbaAnalise: React.FC<{
   }
 
   async function handleApagarArquivo(arq: ArquivoAnexo) {
-    if (!confirm(`Apagar o arquivo "${arq.nome_original}"?`)) return
+    if (!(await confirmar(`Apagar o arquivo "${arq.nome_original}"?`))) return
     try {
       await apagarArquivoAnexo(arq)
       setFeedback({ tipo: 'sucesso', msg: `Arquivo "${arq.nome_original}" apagado.` })

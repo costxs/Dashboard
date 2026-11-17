@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
 import { Alert, Input, Select } from '../../components/UI'
 import { usePapeis } from '../../hooks/usePapel'
-import { buscarAmostraPorCodigo, listarLitologias, listarProjetos, moverAmostraParaProjeto, salvarAmostra } from '../../servicos/api'
+import { buscarAmostraPorCodigo, listarLitologias, listarProjetos, salvarAmostra } from '../../servicos/api'
 import { useContexto } from '../../store/useContexto'
 import type { Litologia, Projeto } from '../../tipos/banco'
 import { mensagemErro, numeroParaInput, paraNumero } from '../../utils/formatacao'
@@ -63,19 +63,10 @@ export const CadastroRapidoAmostra: React.FC<{
     setGravando(true)
     try {
       const cod = codigo.trim().replace(/\s+/g, '').toUpperCase()
+      // código que já existe (mesmo em outro projeto/empresa): sobrescreve a amostra existente, trazendo-a para este projeto
       const existente = await buscarAmostraPorCodigo(cod)
-      if (existente) {
-        if (existente.projeto_id === projetoId) throw new Error(`A amostra ${cod} já está cadastrada neste projeto.`)
-        const onde = `${existente.empresa ?? '?'} · ${existente.projeto ?? '?'}`
-        if (!confirm(`A amostra ${cod} já está cadastrada em ${onde}.\n\nDeseja trazer essa amostra para este projeto? Ela sai do projeto atual e leva junto todos os ensaios.`)) {
-          setErro(`O código ${cod} já existe em ${onde}. Use outro código ou traga a amostra para este projeto.`)
-          return
-        }
-        p.aoCadastrar((await moverAmostraParaProjeto(existente.id, projetoId, cod)).id)
-        return
-      }
       const a = await salvarAmostra({
-        codigo: cod, projeto_id: projetoId, litologia, tipo_origem: origem,
+        id: existente?.id, codigo: cod, projeto_id: projetoId, litologia, tipo_origem: origem,
         poco: origem === 'testemunho' ? poco.trim() : null, comprimento_cm: L, diametro_cm: D, finalidade: 'coreflooding',
       })
       p.aoCadastrar(a.id)

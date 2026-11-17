@@ -6,6 +6,10 @@
 import * as XLSX from "xlsx";
 import type { Planilha } from "./planilhaBdd";
 
+const COLUNAS_CONHECIDAS = new Set([
+  "id_ensaio", "id_referencia", "id_rocha", "id_sistema", "componente", "litologia", "campo", "id_experimento", "id_amostra",
+]);
+
 export async function lerArquivo(arquivo: File | ArrayBuffer): Promise<Planilha> {
   const buffer = arquivo instanceof ArrayBuffer ? arquivo : await arquivo.arrayBuffer();
   // cellDates: datas viram Date; raw: números chegam como número (não como texto formatado)
@@ -13,7 +17,22 @@ export async function lerArquivo(arquivo: File | ArrayBuffer): Promise<Planilha>
   const saida: Planilha = {};
   for (const nome of wb.SheetNames) {
     const ws = wb.Sheets[nome];
-    saida[nome] = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null, raw: true, blankrows: false });
+    // Se a 1ª linha for um título ou estiver vazia antes do cabeçalho real (id_ensaio, id_rocha, etc.), começa na linha do cabeçalho
+    const matriz = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null, raw: true, blankrows: true });
+    let linhaCab = 0;
+    for (let i = 0; i < Math.min(15, matriz.length); i++) {
+      const l = matriz[i] ?? [];
+      if (l.some((c) => typeof c === "string" && COLUNAS_CONHECIDAS.has(c.trim().toLowerCase()))) {
+        linhaCab = i;
+        break;
+      }
+    }
+    saida[nome] = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+      defval: null,
+      raw: true,
+      blankrows: false,
+      ...(linhaCab > 0 ? { range: linhaCab } : {}),
+    });
   }
   return saida;
 }

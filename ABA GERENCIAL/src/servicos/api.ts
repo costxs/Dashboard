@@ -393,11 +393,6 @@ export async function buscarAmostraPorCodigo(codigo: string): Promise<AmostraRes
   return data
 }
 
-/** Traz a amostra (com todos os ensaios, que a acompanham) para outro projeto. Exige ser editor dos dois projetos. */
-export async function moverAmostraParaProjeto(id: string, projetoId: string, codigo: string): Promise<Amostra> {
-  return atualizar('amostras', 'id', id, { projeto_id: projetoId }, `trazer a amostra ${codigo} para este projeto`)
-}
-
 /** Apaga uma referência/publicação. Se há dados de PVbt ou de taxa de reação ligados a ela, o banco recusa. */
 export async function excluirPublicacao(id: string): Promise<void> {
   await apagar('publicacoes', 'id_referencia', id, `excluir a publicação ${id}`)
@@ -566,7 +561,8 @@ export async function salvarCurva(dados: Gravavel['curvas'], pontos: { x: number
 // 7. ARQUIVOS E SUPABASE STORAGE
 // ==========================================
 export async function listarArquivosAnexos(amostraId: string, cfg?: AnaliseConfig): Promise<ArquivoAnexo[]> {
-  let query = supabase.from('arquivos').select('*').eq('amostra_id', amostraId)
+  // as imagens dos espaços fixos (fotos da amostra e de micro-CT) têm posição e aparecem na galeria própria
+  let query = supabase.from('arquivos').select('*').eq('amostra_id', amostraId).is('posicao', null)
   // registros antigos guardaram o nome da pasta no lugar do nome da tabela
   if (cfg) query = query.in('analise_tabela', [cfg.tabela, cfg.pastaArquivos])
   return conferirLeitura<ArquivoAnexo>(await query)
@@ -613,6 +609,55 @@ export async function apagarArquivoAnexo(arq: Pick<ArquivoAnexo, 'id' | 'caminho
   await apagar('arquivos', 'id', arq.id, `apagar o arquivo "${arq.nome_original}"`)
   const { error } = await supabase.storage.from(BUCKET_ARQUIVOS).remove([arq.caminho])
   if (error) throw new Error(`O registro de "${arq.nome_original}" foi apagado, mas o arquivo ficou no Storage. ${tratarErro(error)}`)
+}
+
+// ---- imagens da ficha de Micro-CT: 3 fotos da amostra + 3 imagens de micro-CT (migração 022) ----
+export type TipoImagemFicha = 'foto_amostra' | 'imagem_microct'
+export const TIPOS_IMAGEM_FICHA: TipoImagemFicha[] = ['foto_amostra', 'imagem_microct']
+
+export async function listarImagensFicha(amostraId: string): Promise<ArquivoAnexo[]> {
+  const { data, error } = await supabase.from('arquivos').select('*').eq('amostra_id', amostraId)
+    .in('tipo', TIPOS_IMAGEM_FICHA).not('posicao', 'is', null).order('posicao')
+  if (error) {
+    if (/posicao/.test(error.message) || error.code === '42703') {
+      throw new Error('Rode a migração 022 no Supabase (20261116000022_imagens_microct.sql): o banco ainda não tem o espaço das imagens.')
+    }
+    throw new Error(tratarErro(error))
+  }
+  return (data ?? []) as ArquivoAnexo[]
+}
+
+/** Envia a imagem para o espaço (tipo, posição). Se o espaço já tinha imagem, ela é substituída e o arquivo antigo sai do Storage. */
+export async function enviarImagemFicha(
+  amostraId: string, tipo: TipoImagemFicha, posicao: number, arquivo: File, atual?: ArquivoAnexo | null, legenda?: string | null,
+): Promise<void> {
+  const nome = arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const caminho = `amostras/${amostraId}/microct/${tipo}-${posicao}_${Date.now()}_${nome}`
+  const { error: errUpload } = await supabase.storage.from(BUCKET_ARQUIVOS).upload(caminho, arquivo, { cacheControl: '3600', upsert: false })
+  if (errUpload) throw new Error(`Não foi possível enviar "${arquivo.name}". ${tratarErro(errUpload)}`)
+  const dados = { nome_original: arquivo.name, caminho, tamanho_bytes: arquivo.size }
+  try {
+    if (atual) {
+      const { data, error } = await supabase.from('arquivos').update(dados).eq('id', atual.id).select('id')
+      if (error) throw new Error(tratarErro(error))
+      if (!data?.length) throw new Error('Nada foi gravado: seu usuário precisa ser editor deste projeto.')
+    } else {
+      await inserir('arquivos', {
+        amostra_id: amostraId, analise_tabela: 'analise_microct', tipo, posicao, legenda: legenda?.trim() || null, ...dados,
+      }, `registrar a imagem "${arquivo.name}"`)
+    }
+  } catch (err) {
+    await supabase.storage.from(BUCKET_ARQUIVOS).remove([caminho])
+    throw err
+  }
+  // a imagem antiga já não está ligada a nada: tira do Storage (se falhar, só sobra o arquivo solto)
+  if (atual) await supabase.storage.from(BUCKET_ARQUIVOS).remove([atual.caminho])
+}
+
+export async function salvarLegendaImagem(id: number, legenda: string): Promise<void> {
+  const { data, error } = await supabase.from('arquivos').update({ legenda: legenda.trim() || null }).eq('id', id).select('id')
+  if (error) throw new Error(tratarErro(error))
+  if (!data?.length) throw new Error('Nada foi gravado: seu usuário precisa ser editor deste projeto.')
 }
 
 export async function obterUrlDownloadArquivo(caminho: string): Promise<string> {

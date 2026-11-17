@@ -8,7 +8,7 @@ import { mensagemErro } from '../../utils/formatacao'
 
 export type TipoImportacao = 'reatividade' | 'amostras' | 'pvbt'
 export const ROTULO_TIPO: Record<TipoImportacao, string> = {
-  reatividade: 'Planilha de reatividade (literatura)',
+  reatividade: 'Planilha de reatividade (RDA)',
   amostras: 'Controle de amostras',
   pvbt: 'Base de PVbt',
 }
@@ -35,7 +35,14 @@ export interface OutroTipo { arquivo: File; tipo: TipoImportacao }
 export function detectarTipo(bruta: PlanilhaBruta): TipoImportacao | null {
   const abas = Object.keys(bruta).map((a) => a.trim().toLowerCase())
   if ((abas.includes('experimento') || abas.includes('experimentos')) && abas.includes('amostras')) return 'pvbt'
-  if (abas.includes('ensaios') && (abas.includes('rochas') || abas.includes('sistemas_acidos'))) return 'reatividade'
+  if (abas.includes('ensaios')) return 'reatividade'
+  // Se uma aba tiver cabeçalho com id_ensaio (ex.: RDA-0001) e taxa_reacao_mol_cm2_s / rotacao_rpm, é a planilha de RDA
+  for (const linhas of Object.values(bruta)) {
+    for (let i = 0; i < Math.min(15, linhas.length); i++) {
+      const cols = (linhas[i] ?? []).map((c) => (typeof c === 'string' ? c.trim().toLowerCase() : ''))
+      if (cols.includes('id_ensaio') && (cols.includes('taxa_reacao_mol_cm2_s') || cols.includes('rotacao_rpm'))) return 'reatividade'
+    }
+  }
   return encontrarBlocos(bruta).length > 0 ? 'amostras' : null
 }
 
@@ -126,8 +133,14 @@ export const PainelProblemas: React.FC<{
   filtro: Filtro
   aoFiltrar: (f: Filtro) => void
   nomeArquivo: string
-}> = ({ problemas, erros, avisos, corrigidos, filtro, aoFiltrar, nomeArquivo }) => {
-  const visiveis = problemas.filter((p) => filtro === 'TODOS' || p.severidade === filtro)
+  /** mostra também o filtro por aba da planilha */
+  filtrarPorAba?: boolean
+  /** título da coluna do identificador (padrão "ID") */
+  rotuloId?: string
+}> = ({ problemas, erros, avisos, corrigidos, filtro, aoFiltrar, nomeArquivo, filtrarPorAba, rotuloId = 'ID' }) => {
+  const [aba, setAba] = useState('')
+  const abas = filtrarPorAba ? [...new Set(problemas.map((p) => p.aba))].sort() : []
+  const visiveis = problemas.filter((p) => (filtro === 'TODOS' || p.severidade === filtro) && (!aba || p.aba === aba))
   return (
     <>
       <div className="flex flex-wrap items-center gap-3 px-6 py-4">
@@ -137,6 +150,12 @@ export const PainelProblemas: React.FC<{
         <button type="button" className={`btn ${filtro === 'TODOS' ? 'btn-blue' : 'btn-secondary'}`} onClick={() => aoFiltrar('TODOS')}>
           Todos
         </button>
+        {abas.length > 1 && (
+          <select className="input !w-auto !py-1.5 text-[13px]" aria-label="Filtrar por aba" value={aba} onChange={(e) => setAba(e.target.value)}>
+            <option value="">Todas as abas</option>
+            {abas.map((a) => <option key={a} value={a}>aba {a}</option>)}
+          </select>
+        )}
         <button type="button" className="btn btn-secondary ml-auto" onClick={() => baixarRelatorio(problemas, nomeArquivo)}>
           <Download size={14} /> Relatório (.csv)
         </button>
@@ -146,7 +165,7 @@ export const PainelProblemas: React.FC<{
         <div className="max-h-[320px] overflow-auto border-t border-[var(--color-neutral-300)] px-6">
           <table className="table text-[13px]">
             <thead className="sticky top-0 bg-white">
-              <tr><th>Tipo</th><th>Aba</th><th>Linha</th><th>ID</th><th>Campo</th><th>O que aconteceu</th></tr>
+              <tr><th>Tipo</th><th>Aba</th><th>Linha</th><th>{rotuloId}</th><th>Campo</th><th>O que aconteceu</th></tr>
             </thead>
             <tbody>
               {visiveis.map((p, i) => (
@@ -164,7 +183,7 @@ export const PainelProblemas: React.FC<{
         </div>
       ) : (
         <p className="m-0 border-t border-[var(--color-neutral-300)] px-6 py-4 text-[13px] text-[var(--color-neutral-600)]">
-          {problemas.length === 0 ? 'Nenhum problema encontrado na planilha.' : 'Nada nesta categoria.'}
+          {problemas.length === 0 ? 'Nenhum problema encontrado na planilha.' : aba ? 'Nada nesta categoria nesta aba.' : 'Nada nesta categoria.'}
         </p>
       )}
     </>

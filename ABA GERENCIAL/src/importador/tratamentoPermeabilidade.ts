@@ -69,6 +69,9 @@ export interface Ensaio {
   avisos: string[];
   /** equipamento que gerou o arquivo (o leitor do DCI marca "DCI") */
   equipamento?: "JBV" | "DCI";
+  /** DCI: de onde veio o ΔP ("total", "dp1_dp2" ou "pp_diff") e quais transdutores saturaram */
+  fonte_dp?: "total" | "dp1_dp2" | "pp_diff";
+  saturados?: { canal: string; limite_psi: number; fracao: number }[];
 }
 
 /** Vazão suavizada (mediana móvel): o DCI mede Q com ~1–5 % de ruído em vazões baixas. */

@@ -192,7 +192,8 @@ export interface OpcoesAcidificacao {
   volumePoroso_cm3?: number | null;
   /** volume morto das linhas (Dead volume, ml). Descontado do volume injetado, como no Origin. Padrão 0 (com aviso) */
   volumeMorto_cm3?: number | null;
-  /** de onde vem o volume de ácido: 'vazao' = Q·Δt (como o Origin, padrão) ou 'garrafa' = o que saiu da garrafa */
+  /** de onde vem o volume de ácido, como o laboratório faz no Origin:
+   *  JBV → 'vazao' = Q·(t − t₀);  DCI → 'garrafa' = quanto o volume do ACUMULADOR do ácido caiu desde t₀ */
   fonteVolume?: "vazao" | "garrafa";
   criterio?: CriterioBt;
   /** usar a coluna "Set Point" (ΔP filtrado do JBV) em vez do dPH */
@@ -250,13 +251,16 @@ export function tratarAcidificacao(e: Ensaio, op: OpcoesAcidificacao = {}): Resu
   const phiPct = op.porosidade_pct ?? m.porosidade_pct ?? null;
   const A = D ? (Math.PI * D * D) / 4 : null;
   const phi = phiPct != null ? phiPct / 100 : null;
+  // VP: informado > o do cabeçalho do DCI ("Pore Volume Core B", o mesmo que o laboratório usa) > π·D²/4·L·φ
+  const vpEq = e.leituras.map((l) => l.volume_poroso_eq_cm3).find((x) => x != null && x > 0) ?? null;
+  const vpDim = A && L && phi ? A * L * phi : null;
   let vp: number | null = null, fonte: ResultadoAcidificacao["fonte_volume_poroso"] = null;
   if (op.volumePoroso_cm3) { vp = op.volumePoroso_cm3; fonte = "informado"; }
-  else if (A && L && phi) { vp = A * L * phi; fonte = "dimensoes"; }
-  else {
-    const eq = e.leituras.map((l) => l.volume_poroso_eq_cm3).find((x) => x != null && x > 0);
-    if (eq) { vp = eq; fonte = "equipamento"; }
-  }
+  else if (vpEq && e.equipamento === "DCI") { vp = vpEq; fonte = "equipamento"; }
+  else if (vpDim) { vp = vpDim; fonte = "dimensoes"; }
+  else if (vpEq) { vp = vpEq; fonte = "equipamento"; }
+  if (vp && vpDim && Math.abs(vpDim / vp - 1) > 0.003)
+    avisos.push(`volume poroso: usei ${vp.toFixed(4)} ml (${fonte === "equipamento" ? "cabeçalho do equipamento" : fonte}); pelas dimensões e porosidade informadas daria ${vpDim.toFixed(4)} ml — confira qual o laboratório usa`);
   if (!vp) avisos.push("sem volume poroso: o arquivo não traz comprimento, diâmetro e porosidade — informe-os (ou o VP) para calcular o PVbt");
 
   const vazio: ResultadoAcidificacao = {
@@ -272,7 +276,7 @@ export function tratarAcidificacao(e: Ensaio, op: OpcoesAcidificacao = {}): Resu
   const ls = e.leituras;
   const morto = op.volumeMorto_cm3 ?? 0;
   if (op.volumeMorto_cm3 == null) avisos.push("volume morto (Dead volume) não informado: usei 0 — o PV fica maior que o do Origin; informe o volume morto das linhas");
-  const fonteVol = op.fonteVolume ?? "vazao";
+  const fonteVol = op.fonteVolume ?? (e.equipamento === "DCI" ? "garrafa" : "vazao");
   const serie: PontoAcido[] = [];
   let vol = 0;
   const porGarrafa = fonteVol === "garrafa" && fa.garrafa != null;
@@ -291,11 +295,17 @@ export function tratarAcidificacao(e: Ensaio, op: OpcoesAcidificacao = {}): Resu
   fases.splice(fases.indexOf(fa), 1, faj);
   vazio.fase_acido = faj;
   for (let i = ini; i <= fim; i++) {
-    if (i > ini) vol += porGarrafa ? variacao(ls[i - 1], ls[i], fa.garrafa!) : (fa.q * (ls[i].tempo_s - ls[i - 1].tempo_s)) / 60;
+    if (i > ini) {
+      if (porGarrafa) {
+        // igual ao Origin: volume do acumulador no início − volume agora (sem somar ruído leitura a leitura)
+        const v0 = ls[ini].garrafas?.[fa.garrafa!]?.atual, vi = ls[i].garrafas?.[fa.garrafa!]?.atual;
+        vol = v0 != null && vi != null ? v0 - vi : vol + variacao(ls[i - 1], ls[i], fa.garrafa!);
+      } else vol += (fa.q * (ls[i].tempo_s - ls[i - 1].tempo_s)) / 60;
+    }
     serie.push({ t_s: ls[i].tempo_s, dp: dpDe(ls[i], filtrado), q: ls[i].q, volume_acido_cm3: vol, volume_liquido_cm3: vol - morto, pv: null });
   }
   // arquivo resumido pelo pesquisador (poucas leituras): pela garrafa, o volume total da fase é o que saiu dela
-  if (porGarrafa && fa.origem === "rotulos" && fa.volume_cm3 > 0 && vol > 0) {
+  if (porGarrafa && fa.origem === "rotulos" && fa.n_pontos < 10 && fa.volume_cm3 > 0 && vol > 0) {
     const f = fa.volume_cm3 / vol;
     for (const p of serie) { p.volume_acido_cm3 *= f; p.volume_liquido_cm3 = p.volume_acido_cm3 - morto; }
   }
@@ -421,7 +431,8 @@ export async function gravarAcidificacao(sb: SupabaseClient, g: GravarAcidificac
     dp_inicial_psi: r3(r.dp_inicial_psi), dp_final_psi: r3(r.dp_patamar_psi ?? r.dp_final_psi),
     equipamento_aquisicao: g.equipamento, volume_poroso_usado_cm3: r3(r.volume_poroso_cm3), volume_morto_cm3: r.volume_morto_cm3,
     volume_acido_bt_cm3: r3(r.breakthrough?.volume_acido_cm3 ?? null), criterio_bt: r.breakthrough?.criterio ?? null,
-    pv_acido_injetado: r3(r.pv_acido_injetado), razao_dp_depois_antes: r3(r.razao_dp_depois_antes),
+    pv_acido_injetado: r3(r.pv_acido_injetado), // depois do breakthrough o ΔP do DCI pode ficar negativo (zero do transdutor): a razão sairia negativa e o banco só aceita >= 0
+    razao_dp_depois_antes: r.razao_dp_depois_antes != null && r.razao_dp_depois_antes >= 0 ? r3(r.razao_dp_depois_antes) : null,
     pvbt_equipamento: r.pvbt_equipamento, arquivo_origem: g.arquivo ?? null, responsavel: m.usuario ?? null,
     observacoes: `Tratamento automático (${g.equipamento}): fases ${r.fases.map((f) => f.rotulo).join(" → ")}.`,
   }).select("id").single();

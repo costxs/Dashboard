@@ -1,6 +1,7 @@
 import React from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Building2, Database, Tags, Users } from 'lucide-react'
+import { Building2, Database, ListChecks, Tags, Users } from 'lucide-react'
+import { ListasReatividadePage } from './ListasReatividadePage'
 import { CabecalhoPagina } from '../components/UI'
 import { useAuth } from '../context/AuthContext'
 import { CatalogosPage } from './CatalogosPage'
@@ -12,6 +13,7 @@ import { PrefixosCodigoPage } from './PrefixosCodigoPage'
 //   Empresas & Projetos e Acessos -> só administrador (regra do banco: empresas, projetos e membros).
 //   Catálogos & Ácidos            -> qualquer editor (regra do banco: litologias e sistemas ácidos).
 //   Prefixos de código            -> qualquer editor (regra do banco: prefixos_codigo).
+//   Listas da reatividade         -> qualquer editor (regra do banco: lit_listas).
 // Quem é editor sem ser administrador vê apenas as abas de catálogos e de prefixos.
 export const AdministracaoPage: React.FC = () => {
   const { isAdmin } = useAuth()
@@ -24,6 +26,7 @@ export const AdministracaoPage: React.FC = () => {
     ] : []),
     { chave: 'catalogos', rotulo: 'Catálogos & Ácidos', icone: Database },
     { chave: 'prefixos', rotulo: 'Prefixos de código', icone: Tags },
+    { chave: 'listas', rotulo: 'Listas da reatividade', icone: ListChecks },
   ]
   const pedida = params.get('aba')
   const aba = abas.some((a) => a.chave === pedida) ? pedida : abas[0].chave
@@ -53,6 +56,7 @@ export const AdministracaoPage: React.FC = () => {
       {aba === 'acessos' && <div className="space-y-6"><AcessosPage /><EmpresasProjetosPage embutida secao="acessos" /></div>}
       {aba === 'catalogos' && <CatalogosPage embutida />}
       {aba === 'prefixos' && <PrefixosCodigoPage />}
+      {aba === 'listas' && <ListasReatividadePage />}
     </div>
   )
 }

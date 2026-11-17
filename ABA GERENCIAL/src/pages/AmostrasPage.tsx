@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Layers, Plus, Search, Trash2, Edit3, ArrowRight, Disc, LayoutList, List, RotateCcw } from 'lucide-react'
@@ -5,7 +6,7 @@ import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge, CabecalhoPa
 import { useAuth } from '../context/AuthContext'
 import { usePapeis } from '../hooks/usePapel'
 import {
-  listarAmostras, buscarAmostraPorId, buscarAmostraPorCodigo, moverAmostraParaProjeto, salvarAmostra, excluirAmostra,
+  listarAmostras, buscarAmostraPorId, buscarAmostraPorCodigo, salvarAmostra, excluirAmostra,
   listarProjetos, listarLitologias, criarLitologia, type AmostraResumo
 } from '../servicos/api'
 import { useContexto } from '../store/useContexto'
@@ -165,9 +166,17 @@ export const AmostrasPage: React.FC = () => {
       return
     }
 
+    // testemunho sem poço: o banco recusa (regra testemunho_tem_poco); avisa antes de tentar gravar
+    if (formAmostra.tipo_origem === 'testemunho' && !formAmostra.poco?.trim()) {
+      setFeedback({ tipo: 'erro', msg: 'Informe o poço: é obrigatório para amostra de testemunho de sondagem.' })
+      setSalvando(false)
+      return
+    }
+
     try {
       const nova = !formAmostra.id
       const dados: Partial<Amostra> = { ...formAmostra }
+      if (dados.tipo_origem === 'testemunho') dados.poco = dados.poco?.trim() || null
       for (const [campo, rotulo] of CAMPOS_NUMERICOS) {
         const n = paraNumero(numeros[campo] ?? '')
         if (Number.isNaN(n)) throw new Error(`Campo "${rotulo}": "${numeros[campo]}" não é um número. Use vírgula ou ponto decimal, ex.: 3,81.`)
@@ -190,23 +199,10 @@ export const AmostrasPage: React.FC = () => {
       }
       const utilizada = dados.status === 'utilizada' && ensaiosUsados.length > 0
       if (utilizada) dados.finalidade = finalidadeDosEnsaios(ensaiosUsados)
-      // código que já existe em outro projeto/empresa: oferece trazer a amostra para este projeto
-      if (nova && dados.codigo?.trim() && dados.projeto_id) {
+      // código que já existe (mesmo em outro projeto/empresa): sobrescreve a amostra existente, trazendo-a para este projeto
+      if (nova && dados.codigo?.trim()) {
         const existente = await buscarAmostraPorCodigo(dados.codigo)
-        if (existente) {
-          if (existente.projeto_id === dados.projeto_id) throw new Error(`A amostra ${existente.codigo} já está cadastrada neste projeto.`)
-          const destino = projetos.find((p) => p.id === dados.projeto_id)
-          const onde = `${existente.empresa ?? '?'} · ${existente.projeto ?? '?'}`
-          if (!confirm(`A amostra ${existente.codigo} já está cadastrada em ${onde}.\n\nDeseja trazer essa amostra para este projeto${destino ? ` (${destino.codigo})` : ''}? `
-            + 'Ela sai do projeto atual e leva junto todos os ensaios.')) {
-            setFeedback({ tipo: 'erro', msg: `O código ${existente.codigo} já existe em ${onde}. Use outro código ou traga a amostra para este projeto.` })
-            return
-          }
-          const movida = await moverAmostraParaProjeto(existente.id, dados.projeto_id, existente.codigo)
-          setModalAmostra(false)
-          navigate(`/amostras/${movida.id}`)
-          return
-        }
+        if (existente) dados.id = existente.id
       }
       const gravada = await salvarAmostra(dados)
       setModalAmostra(false)
@@ -226,7 +222,7 @@ export const AmostrasPage: React.FC = () => {
   }
 
   async function handleExcluir(id: string, codigo: string) {
-    if (!confirm(`Deseja realmente excluir a amostra ${codigo} e todos os seus ensaios vinculados?`)) return
+    if (!(await confirmar(`Deseja realmente excluir a amostra ${codigo} e todos os seus ensaios vinculados?`))) return
     try {
       await excluirAmostra(id)
       setFeedback({ tipo: 'sucesso', msg: `Amostra ${codigo} excluída.` })
@@ -589,6 +585,67 @@ export const AmostrasPage: React.FC = () => {
                 Testemunho de Sondagem
               </button>
             </div>
+
+            {/* dados da origem: testemunho vem de um poço (obrigatório no banco); afloramento, de um local/fornecedor */}
+            {formAmostra.tipo_origem === 'testemunho' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Poço"
+                  obrigatorio
+                  required
+                  placeholder="Ex.: 7-ABC-12-RJS"
+                  value={formAmostra.poco || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, poco: e.target.value })}
+                  ajuda="Obrigatório para testemunho de sondagem."
+                />
+                <Input
+                  label="Campo"
+                  placeholder="Ex.: Búzios"
+                  value={formAmostra.campo || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, campo: e.target.value })}
+                />
+                <Input
+                  label="Bacia"
+                  placeholder="Ex.: Santos"
+                  value={formAmostra.bacia || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, bacia: e.target.value })}
+                />
+                <Input
+                  label="Reservatório"
+                  placeholder="Ex.: Pré-sal / Barra Velha"
+                  value={formAmostra.reservatorio || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, reservatorio: e.target.value })}
+                />
+                <Input
+                  label="Profundidade (m)"
+                  inputMode="decimal"
+                  placeholder="5320,5"
+                  value={numeros.profundidade_m ?? ''}
+                  onChange={(e) => setNumeros({ ...numeros, profundidade_m: e.target.value })}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Input
+                  label="Local do afloramento"
+                  placeholder="Ex.: Bedford, Indiana (EUA)"
+                  value={formAmostra.afloramento_local || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, afloramento_local: e.target.value })}
+                />
+                <Input
+                  label="Fornecedor"
+                  placeholder="Ex.: Kocurek Industries"
+                  value={formAmostra.fornecedor || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, fornecedor: e.target.value })}
+                />
+                <Input
+                  label="Bloco"
+                  placeholder="Ex.: B-03"
+                  value={formAmostra.bloco || ''}
+                  onChange={(e) => setFormAmostra({ ...formAmostra, bloco: e.target.value })}
+                />
+              </div>
+            )}
           </div>
 
           {/* Dimensões Físicas */}

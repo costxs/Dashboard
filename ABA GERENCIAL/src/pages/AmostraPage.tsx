@@ -5,14 +5,22 @@ import {
   type LucideIcon, Microscope, RotateCw, Scan, ScanEye,
 } from 'lucide-react'
 import { AbaAnalise } from '../components/analises/AbaAnalise'
-import { Conferencias } from '../components/amostra/Conferencias'
-import { Alert, Card } from '../components/UI'
-import { Simbolos } from '../components/Simbolos'
+import { ImagensMicroct } from '../components/analises/ImagensMicroct'
+import { SeriesRdaLaboratorio } from '../components/analises/SeriesRdaLaboratorio'
+import { AbaAnalise as AbaAnaliseVisual } from '../visualizacao/components/analises/AbaAnalise'
+import { PermeabilidadeCoreflood } from '../visualizacao/components/analises/PermeabilidadeCoreflood'
+import { RdaDaAmostra } from '../visualizacao/components/analises/RdaDaAmostra'
+import { PvbtDaAmostra } from '../visualizacao/components/pvbt/PvbtDaAmostra'
+import { OverviewTab } from '../visualizacao/pages/sample-tabs/VisaoGeralTab'
+import { ANALISES } from '../visualizacao/config/analises'
+import type { AmostraResumo as AmostraResumoDash } from '../visualizacao/tipos/banco'
+import { Alert } from '../components/UI'
 import { LISTA_ANALISES } from '../config/analises'
 import { usePodeEditar } from '../hooks/usePapel'
 import { obterAmostraResumo, obterControleDaAmostra, type AmostraResumo, type ControleDaAmostra } from '../servicos/api'
 import { rotuloFinalidade } from '../utils/controleRochas'
-import { fmt, fmtFaixaMd } from '../utils/formatacao'
+import { ensaiosDaFinalidade } from '../utils/finalidade'
+import { fmt } from '../utils/formatacao'
 import { classeStatus, rotuloStatus } from '../utils/status'
 
 // Ficha da amostra: Visão geral + as 8 análises em abas, na ordem
@@ -36,13 +44,6 @@ const CONTADOR: Record<string, string> = {
   rda: 'n_rda', drx: 'n_drx', petrografia: 'n_petrografia', mev: 'n_mev',
 }
 
-const Valor: React.FC<{ rotulo: string; children: React.ReactNode; destaque?: boolean }> = ({ rotulo, children, destaque }) => (
-  <div className="field">
-    <span className="rotulo"><Simbolos>{rotulo}</Simbolos></span>
-    <div className={destaque ? 'numero text-[16px]' : 'text-[14px] font-medium tabular-nums'}>{children}</div>
-  </div>
-)
-
 export const AmostraPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -54,6 +55,8 @@ export const AmostraPage: React.FC = () => {
   const [controle, setControle] = useState<ControleDaAmostra | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  // uma série RDA gravada recarrega a lista de ensaios logo abaixo
+  const [versaoRda, setVersaoRda] = useState(0)
 
   async function carregar() {
     try {
@@ -99,16 +102,21 @@ export const AmostraPage: React.FC = () => {
   }
 
   const a = amostra
+  // como no dashboard: só aparecem as abas dos ensaios realizados nesta amostra (os marcados no cadastro e os que já têm registro)
+  const todas = LISTA_ANALISES.map((cfg) => ({
+    chave: cfg.chave,
+    rotulo: `${cfg.numero}. ${cfg.titulo}`,
+    icone: ICONES[cfg.chave],
+    n: Number(a[CONTADOR[cfg.chave]] ?? 0),
+  }))
+  const marcados = ensaiosDaFinalidade(a.finalidade)
   const abas: { chave: string; rotulo: string; icone: LucideIcon; n?: number }[] = [
     { chave: 'geral', rotulo: 'Visão geral', icone: ClipboardList },
-    ...LISTA_ANALISES.map((cfg) => ({
-      chave: cfg.chave,
-      rotulo: `${cfg.numero}. ${cfg.titulo}`,
-      icone: ICONES[cfg.chave],
-      n: Number(a[CONTADOR[cfg.chave]] ?? 0),
-    })),
+    ...todas.filter((t) => t.n > 0 || marcados.includes(t.chave)),
   ]
-  const cfgAtiva = LISTA_ANALISES.find((c) => c.chave === aba)
+  const cfgAtiva = abas.some((t) => t.chave === aba) ? LISTA_ANALISES.find((c) => c.chave === aba) : undefined
+  const cfgVisual = ANALISES.find((c) => c.chave === aba)
+  const semEnsaio = marcados.length === 0 && todas.every((t) => t.n === 0)
 
   const origem = a.tipo_origem === 'testemunho'
     ? [a.poco && `Poço ${a.poco}`, a.campo, a.bacia, a.profundidade_m != null && `${fmt(a.profundidade_m, 1)} m`]
@@ -165,44 +173,53 @@ export const AmostraPage: React.FC = () => {
       </div>
 
       <div className="px-7 pt-7 space-y-6">
+        {aba === 'geral' && a.status === 'utilizada' && semEnsaio && (
+          <Alert tipo="info" mensagem="Esta amostra está como utilizada, mas não tem nenhum ensaio registrado." />
+        )}
         {aba === 'geral' && (
-          <>
-            <Card titulo="Dados da amostra" subtitulo="Geometria e resumo das análises mais recentes">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5">
-                <Valor rotulo="Diâmetro (cm)">{fmt(a.diametro_cm, 3)}</Valor>
-                <Valor rotulo="Comprimento (cm)">{fmt(a.comprimento_cm, 3)}</Valor>
-                <Valor rotulo="Massa seca (g)">{fmt(a.massa_seca_g, 2)}</Valor>
-                <Valor rotulo="k do fabricante">{fmtFaixaMd(a.permeabilidade_fabricante_min_md, a.permeabilidade_fabricante_max_md, a.permeabilidade_fabricante_md)}</Valor>
-                <Valor rotulo="φ (%)" destaque>{fmt(a.porosidade_pct, 2)}</Valor>
-                <Valor rotulo="k gás (mD)" destaque>{fmt(a.k_gas_md, 2)}</Valor>
-                <Valor rotulo="k líquido antes (mD)" destaque>{fmt(a.k_liquido_md, 2)}</Valor>
-                <Valor rotulo="k líquido depois (mD)" destaque>{fmt(a.k_liquido_depois_md, 2)}</Valor>
-                <Valor rotulo="Volume poroso (cm³)">{fmt(a.volume_poroso_cm3, 3)}</Valor>
-                <Valor rotulo="PVbt" destaque>{fmt(a.pvbt, 2)}</Valor>
-                <Valor rotulo="Breakthrough">{fmt(a.breakthrough)}</Valor>
-                <Valor rotulo="Finalidade">{rotuloFinalidade(a.finalidade) ?? '—'}</Valor>
-              </div>
-            </Card>
-            {controle?.observacoes && (
-              <Card titulo="Observações do controle" subtitulo="Texto das observações da amostra (vem da planilha de controle de rochas ou do cadastro)">
-                <p className="m-0 whitespace-pre-line text-[14px] text-[var(--color-neutral-800)]">{controle.observacoes}</p>
-              </Card>
-            )}
-            <Conferencias amostraId={a.id} podeEditar={podeEditar} />
-          </>
+          <OverviewTab a={a as unknown as AmostraResumoDash} podeEditar={podeEditar} observacoes={controle?.observacoes ?? null} />
         )}
 
-        {cfgAtiva && (
-          <AbaAnalise
-            key={cfgAtiva.chave}
-            cfg={cfgAtiva}
+        {cfgAtiva && cfgVisual && (
+          <AbaAnaliseVisual
+            key={`v-${cfgVisual.chave}`}
+            cfg={cfgVisual}
             amostraId={a.id}
-            codigoAmostra={a.codigo}
-            podeEditar={podeEditar}
+            podeEditar={false}
             aoMudar={carregar}
-            amostra={{ finalidade: a.finalidade, status: a.status }}
+            amostra={{ finalidade: a.finalidade, status: a.status, codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }}
             controle={controle}
+            antes={cfgVisual.chave === 'coreflooding'
+              ? <PermeabilidadeCoreflood amostraId={a.id} amostra={{ codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} />
+              : undefined}
+            extra={cfgVisual.chave === 'coreflooding' ? <PvbtDaAmostra amostraId={a.id} codigo={a.codigo} />
+              : cfgVisual.chave === 'rda' ? <RdaDaAmostra codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} /> : undefined}
           />
+        )}
+
+        {cfgAtiva?.chave === 'microct' && (
+          <ImagensMicroct amostraId={a.id} codigo={a.codigo} podeEditar={podeEditar} />
+        )}
+
+        {cfgAtiva?.chave === 'rda' && (
+          <SeriesRdaLaboratorio amostraId={a.id} codigo={a.codigo} projetoId={a.projeto_id} podeEditar={podeEditar}
+            aoMudar={() => { setVersaoRda((v) => v + 1); void carregar() }} />
+        )}
+
+        {cfgAtiva && podeEditar && (
+          <div className="border-t-2 border-[var(--color-neutral-300)] pt-6">
+            <h2 className="m-0 mb-4 text-[16px] font-heading font-bold text-[var(--color-blue-800)]">Lançar e editar ensaios</h2>
+            <AbaAnalise
+              key={`${cfgAtiva.chave}-${cfgAtiva.chave === 'rda' ? versaoRda : 0}`}
+              cfg={cfgAtiva}
+              amostraId={a.id}
+              codigoAmostra={a.codigo}
+              podeEditar={podeEditar}
+              aoMudar={carregar}
+              amostra={{ finalidade: a.finalidade, status: a.status }}
+              controle={controle}
+            />
+          </div>
         )}
       </div>
     </div>

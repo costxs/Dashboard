@@ -32,8 +32,8 @@ export const TratamentoCorefloodPage: React.FC = () => {
   const pedida = params.get('aba')
   const aba = ABAS.some((a) => a.chave === pedida) ? pedida : ABAS[0].chave
   const [equipamento, setEquipamento] = useState<Equipamento>(equipamentoSalvo)
-  // só DCI: de onde vem o ΔP (a soma dos três transdutores ou só os dois primeiros)
-  const [dpDCI, setDpDCI] = useState<FonteDpDCI>('total')
+  // só DCI: de onde vem o ΔP (automático troca para a diferença entrada − saída quando um transdutor satura)
+  const [dpDCI, setDpDCI] = useState<FonteDpDCI>('auto')
 
   function escolherEquipamento(e: Equipamento) {
     setEquipamento(e)
@@ -59,8 +59,10 @@ export const TratamentoCorefloodPage: React.FC = () => {
                 <span className="rotulo">ΔP usado</span>
                 <select className="input !w-auto" value={dpDCI} onChange={(e) => setDpDCI(e.target.value as FonteDpDCI)}
                   title="Vale para o próximo arquivo enviado: para trocar depois, envie o arquivo de novo">
-                  <option value="total">Total (DP1 + DP2 + DP3)</option>
+                  <option value="auto">Automático (recomendado)</option>
+                  <option value="total">DPBtot (DP1 + DP2 + DP3)</option>
                   <option value="dp1_dp2">DP1 + DP2</option>
+                  <option value="pp_diff">DPB Diff. (entrada − saída)</option>
                 </select>
               </label>
             )}

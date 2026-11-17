@@ -12,8 +12,9 @@ const TIPOS: { tipo: TipoImportacao; icone: React.ReactNode; descricao: string; 
   {
     tipo: 'reatividade',
     icone: <BookOpen size={18} />,
-    descricao: 'BDD_LCPETRO_Reatividade: referências, rochas, sistemas ácidos e medidas de taxa da literatura.',
-    subtitulo: 'Planilha BDD_LCPETRO_Reatividade (.xlsx). O app lê todas as abas, confere os dados e mostra uma prévia. Nada é gravado até você confirmar.',
+    descricao: 'BDD_LCPETRO_Reatividade: medidas de taxa da literatura (referências e rochas dos artigos) e o catálogo de sistemas ácidos e fluidos, que vale também para os ensaios do LC PETRO.',
+    subtitulo: 'Planilha BDD_LCPETRO_Reatividade (.xlsx). O app lê todas as abas, confere os dados e mostra uma prévia. Nada é gravado até você confirmar. '
+      + 'Os ensaios de RDA do próprio laboratório não vêm desta planilha: são lançados na ficha da amostra › 5. RDA.',
   },
   {
     tipo: 'amostras',

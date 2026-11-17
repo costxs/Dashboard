@@ -1,5 +1,6 @@
 // Cadastro dos dados de PVbt da literatura no padrão da planilha (amostras, ensaios, referências):
 // criar, editar e excluir (um a um ou vários marcados). Só para editores.
+import { confirmar } from '../components/Confirmar'
 import { useMemo, useState } from 'react'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Alert, Button, Input, Modal, Select } from '../components/UI'
@@ -106,7 +107,7 @@ function TabelaGenerica(p: {
 
   async function excluir(ids: string[]) {
     const nome = ids.length === 1 ? ids[0] : `${ids.length} registros`
-    if (!confirm(`Excluir ${nome}? Isso não pode ser desfeito.`)) return
+    if (!(await confirmar(`Excluir ${nome}? Isso não pode ser desfeito.`))) return
     try {
       await p.aoExcluir(ids)
       limpar()

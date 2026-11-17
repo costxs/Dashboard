@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { ListChecks, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Alert, Button, CabecalhoPagina, Card, Input, Modal, Select, Vazio } from '../components/UI'
@@ -115,7 +116,7 @@ export const WorkPackagesPage: React.FC = () => {
   }
 
   async function handleApagar(wp: WorkPackage) {
-    if (!confirm(`Apagar o work package ${wp.codigo} — ${wp.nome}?`)) return
+    if (!(await confirmar(`Apagar o work package ${wp.codigo} — ${wp.nome}?`))) return
     try {
       await apagarWorkPackage(wp.id)
       setFeedback({ tipo: 'sucesso', msg: `Work package ${wp.codigo} apagado.` })

@@ -346,15 +346,6 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
 
   async function gravar() {
     if (!ensaio || !resultado || !amostra || !fa) return
-    const confirmacao = [
-      `Gravar a acidificação na amostra ${amostra.codigo}?`,
-      outraAmostra && `• ATENÇÃO: o arquivo é da amostra ${codigoArquivo}, não de ${amostra.codigo}.`,
-      `• Coreflooding com ácido na fase "${fa.rotulo}", Q = ${fmt(resultado.q_ml_min, 2)} cm³/min, `
-        + (bt ? `PVbt = ${fmt(bt.pvbt, 3)}.` : 'sem breakthrough.'),
-      `• ${fases.length} fase(s) (${fases.map((f) => f.rotulo).join(' → ')}) e as curvas ΔP × tempo e ΔP × PV injetado.`,
-      'Nada é apagado: se este ensaio já foi gravado antes, ficará em duplicidade.',
-    ].filter(Boolean).join('\n')
-    if (!confirm(confirmacao)) return
     setErroGravar(null)
     setGravando(true)
     try {
@@ -397,18 +388,21 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
       volume_morto_cm3: morto, temperatura_rotulo: temperaturaRotulo.trim() || null,
       aba: ensaio.aba,
       equipamento: ensaio.equipamento,
-      leituras: ensaio.leituras.map((l) => [l.tempo_s, l.q, usarFiltrado ? (l.dp_filtrado ?? l.dp) : l.dp]),
+      // no DCI o serviço lê o arquivo: o volume injetado vem da queda do acumulador, que não está nas leituras
+      leituras: ensaio.equipamento === 'DCI' ? undefined : ensaio.leituras.map((l) => [l.tempo_s, l.q, usarFiltrado ? (l.dp_filtrado ?? l.dp) : l.dp]),
+      volume_poroso_cm3: resultado?.volume_poroso_cm3 ?? null,
       houve_breakthrough: resultado?.houve_breakthrough ?? null,
       dp_dci: dpDCI,
       // gráficos da planilha sem a marcação do PVbt
       config: { mostrar_pvbt: false },
       fases: fases.map((f) => ({
         ordem: f.ordem, papel: papelDe(f.ordem), q: f.q, t_inicio: f.t_inicio_s, t_fim: f.t_fim_s, fluido: fluidoDe(f.ordem).trim() || null,
+        garrafa: f.garrafa,
       })),
     }
     // fluidoDe lê "fluidos" e "fases"
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, dpDCI, usarFiltrado])
+  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, resultado?.volume_poroso_cm3, dpDCI, usarFiltrado])
 
   async function baixarPlanilhaOrigin() {
     if (!arquivoOriginal || !pedidoOrigin) return
@@ -561,6 +555,9 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
               </div>
               <p className="m-0 text-[13px]">
                 Volume poroso usado: <strong className="tabular-nums">{fmt(resultado.volume_poroso_cm3, 3)} cm³</strong>
+                {resultado.fonte_volume_poroso && (
+                  <span className="text-[var(--color-neutral-600)]"> · {{ equipamento: 'do cabeçalho do equipamento', dimensoes: 'das dimensões e da porosidade', informado: 'informado' }[resultado.fonte_volume_poroso]}</span>
+                )}
                 {doCadastro.length > 0 && <span className="text-[var(--color-neutral-600)]"> · {doCadastro.join(', ')} do cadastro da amostra</span>}
               </p>
               {morto == null ? (
@@ -711,7 +708,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
                     ))}
                     <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tick={eixo} tickLine={false}
                       axisLine={{ stroke: 'var(--color-neutral-300)' }} tickFormatter={(v) => fmt(v / un.div, un.div > 1 ? 2 : 0)} />
-                    <YAxis width={56} domain={[0, 'auto']} tick={eixo} tickLine={false} axisLine={{ stroke: 'var(--color-neutral-300)' }}
+                    <YAxis width={56} domain={[(min: number) => Math.min(0, Math.floor(min * 1.1)), 'auto']} tick={eixo} tickLine={false} axisLine={{ stroke: 'var(--color-neutral-300)' }}
                       tickFormatter={(v) => fmt(v, 2)}
                       label={{ value: 'ΔP (psi)', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--grafico-texto)', fontWeight: 600, style: { textAnchor: 'middle' } }} />
                     <Tooltip contentStyle={estiloDica} labelStyle={{ fontWeight: 800, marginBottom: 4 }}
@@ -747,7 +744,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
                         {/* PV = (volume injetado − volume morto) ÷ VP: começa negativo e cruza o zero quando o ácido chega na rocha */}
                         <XAxis dataKey="pv" type="number" domain={['dataMin', 'dataMax']} tick={eixo} tickLine={false}
                           axisLine={{ stroke: 'var(--color-neutral-300)' }} tickFormatter={(v) => fmt(v, 2)} />
-                        <YAxis width={56} domain={[0, 'auto']} tick={eixo} tickLine={false} axisLine={{ stroke: 'var(--color-neutral-300)' }}
+                        <YAxis width={56} domain={[(min: number) => Math.min(0, Math.floor(min * 1.1)), 'auto']} tick={eixo} tickLine={false} axisLine={{ stroke: 'var(--color-neutral-300)' }}
                           tickFormatter={(v) => fmt(v, 2)}
                           label={{ value: 'ΔP (psi)', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--grafico-texto)', fontWeight: 600, style: { textAnchor: 'middle' } }} />
                         <Tooltip contentStyle={estiloDica} labelStyle={{ fontWeight: 800, marginBottom: 4 }}

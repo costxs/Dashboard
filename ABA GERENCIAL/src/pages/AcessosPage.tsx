@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Check, Inbox, ShieldCheck, UserPlus, X } from 'lucide-react'
 import { Alert, Badge, Button, Card, Input, Modal, Select } from '../components/UI'
@@ -56,7 +57,7 @@ export const AcessosPage: React.FC = () => {
   }
 
   async function recusar(p: Perfil) {
-    if (!confirm(`Recusar o acesso de ${p.nome || p.email}? A conta continua existindo, mas não vê nada.`)) return
+    if (!(await confirmar(`Recusar o acesso de ${p.nome || p.email}? A conta continua existindo, mas não vê nada.`))) return
     try {
       await decidirAcesso({ usuarioId: p.id, aprovar: false })
       setAviso(`Acesso de ${p.email} recusado.`)

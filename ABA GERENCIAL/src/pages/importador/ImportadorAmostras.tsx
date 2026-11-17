@@ -1,3 +1,4 @@
+import { URL_DASHBOARD } from '../../config/urls'
 import React, { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Columns3, ExternalLink, FileSpreadsheet, FlaskConical, Loader2, RotateCcw, Search } from 'lucide-react'
 import { Alert, Card, Input, Select } from '../../components/UI'
@@ -7,6 +8,7 @@ import {
   analisarAmostras, conferirNoBanco, DESTINOS, encontrarBlocos, gravarAmostras,
   type AmostraImportada, type AnaliseAmostras, type BlocoAmostras, type Destino, type ResultadoAmostras, type TipoBloco,
 } from '../../importador/planilhaAmostras'
+import { gravarRdaDosDiscos, planejarRdaDosDiscos, type OpcoesRda, type ResultadoRda } from '../../importador/rdaDosDiscos'
 import { supabase } from '../../lib/supabase'
 import { listarLitologias, listarProjetos } from '../../servicos/api'
 import { useContexto } from '../../store/useContexto'
@@ -22,11 +24,11 @@ import {
 // 1) projeto de destino e arquivo  2) tipo de cada aba e mapeamento das colunas (já sugeridos; a pessoa confere)
 // 3) prévia com erros e avisos  4) só grava quando a pessoa confirma.
 // As regras estão em src/importador/planilhaAmostras.ts (cópia de docs/referencia/importador).
-const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
 const ROTULO_TIPO_BLOCO: Record<TipoBloco, string> = { coreflooding: 'Coreflooding (plugs)', rda: 'RDA (discos)' }
 const TEM_DATA = /\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}/
 
 type Etapa = 'escolher' | 'lendo' | 'mapear' | 'analisando' | 'previa' | 'gravando' | 'concluido'
+type Porcentagem = NonNullable<OpcoesRda['porcentagem']>
 
 const letraColuna = (i: number): string => (i >= 26 ? letraColuna(Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + (i % 26))
 
@@ -61,6 +63,18 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
   const [progresso, setProgresso] = useState<Record<string, [number, number]>>({})
   const [resultado, setResultado] = useState<ResultadoAmostras | null>(null)
   const [outroTipo, setOutroTipo] = useState<OutroTipo | null>(null)
+  // ensaios RDA dos discos (coluna Utilização) — rdaDosDiscos.ts
+  const [sistemasBanco, setSistemasBanco] = useState<Record<string, unknown>[]>([])
+  const [porcentagem, setPorcentagem] = useState<Porcentagem>('wt%')
+  const [criarRda, setCriarRda] = useState(true)
+  const [filtroRda, setFiltroRda] = useState<Filtro>('TODOS')
+  const [resultadoRda, setResultadoRda] = useState<ResultadoRda | null>(null)
+  const plano = useMemo(
+    () => (analise?.sugestoesRda.length ? planejarRdaDosDiscos(analise.sugestoesRda, sistemasBanco, { porcentagem }) : null),
+    [analise, sistemasBanco, porcentagem])
+  const problemasRda = useMemo(() => (plano?.problemas ?? []).map((p) => ({
+    severidade: p.severidade, aba: 'Utilização', linha: p.linha, id: p.codigo, campo: p.campo, mensagem: p.mensagem,
+  })), [plano])
 
   // projetos de destino: só os que o usuário pode editar
   useEffect(() => {
@@ -85,6 +99,7 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
   function invalidar() {
     setAnalise(null)
     setResultado(null)
+    setResultadoRda(null)
     setProgresso({})
     setErro(null)
     setPularErros(false)
@@ -97,6 +112,7 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
     setOutroTipo(null)
     setAnalise(null)
     setResultado(null)
+    setResultadoRda(null)
     setProgresso({})
     if (!/\.xlsx?$/i.test(arquivo.name)) {
       setErro(`"${arquivo.name}" não é uma planilha do Excel. Escolha a planilha de controle de amostras no formato .xlsx.`)
@@ -148,7 +164,12 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
     setErro(null)
     setEtapa('analisando')
     try {
-      const litologias = await listarLitologias()
+      const [litologias, sis] = await Promise.all([
+        listarLitologias(),
+        supabase.from('sistemas_acidos').select('id_sistema, componente_1, valor_1, unidade_1, componente_2, valor_2, unidade_2, componente_3, valor_3, unidade_3, componente_4, valor_4, unidade_4'),
+      ])
+      if (sis.error) throw new Error(sis.error.message)
+      setSistemasBanco(sis.data ?? [])
       const a = await conferirNoBanco(supabase, analisarAmostras(blocos, {
         projetoId, tipoOrigem,
         litologiasExistentes: litologias.map((l) => l.nome),
@@ -176,6 +197,17 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
         pularErros,
         aoProgresso: (tabela, feitas, total) => setProgresso((p) => ({ ...p, [tabela]: [feitas, total] })),
       })
+      // ensaios RDA dos discos: depois das amostras (precisam do disco já no banco)
+      if (criarRda && plano?.ensaios.length) {
+        try {
+          setResultadoRda(await gravarRdaDosDiscos(supabase, plano))
+        } catch (e) {
+          // fica na prévia para gravar de novo: as amostras só são atualizadas, e os ensaios não duplicam
+          setErro(`As amostras foram gravadas, mas os ensaios RDA dos discos não: ${mensagemErro(e)}. Clique em "Gravar no banco" de novo (as amostras são só atualizadas).`)
+          setEtapa('previa')
+          return
+        }
+      }
       setResultado(r)
       setEtapa('concluido')
     } catch (e) {
@@ -420,34 +452,72 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
             )}
           </Card>
 
-          {/* sugestões de ensaio RDA: só informação */}
-          {analise.sugestoesRda.length > 0 && (
-            <Card titulo="Sugestões de ensaio RDA" icone={<FlaskConical size={18} />}
-              subtitulo="O que o app entendeu do texto de Utilização. É só informação: nenhuma análise de RDA é criada; o texto vai para as observações da amostra.">
-              <div className="overflow-x-auto -my-4">
+          {/* ensaios RDA dos discos: a "Utilização" de cada disco vira um ensaio RDA ligado à amostra */}
+          {analise.sugestoesRda.length > 0 && plano && (
+            <div className="cartao">
+              <div className="cartao-topo">
+                <div className="flex items-center gap-3">
+                  <span className="text-[var(--color-blue)]"><FlaskConical size={18} /></span>
+                  <div>
+                    <h2>Ensaios RDA dos discos</h2>
+                    <p>A coluna Utilização de cada disco vira um ensaio RDA na ficha da amostra (sistema, temperatura e rotação; taxa “aguardando resultado”).</p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-neutral-700)]">
+                  ‘%’ na Utilização significa
+                  <select className="input !w-auto !py-1.5" value={porcentagem} disabled={etapa === 'gravando' || etapa === 'concluido'}
+                    onChange={(e) => setPorcentagem(e.target.value as Porcentagem)}>
+                    <option value="wt%">wt% (massa)</option>
+                    <option value="vol%">vol% (volume)</option>
+                    <option value="%">deixar %</option>
+                  </select>
+                </label>
+              </div>
+              <div className="max-h-[360px] overflow-auto px-6">
                 <table className="table text-[12px]">
-                  <thead>
+                  <thead className="sticky top-0 bg-white">
                     <tr>
-                      <th>Código</th><th>Texto da planilha</th><th>Ensaio</th><th>Ácido</th>
-                      <th className="text-right">Concentração</th><th className="text-right">T (°C)</th><th className="text-right">rpm</th>
+                      <th>Disco</th><th>Texto da Utilização</th><th>Sistema ácido</th>
+                      <th className="text-right">T (°C)</th><th className="text-right">rpm</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {analise.sugestoesRda.map((s) => (
-                      <tr key={`${s._aba}:${s._linha}`} className="lcp-row">
-                        <td className="!py-2"><span className="codigo">{s.codigo}</span></td>
-                        <td className="!py-2">{s.texto}</td>
-                        <td className="!py-2">{s.ensaio ?? '—'}</td>
-                        <td className="!py-2">{s.acido ?? '—'}</td>
-                        <td className="!py-2 text-right tabular-nums">{s.concentracao != null ? `${fmt(s.concentracao, 3)} ${s.unidade ?? ''}` : '—'}</td>
-                        <td className="!py-2 text-right tabular-nums">{fmt(s.temperatura_c, 1)}</td>
-                        <td className="!py-2 text-right tabular-nums">{fmt(s.rotacao_rpm, 0)}</td>
-                      </tr>
-                    ))}
+                    {plano.ensaios.map((e) => {
+                      const novo = e.id_sistema ? null : plano.sistemasNovos.find((s) => s.assinatura === e.assinatura)
+                      return (
+                        <tr key={`${e.codigo}:${e.linha}`} className="lcp-row">
+                          <td className="!py-2"><span className="codigo">{e.codigo}</span></td>
+                          <td className="!py-2">{e.texto_utilizacao}</td>
+                          <td className="!py-2">{e.id_sistema
+                            ? <span className="tag tag-orange">{e.id_sistema}</span>
+                            : <span className="tag tag-blue">novo: {novo?.nome_sistema ?? '?'}</span>}</td>
+                          <td className="!py-2 text-right tabular-nums">{fmt(e.temperatura_c, 1)}</td>
+                          <td className="!py-2 text-right tabular-nums">{fmt(e.rotacao_rpm, 0)}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
+                {plano.ensaios.length === 0 && <p className="m-0 py-4 text-[13px] text-[var(--color-neutral-600)]">Nenhuma Utilização com ácido reconhecido.</p>}
               </div>
-            </Card>
+              {plano.problemas.length > 0 && (
+                <div className="mt-4 border-t border-[var(--color-neutral-300)]">
+                  <PainelProblemas problemas={problemasRda} filtro={filtroRda} aoFiltrar={setFiltroRda} rotuloId="Disco" nomeArquivo={`${nomeArquivo}_rda`}
+                    erros={problemasRda.filter((p) => p.severidade === 'ERRO').length}
+                    avisos={problemasRda.filter((p) => p.severidade === 'AVISO').length}
+                    corrigidos={problemasRda.filter((p) => p.severidade === 'CORRIGIDO').length} />
+                </div>
+              )}
+              <label className="flex items-start gap-2 border-t border-[var(--color-neutral-300)] px-6 py-4 text-[13px] cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={criarRda} disabled={etapa === 'gravando' || etapa === 'concluido'}
+                  onChange={(e) => setCriarRda(e.target.checked)} />
+                <span>
+                  <strong>Criar os ensaios RDA dos discos</strong> ({plano.ensaios.length} disco(s)
+                  {plano.sistemasNovos.length > 0 && `; ${plano.sistemasNovos.length} sistema(s) ácido(s) novo(s)`}).
+                  Reimportar não duplica (um ensaio por disco) e nunca mexe na taxa já lançada.
+                </span>
+              </label>
+            </div>
           )}
 
           {/* 4. gravar */}
@@ -470,7 +540,19 @@ export const ImportadorAmostras: React.FC<PropsImportador> = ({ arquivoInicial, 
               {erro && <Alert tipo="erro" mensagem={erro} onClose={() => setErro(null)} />}
 
               {resultado ? (
-                <ResumoFinal r={resultado} />
+                <>
+                  <ResumoFinal r={resultado} />
+                  {resultadoRda && (
+                    <div className="aviso aviso-ok" role="status">
+                      <p className="m-0 flex items-center gap-2 font-semibold"><FlaskConical size={16} /> Ensaios RDA dos discos</p>
+                      <p className="m-0 mt-1">
+                        {resultadoRda.inseridos} criado(s) · {resultadoRda.atualizados} atualizado(s) · {resultadoRda.iguais} igual(is)
+                        {resultadoRda.sistemasCriados.length > 0 && <> · sistemas novos: {resultadoRda.sistemasCriados.join(', ')}</>}
+                        {resultadoRda.semAmostra.length > 0 && <> · discos não encontrados: {resultadoRda.semAmostra.slice(0, 15).join(', ')}{resultadoRda.semAmostra.length > 15 ? '…' : ''}</>}
+                      </p>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="flex flex-wrap items-center gap-3">
                   <button type="button" className="btn btn-primary" onClick={gravar}

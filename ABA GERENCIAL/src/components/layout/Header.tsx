@@ -2,7 +2,6 @@ import { LogOut, Search, ArrowLeft, X, Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { SUPABASE_REF } from '../../lib/supabase'
 import { useContexto } from '../../store/useContexto'
 
 // Base: docs/referencia/visual/Header.tsx, com o selo "Modo cadastro" do gerencial.
@@ -74,11 +73,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
-          <span className="hidden xl:flex items-center gap-1.5 text-[11px] text-[var(--color-neutral-500)]"
-            title="Banco de dados conectado">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-neutral-400)]" />
-            Supabase conectado · {SUPABASE_REF}
-          </span>
           <span className="tag tag-orange !text-[11px] !py-1.5 shrink-0">Modo cadastro</span>
         </div>
 

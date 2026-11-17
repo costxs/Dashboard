@@ -23,7 +23,25 @@ import type { PlanilhaBruta } from "./planilhaAmostras";
 import { chave } from "./planilhaAmostras";
 import type { Ensaio, Leitura, Metadados } from "./tratamentoPermeabilidade";
 
-export type FonteDpDCI = "total" | "dp1_dp2";
+/** De onde vem o ΔP no DCI:
+ *  auto    — DPBtot; se algum transdutor DP1/DP2/DP3 SATURAR (fica preso no limite de leitura), usa "DPB Diff."
+ *  total   — DPBtot = DP1 + DP2 + DP3 (preciso em ΔP baixo, mas erra quando um transdutor satura)
+ *  dp1_dp2 — DP1 + DP2
+ *  pp_diff — "DPB Diff." = entrada − saída (PP1B − PP2B): não satura; é o que o Origin usa quando o ΔP é alto */
+export type FonteDpDCI = "auto" | "total" | "dp1_dp2" | "pp_diff";
+
+export interface Saturacao { canal: string; limite_psi: number; fracao: number }
+
+/** Um transdutor saturou quando uma parte das leituras COM VAZÃO fica presa no valor máximo dele. */
+export function detectarSaturacao(valores: (number | null)[], comVazao: boolean[], nome: string): Saturacao | null {
+  const v = valores.filter((x, i): x is number => x != null && comVazao[i]);
+  if (v.length < 50) return null;
+  const max = Math.max(...v);
+  if (max < 20) return null;                                   // ΔP baixo: não é saturação
+  const tol = Math.max(0.3, max * 0.002);
+  const presos = v.filter((x) => x >= max - tol).length / v.length;
+  return presos >= 0.05 ? { canal: nome, limite_psi: max, fracao: presos } : null;
+}
 
 /** O DCI grava em formato americano (ponto decimal, sem separador de milhar). */
 const n = (v: unknown): number | null => {
@@ -154,6 +172,22 @@ export function lerEnsaiosDCI(bruta: PlanilhaBruta, op: { dp?: FonteDpDCI } = {}
     const bomba = bombas.sort((a, b) => b.vol - a.vol)[0];
     if (!bomba || bomba.q < 0) { avisos.push("não achei a vazão da bomba de injeção (VPA n Flow Rate)"); continue; }
     if (op.dp === "dp1_dp2" && (iDp[0] < 0 || iDp[1] < 0)) avisos.push("colunas DP1/DP2 não encontradas: usei o ΔP total");
+    // saturação dos transdutores diferenciais (só nas leituras com a bomba ligada)
+    const iDiff = idx((s) => s.startsWith(`dp${c} diff`));
+    const corpo = m.slice(iCab + 1).filter((l) => n(l?.[iT]) != null);
+    const comVazao = corpo.map((l) => (n(l[bomba.q]) ?? 0) > 0.02);
+    const saturados = [1, 2, 3].map((k, z) => (iDp[z] >= 0 ? detectarSaturacao(corpo.map((l) => n(l[iDp[z]])), comVazao, `DP${k}${core}`) : null))
+      .filter((x): x is Saturacao => x != null);
+    const temPP = iDiff >= 0 || (iUp >= 0 && iDown >= 0);
+    let fonte: Exclude<FonteDpDCI, "auto"> = op.dp && op.dp !== "auto" ? op.dp : "total";
+    if ((op.dp ?? "auto") === "auto" && saturados.length && temPP) fonte = "pp_diff";
+    if (saturados.length) {
+      const txt = saturados.map((x) => `${x.canal} em ${x.limite_psi.toFixed(1)} psi (${Math.round(x.fracao * 100)} % das leituras)`).join(", ");
+      avisos.push(fonte === "pp_diff"
+        ? `transdutor saturado: ${txt}. Usei o ΔP "DPB Diff." (entrada − saída, PP1B − PP2B), como no Origin. O k que o equipamento mostra (Permeability 1B) usa o ΔP saturado e fica errado`
+        : `transdutor saturado: ${txt} — o ΔP "${fonte === "total" ? "DPBtot" : "DP1 + DP2"}" fica errado nesse trecho; prefira "DPB Diff."`);
+    }
+    if (fonte === "pp_diff" && !temPP) { avisos.push("sem as colunas PP1B/PP2B: usei o DPBtot"); fonte = "total"; }
 
     const leituras: Leitura[] = [];
     let usados: Set<number> = new Set();
@@ -162,10 +196,11 @@ export function lerEnsaiosDCI(bruta: PlanilhaBruta, op: { dp?: FonteDpDCI } = {}
       const th = n(l?.[iT]);
       if (th == null) continue;
       const parc = iDp.map((j) => (j >= 0 ? n(l[j]) : null));
-      let dp: number | null;
-      if (op.dp === "dp1_dp2" && parc[0] != null && parc[1] != null) dp = parc[0] + parc[1];
-      else dp = iTot >= 0 ? n(l[iTot]) : parc.every((x) => x != null) ? (parc as number[]).reduce((s, x) => s + x, 0) : null;
       const up = iUp >= 0 ? n(l[iUp]) : null, down = iDown >= 0 ? n(l[iDown]) : null;
+      let dp: number | null;
+      if (fonte === "pp_diff") dp = iDiff >= 0 && n(l[iDiff]) != null ? n(l[iDiff]) : up != null && down != null ? up - down : null;
+      else if (fonte === "dp1_dp2" && parc[0] != null && parc[1] != null) dp = parc[0] + parc[1];
+      else dp = iTot >= 0 ? n(l[iTot]) : parc.every((x) => x != null) ? (parc as number[]).reduce((s, x) => s + x, 0) : null;
       const garrafas: Leitura["garrafas"] = {};
       for (const [g, j] of Object.entries(acc)) garrafas[Number(g)] = { nome: null, atual: n(l[j]), parcial: null };
       const k = iK >= 0 ? n(l[iK]) : null;
@@ -187,12 +222,13 @@ export function lerEnsaiosDCI(bruta: PlanilhaBruta, op: { dp?: FonteDpDCI } = {}
         if (d > dv) { dv = d; melhor = g; }
       }
       usados = new Set(melhor != null ? [melhor] : []);
-      const meta = { ...cab.meta, outros: { ...cab.meta.outros, "Bomba de injeção": `VPA ${bomba.k}` } };
+      const nomeFonte = { total: "DPBtot (DP1 + DP2 + DP3)", dp1_dp2: "DP1 + DP2", pp_diff: "DPB Diff. (PP1B − PP2B)" }[fonte];
+      const meta = { ...cab.meta, outros: { ...cab.meta.outros, "Bomba de injeção": `VPA ${bomba.k}`, "ΔP usado": nomeFonte } };
       meta.viscosidade_cp = [...usados].map((g) => cab.viscosidades[g]).find((x) => x != null) ?? Object.values(cab.viscosidades)[0] ?? null;
       leituras.forEach((x) => { x.volume_poroso_eq_cm3 = cab.pvEq; });
-      ensaios.push({ aba, metadados: meta, holder: "H1", leituras, avisos, equipamento: "DCI" } as Ensaio);
+      ensaios.push({ aba, metadados: meta, holder: "H1", leituras, avisos, equipamento: "DCI", fonte_dp: fonte, saturados } as Ensaio);
     } else {
-      ensaios.push({ aba, metadados: { garrafas: {}, outros: { Equipamento: "DCI" } }, holder: "H1", leituras, avisos, equipamento: "DCI" } as Ensaio);
+      ensaios.push({ aba, metadados: { garrafas: {}, outros: { Equipamento: "DCI" } }, holder: "H1", leituras, avisos, equipamento: "DCI", fonte_dp: fonte, saturados } as Ensaio);
     }
   }
   // a aba com a separação do pesquisador primeiro

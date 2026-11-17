@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Edit3, Plus, Tags, Trash2 } from 'lucide-react'
@@ -76,7 +77,7 @@ export const PrefixosCodigoPage: React.FC = () => {
   }
 
   async function apagar(p: PrefixoCodigo) {
-    if (!confirm(`Apagar o prefixo ${p.prefixo} (${p.significado})? As amostras não são alteradas; só deixam de mostrar o significado.`)) return
+    if (!(await confirmar(`Apagar o prefixo ${p.prefixo} (${p.significado})? As amostras não são alteradas; só deixam de mostrar o significado.`))) return
     try {
       await apagarPrefixoCodigo(p.prefixo)
       setFeedback({ tipo: 'sucesso', msg: `Prefixo ${p.prefixo} apagado.` })

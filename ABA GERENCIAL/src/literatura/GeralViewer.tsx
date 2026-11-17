@@ -18,6 +18,8 @@ import { listarDadosRda, listarPublicacoes, listarPvbt, listarRochasLiteratura, 
 import { Simbolos } from "./Simbolos";
 import type { DadoLiteraturaRda } from "./tipos";
 import { Aviso, Carregando, Cartao } from "./ui";
+import { Conferencia } from "./reatividade/Conferencia";
+import { NovaSerie } from "./reatividade/NovaSerie";
 
 const TODOS = "Todos";
 
@@ -67,8 +69,8 @@ function GeralPvbt() {
   );
 }
 
-// Taxa de reação: tudo o que a planilha de reatividade carregou, em 5 visões.
-type VisaoGeral = "grafico" | "ensaios" | "rochas" | "sistemas" | "referencias";
+// Taxa de reação: tudo o que a planilha de reatividade carregou, em 5 visões + cadastro/conferência.
+type VisaoGeral = "grafico" | "ensaios" | "rochas" | "sistemas" | "referencias" | "nova-serie" | "conferencia";
 const VAZIO = { litologia: TODOS, acido: TODOS, temperatura: TODOS, referencia: TODOS, rocha: TODOS, sistema: TODOS };
 
 function GeralRda() {
@@ -126,7 +128,8 @@ function GeralRda() {
     ["rochas", "Rochas descritas", rochas.dados?.length],
     ["sistemas", "Sistemas ácidos", sistemas.dados?.length],
   ];
-  const abas: [VisaoGeral, string][] = [["grafico", "Gráfico"], ["ensaios", "Ensaios"], ["rochas", "Rochas"], ["sistemas", "Sistemas ácidos"], ["referencias", "Referências"]];
+  const abas: [VisaoGeral, string][] = [["grafico", "Gráfico"], ["ensaios", "Ensaios"], ["rochas", "Rochas"], ["sistemas", "Sistemas ácidos"], ["referencias", "Referências"],
+    ["nova-serie", "Nova série"], ["conferencia", "Conferência"]];
 
   const filtros = (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-5 px-6 pt-5">
@@ -231,6 +234,12 @@ function GeralRda() {
       )}
 
       {visao === "referencias" && <CadastroPublicacoes categoria="geral" />}
+
+      {visao === "nova-serie" && (
+        <NovaSerie aoGravar={() => { todosDados.recarregar(); pontos.recarregar(); pubs.recarregar(); rochas.recarregar(); sistemas.recarregar(); }} />
+      )}
+
+      {visao === "conferencia" && <Conferencia />}
     </div>
   );
 }

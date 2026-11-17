@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { BookOpen, Plus, ExternalLink, FileText, Lock, Pencil, Search, Trash2 } from 'lucide-react'
 import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge , SeloContexto } from '../components/UI'
@@ -158,7 +159,7 @@ export const CadastroPublicacoes: React.FC<{ categoria: 'geral' | 'propria' }> =
   }
 
   async function handleExcluir(pub: Publicacao) {
-    if (!confirm(`Excluir a publicação ${pub.id_referencia}${pub.titulo ? ` — ${pub.titulo}` : ''}? Isso não pode ser desfeito.`)) return
+    if (!(await confirmar(`Excluir a publicação ${pub.id_referencia}${pub.titulo ? ` — ${pub.titulo}` : ''}? Isso não pode ser desfeito.`))) return
     try {
       await excluirPublicacao(pub.id_referencia)
       setFeedback({ tipo: 'sucesso', msg: `Publicação ${pub.id_referencia} excluída.` })

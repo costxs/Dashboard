@@ -21,8 +21,6 @@ export const supabase = createClient(url, chave, {
 
 export const BUCKET_ARQUIVOS = 'arquivos'
 
-/** Identificador do projeto Supabase conectado (mostrado, discreto, no cabeçalho). */
-export const SUPABASE_REF = new URL(url).hostname.split('.')[0]
 
 interface ErroBanco {
   code?: string

@@ -1,3 +1,4 @@
+import { URL_DASHBOARD } from '../../config/urls'
 import React, { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, Lock, RotateCcw, Search } from 'lucide-react'
 import { Alert, Card, Select } from '../../components/UI'
@@ -23,7 +24,6 @@ import {
 // 2) o app LÊ, ANALISA e CONFERE com o banco (só leitura) e mostra a prévia por fonte
 // 3) só grava quando a pessoa confirma (por id: reimportar atualiza, não duplica, não apaga).
 // As regras estão em src/importador/planilhaPvbt.ts (cópia de docs/importador).
-const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
 const FONTES: { fonte: Fonte; rotulo: string; classe: string }[] = [
   { fonte: 'LCPETRO', rotulo: 'LC PETRO', classe: 'tag tag-orange' },
   { fonte: 'Literatura', rotulo: 'Literatura', classe: 'tag tag-blue' },
@@ -195,15 +195,6 @@ export const ImportadorPvbt: React.FC<PropsImportador> = ({ arquivoInicial, aoTr
 
   async function gravar() {
     if (!analise || !resumo) return
-    const nEnsaios = resumo.ensaios.filter((d) => !resumo.fora.has(d.id_experimento as string)).length
-    const confirmacao = [
-      `Gravar ${nEnsaios} ensaio(s) de "${nomeArquivo}" no banco?`,
-      resumo.labNovas.length > 0 && projeto && `• ${resumo.labNovas.length} amostra(s) LCPETRO nova(s) serão criadas no projeto ${nomeProjeto(projeto)}.`,
-      temPetrobras && empresaPb && `• Os dados Petrobras ficarão visíveis só para a empresa ${empresaPb.nome}.`,
-      pularErros && resumo.fora.size > 0 && `• ${resumo.fora.size} id(s) com erro ficam de fora.`,
-      'Linhas com o mesmo id são atualizadas. Nada é apagado.',
-    ].filter(Boolean).join('\n')
-    if (!confirm(confirmacao)) return
     setErro(null)
     setProgresso({})
     setEtapa('gravando')

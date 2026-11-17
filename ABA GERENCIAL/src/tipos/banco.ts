@@ -307,6 +307,9 @@ export interface ArquivoGravavel {
   caminho: string
   tamanho_bytes?: number | null
   sha256?: string | null
+  /** migração 022: espaço da imagem na ficha (1 a 3) e legenda, para tipo foto_amostra | imagem_microct */
+  posicao?: number | null
+  legenda?: string | null
 }
 
 // -----------------------------------------------------------------------------

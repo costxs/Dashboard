@@ -6,6 +6,9 @@ dci_acidificacao_ficticio.xlsx      água antes (acumulador 3) @0.5 → ácido (
                                     (PVbt = 0,60 contando o volume morto de 0,4 ml) → água depois (acumulador 1) @0.5 → @2.
                                     + aba "Planilha1" como o pesquisador copia (tabela a partir da coluna C, coluna de rótulos)
 dci_acidificacao_sem_bt_ficticio.xlsx  igual, mas o ácido NÃO abre caminho: o ΔP sobe (dano)
+dci_acidificacao_negativo_ficticio.xlsx    ΔP alto antes (~370 psi) e NEGATIVO depois do breakthrough (-15 psi), água em 4 vazões
+dci_permeabilidade_saturado_ficticio.xlsx  rocha de k = 1 mD (ΔP alto): os transdutores DP1/DP2 travam em 240 psi
+                                    (DPBtot fica errado); o ΔP certo está em "DPB Diff." = PP1B − PP2B
 
 Formato igual ao DCI: números como texto com 6 casas, tempo em horas, polegadas, DPBtot = DP1 + DP2 + DP3."""
 import math, random
@@ -27,7 +30,7 @@ COLS = ['Date (MM/DD/YY)', 'Time', 'Timestamp (hours)', 'VPA 1 Volume Pumped (ml
 f6 = lambda x: f"{x:.6f}"
 
 
-def gerar(nome, projeto, etapas, data='10/05/2026', inicio='9:00:00 AM', copia=False):
+def gerar(nome, projeto, etapas, data='10/05/2026', inicio='9:00:00 AM', copia=False, limite_dp=None):
     """etapas: lista de (rotulo, acumulador, q, duração_s, função ΔP(i, t_rel, vol_no_trecho))"""
     random.seed(3)
     acc = {1: 400.0, 2: 150.0, 3: 600.0, 4: 0.0}
@@ -38,14 +41,17 @@ def gerar(nome, projeto, etapas, data='10/05/2026', inicio='9:00:00 AM', copia=F
             qm = q * (1 + random.gauss(0, 0.012 if q < 1 else 0.002))
             dv = q / 60
             acc[g] -= dv; vpa1 += dv; v_tr += dv
-            dp = max(fdp(i, i, v_tr) * (1 + random.gauss(0, 0.01)) + random.gauss(0, 0.02), 0.0)
+            dp = fdp(i, i, v_tr) * (1 + random.gauss(0, 0.01)) + random.gauss(0, 0.02)   # pode ser negativo (zero do transdutor)
             d1, d3 = dp * 0.45 + random.gauss(0, 0.01), random.gauss(0, 0.02)
             d2 = dp - d1 - d3
-            k1 = C * q * 1.0 * L / (A * dp) if dp > 0.05 else 0
+            if limite_dp:                     # transdutor no limite de leitura: trava no valor máximo
+                d1, d2 = min(d1, limite_dp + random.gauss(0, 0.05)), min(d2, limite_dp + random.gauss(0, 0.05))
+            tot = d1 + d2 + d3
+            k1 = C * q * 1.0 * L / (A * tot) if tot > 0.05 else 0     # o equipamento calcula com o DPBtot
             linhas.append([data, inicio, f6(t / 3600 + 1e-6), f6(vpa1), f6(500 + 2 * dp), f6(qm), '20.500000', '1100.000000', f6(random.gauss(0, 0.02)),
                            '23.000000', '1500.000000', f6(random.gauss(0, 0.05)), '18.400000', '1700.000000', f6(random.gauss(0, 0.05)), '50.000000',
-                           f6(1000 + dp), f6(1000.0), f6(d1), f6(d2), f6(d3), '1500.000000', '1660.000000', '50.000000', '50.000000',
-                           f6(acc[1]), f6(acc[2]), f6(acc[3]), f6(acc[4]), f6(k1), '0.000000', f6(dp), f6(d1 - d2), ''])
+                           f6(1000 + dp + 1.5), f6(1000.0), f6(d1), f6(d2), f6(d3), '1500.000000', '1660.000000', '50.000000', '50.000000',
+                           f6(acc[1]), f6(acc[2]), f6(acc[3]), f6(acc[4]), f6(k1), '0.000000', f6(tot), f6(dp + 1.5 + random.gauss(0, 0.3)), ''])
             rotulos.append(rot)
             t += 1
     wb = Workbook(); ws = wb.active; ws.title = nome.replace('_ficticio', '')[:31]
@@ -83,6 +89,15 @@ def etapa(q):
 gerar('dci_permeabilidade_ficticio', 'TESTE-D Permeabilidade', [('Permeabilidade 1', 1, 1.0, 600, etapa(1.0)),
       ('Permeabilidade 2', 1, 2.0, 400, etapa(2.0)), ('Permeabilidade 3', 1, 4.0, 300, etapa(4.0))])
 
+# --- permeabilidade com transdutor saturado: k = 1 mD → ΔP de ~120 a ~490 psi
+K_SAT = 1.0
+ant[0] = 0.0
+def etapa_sat(q):
+    a0 = ant[0]; alvo = C * q * 1.0 * L / (A * K_SAT); ant[0] = alvo
+    return lambda i, tr, v, a0=a0, alvo=alvo: a0 + (alvo - a0) * (1 - math.exp(-tr / 40))
+gerar('dci_permeabilidade_saturado_ficticio', 'TESTE-D Permeabilidade', [('Permeabilidade 1', 1, 1.0, 600, etapa_sat(1.0)),
+      ('Permeabilidade 2', 1, 2.0, 400, etapa_sat(2.0)), ('Permeabilidade 3', 1, 4.0, 300, etapa_sat(4.0))], limite_dp=240.0)
+
 # --- acidificação com breakthrough
 MORTO, PVBT, Q = 0.4, 0.60, 0.5
 v_bt = PVBT * VP + MORTO                      # volume total de ácido injetado até o breakthrough
@@ -93,6 +108,15 @@ dur_acido = (v_bt + 0.15) / Q * 60
 vp = gerar('dci_acidificacao_ficticio', 'TESTE-D HCl[15 wt%] @0.5 T50', [
     ('Água antes @0.5', 3, Q, 900, lambda i, tr, v: dp0), ('Ácido @0.5', 2, Q, dur_acido, acido),
     ('Água depois @0.5', 1, Q, 400, lambda i, tr, v: PAT), ('Água depois @2.0', 1, 2.0, 300, lambda i, tr, v: PAT)], copia=True)
+# --- acidificação com breakthrough e ΔP NEGATIVO depois (zero do transdutor ~ -15 psi), água em 4 vazões
+NEG = -15.0
+acido_neg = lambda i, tr, v: (dp0 * 60 * (1 - min(v / v_bt, 1) ** 4) + NEG * min(v / v_bt, 1) ** 4) if v < v_bt else NEG
+gerar('dci_acidificacao_negativo_ficticio', 'TESTE-D HCl[15 wt%] @0.5 T65', [
+    ('KCl antes @0.5', 3, Q, 600, lambda i, tr, v: dp0 * 60 * (1 - 0.2 * math.exp(-tr / 150))),
+    ('Ácido @0.5', 2, Q, dur_acido, acido_neg),
+    ('Água depois @0.5', 1, Q, 300, lambda i, tr, v: NEG), ('Água depois @1.0', 1, 1.0, 200, lambda i, tr, v: NEG),
+    ('Água depois @2.0', 1, 2.0, 150, lambda i, tr, v: NEG), ('Água depois @3.0', 1, 3.0, 150, lambda i, tr, v: NEG)])
+
 # --- acidificação SEM breakthrough (dano: ΔP sobe)
 gerar('dci_acidificacao_sem_bt_ficticio', 'TESTE-D HCl[15 wt%] @0.5 T50', [
     ('Água antes @0.5', 3, Q, 600, lambda i, tr, v: dp0), ('Ácido @0.5', 2, Q, 600, lambda i, tr, v: dp0 * (1 + 2 * tr / 600)),

@@ -1,3 +1,4 @@
+import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { Building2, FolderKanban, Plus, UserPlus, Trash2, ShieldCheck, Users } from 'lucide-react'
 import { Card, Button, Input, Select, Modal, Alert, Badge , SeloContexto } from '../components/UI'
@@ -93,7 +94,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
 
   async function handleAlternarProjeto(proj: Projeto) {
     const ativar = !proj.ativo
-    if (!ativar && !confirm(`Desativar o projeto ${proj.codigo}? Ele sai das listas de escolha; amostras e ensaios continuam no banco.`)) return
+    if (!ativar && !(await confirmar(`Desativar o projeto ${proj.codigo}? Ele sai das listas de escolha; amostras e ensaios continuam no banco.`))) return
     try {
       await atualizarProjeto(proj.id, { ativo: ativar })
       setFeedback({ tipo: 'sucesso', msg: `Projeto ${proj.codigo} ${ativar ? 'ativado' : 'desativado'}.` })
@@ -125,7 +126,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
   }
 
   async function handleRemoverMembro(id: number) {
-    if (!confirm('Deseja realmente remover esta permissão?')) return
+    if (!(await confirmar('Deseja realmente remover esta permissão?'))) return
     try {
       await removerMembro(id)
       setFeedback({ tipo: 'sucesso', msg: 'Permissão removida.' })

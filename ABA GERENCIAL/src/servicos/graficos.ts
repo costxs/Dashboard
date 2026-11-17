@@ -175,7 +175,7 @@ export function pedirPlanilhaEtapas(arquivo: File, pedido: {
   /** aba lida na tela: o serviço lê a mesma */
   aba?: string | null
   /** só DCI: ΔP = DP1+DP2+DP3 ('total') ou só DP1+DP2, o mesmo da tela */
-  dp_dci?: 'total' | 'dp1_dp2'
+  dp_dci?: 'auto' | 'total' | 'dp1_dp2' | 'pp_diff'
   /** mesmo corpo do /grafico (montarPedido): a planilha ganha a aba "Gráficos" com o gráfico único e o ΔP × Q */
   grafico?: ReturnType<typeof montarPedido>
 }): Promise<Blob> {
@@ -243,7 +243,9 @@ async function postar(caminho: string, corpo: BodyInit, cabecalhos: Record<strin
 
 // ---- acidificação: planilha e gráficos no padrão do Origin do laboratório ----
 /** Fase como vai para /acidificacao/* (o papel e o fluido são os escolhidos na tela) */
-export interface FaseAcid { ordem: number; papel: string; q: number; t_inicio: number; t_fim: number; fluido: string | null }
+export interface FaseAcid { ordem: number; papel: string; q: number; t_inicio: number; t_fim: number; fluido: string | null
+  /** garrafa (JBV) ou acumulador (DCI) da fase: o serviço usa o do ácido para o volume injetado */
+  garrafa?: number | null }
 export interface PedidoAcid {
   amostra: string | null; sistema_acido: string | null
   comprimento_cm: number | null; diametro_cm: number | null; porosidade_pct: number | null
@@ -255,8 +257,10 @@ export interface PedidoAcid {
   leituras?: [number, number, number | null][]
   /** true = houve breakthrough; false = não houve (os gráficos não marcam PVbt); null = incerto */
   houve_breakthrough?: boolean | null
+  /** VP que a tela usou (no DCI, o do cabeçalho do equipamento): o serviço usa o mesmo */
+  volume_poroso_cm3?: number | null
   /** só DCI: ΔP = DP1+DP2+DP3 ('total') ou só DP1+DP2, o mesmo da tela */
-  dp_dci?: 'total' | 'dp1_dp2'
+  dp_dci?: 'auto' | 'total' | 'dp1_dp2' | 'pp_diff'
   fases: FaseAcid[]
   config?: {
     formato?: Formato; dpi?: number; fonte?: string; mostrar_pvbt?: boolean
@@ -265,6 +269,7 @@ export interface PedidoAcid {
     /** limites do ΔP em psi (vazio = ajusta aos dados) */
     dp_max?: number | null; dp_min?: number
     espessura_linha?: number
+    titulo?: string | null; largura_cm?: number | null; altura_cm?: number | null
   }
 }
 export type GraficoAcid = 'geral' | 'pv' | 'apos'

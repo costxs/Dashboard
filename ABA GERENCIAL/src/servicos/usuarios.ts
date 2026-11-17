@@ -1,11 +1,11 @@
 // Cadastro de usuários do painel gerencial (admin ou editor), feito pelo administrador.
 // Criar a conta exige a chave secreta do Supabase, que só existe no backend (Dashboard-Back/servico-graficos,
 // contas.py): o backend confere no banco que quem pede é administrador e o Supabase manda o convite por e-mail.
+import { URL_DASHBOARD } from '../config/urls'
 import { supabase } from '../lib/supabase'
 import { URL_GRAFICOS } from './graficos'
 
 // endereço PUBLICADO do dashboard (Vercel); sem ele, o link do convite usa este gerencial
-const URL_DASHBOARD = String(import.meta.env.VITE_URL_DASHBOARD ?? '').replace(/\/+$/, '')
 
 export interface ConviteUsuario {
   email: string

@@ -1,3 +1,5 @@
+import { ConfirmarHost } from './components/Confirmar'
+import { URL_DASHBOARD } from './config/urls'
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -13,6 +15,7 @@ import { AmostraPage } from './pages/AmostraPage'
 import { WorkPackagesPage } from './pages/WorkPackagesPage'
 import { LiteraturaPage } from './pages/LiteraturaPage'
 import { ImportadorPage } from './pages/ImportadorPage'
+import { ReatividadePage } from './pages/ReatividadePage'
 import { TratamentoCorefloodPage } from './pages/TratamentoCorefloodPage'
 import { AdministracaoPage } from './pages/AdministracaoPage'
 
@@ -38,7 +41,6 @@ const RequerLogin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <RequerNivelElevado>{children}</RequerNivelElevado>
 }
 
-const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
 
 /**
  * O painel gerencial é só de administradores e editores. Leitores e quem se registrou pelo dashboard
@@ -84,6 +86,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ConfirmarHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
@@ -96,6 +99,7 @@ export function App() {
             <Route path="/work-packages" element={<RequerContexto><WorkPackagesPage /></RequerContexto>} />
             <Route path="/publicacoes" element={<RequerContexto><LiteraturaPage /></RequerContexto>} />
             <Route path="/importar" element={<RequerEditor><ImportadorPage /></RequerEditor>} />
+            <Route path="/reatividade" element={<RequerEditor><ReatividadePage /></RequerEditor>} />
             <Route path="/tratamento-coreflood" element={<RequerEditor><RequerContexto><TratamentoCorefloodPage /></RequerContexto></RequerEditor>} />
             <Route path="/administracao"element={<RequerEditor><AdministracaoPage /></RequerEditor>} />
 

@@ -88,3 +88,54 @@ describe('DCI — acidificação (dados fictícios)', () => {
     expect(r.avisos.some((a) => a.startsWith('sem breakthrough'))).toBe(true)
   })
 })
+
+describe('DCI — transdutor saturado (dados fictícios, k verdadeiro 1 mD)', () => {
+  it('detecta DP1/DP2 travados no limite e usa DPB Diff. (PP1B − PP2B), como o Origin', async () => {
+    const e = lerEnsaiosEquipamento(await bruta('dci_permeabilidade_saturado_ficticio.xlsx'), 'DCI').ensaios[0]
+    expect(e.fonte_dp).toBe('pp_diff')
+    expect(e.saturados!.map((x) => x.canal)).toContain('DP2B')
+    expect(e.avisos.some((a) => a.includes('saturado'))).toBe(true)
+    const r = tratarPermeabilidade(e)
+    expect(r.ajuste!.k_md).toBeCloseTo(1, 1)
+    for (const et of r.etapas) expect(et.k_md!).toBeCloseTo(1, 1)
+    // o k do equipamento (com o DPBtot travado) cresce com a vazão — errado
+    expect(r.etapas[2].k_equipamento_md!).toBeGreaterThan(1.5)
+  })
+
+  it('a pessoa pode forçar o DPBtot (e o k sai errado, crescendo com a vazão)', async () => {
+    const e = lerEnsaiosEquipamento(await bruta('dci_permeabilidade_saturado_ficticio.xlsx'), 'DCI', { dpDCI: 'total' }).ensaios[0]
+    expect(e.fonte_dp).toBe('total')
+    const r = tratarPermeabilidade(e)
+    expect(r.etapas[2].k_md!).toBeGreaterThan(r.etapas[0].k_md! * 1.4)
+  })
+
+  it('ΔP baixo não é confundido com saturação', async () => {
+    const e = lerEnsaiosEquipamento(await bruta('dci_permeabilidade_ficticio.xlsx'), 'DCI').ensaios[0]
+    expect(e.fonte_dp).toBe('total')
+    expect(e.saturados).toEqual([])
+  })
+})
+
+
+describe('DCI — PV igual ao Origin do laboratório (dados fictícios)', () => {
+  it('volume de ácido = queda do volume do ACUMULADOR desde o início do ácido; VP do cabeçalho do equipamento', async () => {
+    const e = lerEnsaiosEquipamento(await bruta('dci_acidificacao_ficticio.xlsx'), 'DCI').ensaios.find((x) => x.aba !== 'Planilha1')!
+    // porosidade "arredondada" vinda do banco: o VP continua sendo o do cabeçalho, com aviso
+    const r = tratarAcidificacao(e, { volumeMorto_cm3: 0.4, porosidade_pct: 14.9 })
+    expect(r.fonte_volume_poroso).toBe('equipamento')
+    expect(r.volume_poroso_cm3).toBeCloseTo(VP, 4)
+    expect(r.avisos.some((a) => a.startsWith('volume poroso'))).toBe(true)
+    const fa = r.fase_acido!, ls = e.leituras, g = fa.garrafa!
+    const v0 = ls[fa.inicio].garrafas![g].atual!
+    for (const k of [10, 60, r.serie.length - 1]) {
+      const vAcc = v0 - ls[fa.inicio + k].garrafas![g].atual!
+      expect(r.serie[k].volume_acido_cm3).toBeCloseTo(vAcc, 9)                  // "Injected Volume Tot"
+      expect(r.serie[k].pv!).toBeCloseTo((vAcc - 0.4) / r.volume_poroso_cm3!, 9) // (B1 − B − morto) ÷ VP
+    }
+    // JBV continua por vazão × tempo
+    const j = lerEnsaiosEquipamento(await bruta('acidificacao_ficticio.xlsx'), 'JBV').ensaios[0]
+    const rj = tratarAcidificacao(j, { volumeMorto_cm3: 0.5 })
+    const s = rj.serie
+    expect(s[20].volume_acido_cm3).toBeCloseTo(2 * (s[20].t_s - s[0].t_s) / 60, 9)
+  })
+})

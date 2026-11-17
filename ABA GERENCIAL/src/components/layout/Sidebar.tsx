@@ -1,3 +1,4 @@
+import { URL_DASHBOARD } from '../../config/urls'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -7,6 +8,7 @@ import {
   Database,
   ExternalLink,
   FileSpreadsheet,
+  FlaskConical,
   LayoutDashboard,
   ListChecks,
   type LucideIcon,
@@ -20,7 +22,6 @@ import logoLcPetro from '../../assets/lcpetro-logo.png'
 import iconeLcPetro from '../../assets/lcpetro-icone.png'
 
 // Base: docs/referencia/painel-cadastro/src/components/layout/Sidebar.tsx
-const URL_DASHBOARD = import.meta.env.VITE_URL_DASHBOARD as string | undefined
 
 interface Item { to: string; label: string; icon: LucideIcon }
 
@@ -40,6 +41,7 @@ export function Sidebar() {
     { to: '/amostras', label: 'Amostras e ensaios', icon: Database },
     { to: '/work-packages', label: 'Work packages', icon: ListChecks },
     { to: '/publicacoes', label: 'Literatura', icon: BookOpen },
+    ...(editor ? [{ to: '/reatividade', label: 'Reatividade', icon: FlaskConical }] : []),
     ...(editor ? [{ to: '/importar', label: 'Importar planilha', icon: FileSpreadsheet }] : []),
     ...(editor || isAdmin ? [{ to: '/tratamento-coreflood', label: 'Tratamento de dados de coreflood', icon: Activity }] : []),
   ]
