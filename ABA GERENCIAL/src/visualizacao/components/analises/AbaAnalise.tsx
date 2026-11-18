@@ -76,6 +76,7 @@ export function AbaAnalise(p: {
           {p.podeEditar && (
             <div><button className="btn btn-primary" onClick={() => setEditando("novo")}><Plus size={14} /> Lançar {cfg.titulo.toLowerCase()}</button></div>
           )}
+          {p.extra}
         </div>
       );
     }
@@ -84,6 +85,7 @@ export function AbaAnalise(p: {
         {p.antes}
         <EmptyState message={`Nenhum registro de ${cfg.titulo.toLowerCase()} para esta amostra.`}
         acao={p.podeEditar && <button className="btn btn-primary" onClick={() => setEditando("novo")}><Plus size={14} /> Lançar {cfg.titulo.toLowerCase()}</button>} />
+        {p.extra}
       </div>
     );
   }

@@ -24,15 +24,18 @@ function numero(s: string | undefined): number | null {
 function lerUtilizacao(s: string): CondicoesRda {
   const partes = s.split(/\s+-\s+/).map((p) => p.trim());
   const conc = /\[\s*([\d.,]+)\s*([a-z%/ ]*)\]/i.exec(s);
-  const acido = /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +]*?)\s*\[/.exec(s);
-  const temp = /([\d.,]+)\s*°\s*C/i.exec(s);
+  const acido = conc ? /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +]*?)\s*\[/.exec(s) : null;
+  const semColchete = !conc
+    ? /\b(HCl|GLDA|MAS|EDTA|HF|[ÁA]cido\s+[A-Za-zÀ-ú]+)\s+([\d.,]+)\s*(wt\s*%|vol\s*%|%|M|N|mM)\b/i.exec(s)
+    : null;
+  const temp = /T?\s*([\d.,]+)\s*(?:°\s*C|\bC\b)/i.exec(s);
   const rpm = /@\s*([\d.,]+)/.exec(s);
   return {
     texto: s,
     ensaio: partes.length > 1 && !/\[/.test(partes[0]) ? partes[0] : null,
-    acido: acido ? acido[1].trim() : null,
-    concentracao: numero(conc?.[1]),
-    unidade: conc ? (conc[2].trim() || null) : null,
+    acido: acido ? acido[1].trim() : semColchete ? semColchete[1].trim() : null,
+    concentracao: numero(conc?.[1] ?? semColchete?.[2]),
+    unidade: conc ? (conc[2].trim() || null) : semColchete ? (semColchete[3].replace(/\s+/g, "") || null) : null,
     temperatura_c: numero(temp?.[1]),
     rotacao_rpm: numero(rpm?.[1]),
   };

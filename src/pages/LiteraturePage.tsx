@@ -292,22 +292,64 @@ function TabelaSimples({ cab, linhas }: { cab: string[]; linhas: ReactNode[][] }
   );
 }
 
+const COLS_CALCULADAS_RDA = new Set<keyof DadoLiteraturaRda>([
+  "litologia", "composicao_rocha", "calcita_pct", "acido", "conc_valor", "conc_unidade",
+  "conc_pct", "conc_m", "aditivos", "temperatura_nominal_c", "omega_rad_s", "raiz_omega", "taxa_reacao_mol_m2_s",
+]);
+
 function TabelaRda({ linhas, compacta }: { linhas: DadoLiteraturaRda[]; compacta?: boolean }) {
-  const cols: [keyof DadoLiteraturaRda, string, boolean?][] = [
-    ["id_ensaio", "Ensaio"], ...(compacta ? [] : [["referencia_autor", "Referência"]] as [keyof DadoLiteraturaRda, string][]),
-    ["id_rocha", "Rocha"], ["litologia", "Litotipo"], ["acido", "Ácido"],
-    ["conc_m", "Conc. (M)"], ["temperatura_c", "T (°C)"], ["pressao_psi", "P (psi)"], ["rotacao_rpm", "rpm"], ["raiz_omega", "√ω"],
-    ["taxa_reacao_mol_cm2_s", "Taxa (mol/cm²·s)", true], ["taxa_reacao_mol_m2_s", "Taxa (mol/m²·s)", true], ["obtencao_dado", "Obtenção"],
-  ];
+  const cols: [keyof DadoLiteraturaRda, string, boolean?][] = compacta
+    ? [
+        ["id_ensaio", "Ensaio"],
+        ["id_rocha", "Rocha"], ["litologia", "ƒ Litotipo"], ["acido", "ƒ Ácido"],
+        ["conc_m", "ƒ Conc. (M)"], ["temperatura_c", "T (°C)"], ["temperatura_nominal_c", "ƒ T nom. (°C)"],
+        ["pressao_psi", "P (psi)"], ["rotacao_rpm", "rpm"], ["raiz_omega", "ƒ √ω"],
+        ["taxa_reacao_mol_cm2_s", "Taxa (mol/cm²·s)", true], ["taxa_reacao_mol_m2_s", "ƒ Taxa (mol/m²·s)", true], ["obtencao_dado", "Obtenção"],
+      ]
+    : [
+        ["id_ensaio", "id_ensaio"], ["id_referencia", "id_referencia"], ["ano", "ano"], ["id_rocha", "id_rocha"],
+        ["litologia", "ƒ litologia"], ["composicao_rocha", "ƒ composicao_rocha"], ["calcita_pct", "ƒ calcita_pct"],
+        ["dim_h_in", "dim_h_in"], ["dim_d_in", "dim_d_in"], ["id_sistema", "id_sistema"],
+        ["acido", "ƒ acido"], ["conc_valor", "ƒ conc_valor"], ["conc_unidade", "ƒ conc_unid"],
+        ["conc_pct", "ƒ conc_pct"], ["conc_m", "ƒ conc_M"], ["aditivos", "ƒ aditivos"],
+        ["temperatura_c", "temperatura_C"], ["temperatura_nominal_c", "ƒ temp_nominal_C"], ["pressao_psi", "pressao_psi"],
+        ["tipo_variavel", "tipo_variavel"], ["rotacao_rpm", "rotacao_rpm"], ["omega_rad_s", "ƒ omega_rad_s"],
+        ["raiz_omega", "ƒ raiz_omega"], ["shear_rate_s1", "shear_rate_s1"],
+        ["taxa_reacao_mol_cm2_s", "taxa_reacao_mol_cm2_s", true], ["taxa_reacao_mol_m2_s", "ƒ taxa_reacao_mol_m2_s", true],
+        ["coef_difusao_cm2_s", "coef_difusao_cm2_s", true], ["metodo_coef_difusao", "metodo_coef_difusao"],
+        ["metodo_quantificacao", "metodo_quantificacao"], ["obtencao_dado", "obtencao_dado"],
+        ["cor_celula", "cor_celula"], ["variavel_original", "variavel_original"], ["sistema_original", "sistema_original"],
+      ];
   if (!linhas.length) return <p className="px-6 py-8 m-0 text-center text-[13px] text-[var(--color-neutral-600)]">Nenhuma medida com esses filtros.</p>;
   return (
     <div className={`${compacta ? "max-h-[320px]" : "max-h-[560px]"} overflow-auto px-6`}>
       <table className="table text-[12px]">
-        <thead className="sticky top-0 bg-white z-[1]"><tr>{cols.map(([k, r]) => <th key={k}><Simbolos>{r}</Simbolos></th>)}</tr></thead>
+        <thead className="sticky top-0 bg-white z-[1]">
+          <tr>
+            {cols.map(([k, r]) => (
+              <th key={k} className={COLS_CALCULADAS_RDA.has(k) ? "!bg-[#1b5e20] !text-white whitespace-nowrap" : "whitespace-nowrap"}>
+                <Simbolos>{r}</Simbolos>
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {linhas.map((l) => (
             <tr key={l.id_ensaio} className="lcp-row">
-              {cols.map(([k, , c]) => <td key={k} className={`!py-2 tabular-nums ${k === "id_ensaio" || k === "id_rocha" ? "whitespace-nowrap font-bold text-[var(--color-blue-800)]" : ""}`}>{fmt(l[k], 3, c)}</td>)}
+              {cols.map(([k, , c]) => (
+                <td
+                  key={k}
+                  className={`!py-2 tabular-nums whitespace-nowrap ${
+                    COLS_CALCULADAS_RDA.has(k)
+                      ? "bg-[#f1f8f3] text-[#14532d] font-medium"
+                      : k === "id_ensaio" || k === "id_rocha"
+                      ? "font-bold text-[var(--color-blue-800)]"
+                      : ""
+                  }`}
+                >
+                  {fmt(l[k], 3, c)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

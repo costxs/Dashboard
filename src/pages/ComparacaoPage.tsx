@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check, Download, ExternalLink, Eye, Filter, FlaskConical, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, X,
+  Building2, Check, Download, ExternalLink, Eye, Filter, FlaskConical, FolderKanban, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, X,
 } from "lucide-react";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
 import {
@@ -10,20 +10,29 @@ import {
 import { useConsulta } from "../hooks/useConsulta";
 import { supabase } from "../lib/supabase";
 import { listarLitologias, listarSistemasAcidos, obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
+import { listarEmpresas, listarProjetos } from "../servicos/contexto";
 import { listarPvbt } from "../servicos/pvbt";
 import { useContexto } from "../store/useContexto";
-import type { PontoPvbt, SistemaAcido } from "../tipos/banco";
+import type { FontePvbt, PontoPvbt, SistemaAcido } from "../tipos/banco";
 import { fmt, fmtExato, mensagemErro } from "../utils/formatacao";
 import { classeStatus, STATUS_ROTULO } from "../utils/status";
 
-// Comparação de resultados (PVbt × Q): filtra por litologia, fluidos/sistemas ácidos do catálogo, temperatura, vazão
-// e propriedades do core; permite clicar em qualquer amostra (na lista, nas selecionadas ou nas séries) para ver
-// todos os detalhes da rocha, petrofísica e coreflooding.
+// Comparação de resultados (PVbt × Q): permite comparar amostras e resultados de vários projetos e empresas,
+// filtrar por litologia, fluidos/sistemas ácidos do catálogo, temperatura, vazão e propriedades do core,
+// e clicar em qualquer amostra (na lista, nas selecionadas ou nas séries) para ver todos os detalhes.
 
 interface AmostraPvbt {
   uuid: string;
+  amostraUuidLab: string | null;
   codigo: string;
   litologia: string | null;
+  fonte: FontePvbt;
+  empresaId: string | null;
+  empresaSigla: string;
+  empresaNome: string;
+  projetoId: string | null;
+  projetoCodigo: string;
+  projetoNome: string;
   ensaios: PontoPvbt[];
 }
 interface Serie {
@@ -33,6 +42,9 @@ interface Serie {
 }
 
 interface FiltrosComparacao {
+  empresa: string;
+  projeto: string;
+  incluirLiteratura: boolean;
   litologia: string;
   acido: string;
   temperatura: string;
@@ -45,6 +57,9 @@ interface FiltrosComparacao {
 }
 
 const FILTROS_VAZIOS: FiltrosComparacao = {
+  empresa: "",
+  projeto: "",
+  incluirLiteratura: false,
   litologia: "",
   acido: "",
   temperatura: "",
@@ -108,7 +123,7 @@ async function listarFluidosCatalogo(): Promise<string[]> {
 }
 
 export function ComparacaoPage() {
-  const projetoId = useContexto((s) => s.projetoId);
+  const projetoIdContexto = useContexto((s) => s.projetoId);
   const [busca, setBusca] = useState("");
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtros, setFiltros] = useState<FiltrosComparacao>(FILTROS_VAZIOS);
@@ -123,7 +138,10 @@ export function ComparacaoPage() {
 
   useEffect(() => guardar(series), [series]);
 
-  const base = useConsulta(() => listarPvbt({ fontes: ["LCPETRO"] }), []);
+  // Carrega todos os resultados de PVbt acessíveis (vários projetos, empresas e fontes)
+  const base = useConsulta(() => listarPvbt(), []);
+  const empresasCat = useConsulta(listarEmpresas, []);
+  const projetosCat = useConsulta(() => listarProjetos(), []);
   const litologiasCat = useConsulta(listarLitologias, []);
   const sistemasCat = useConsulta(listarSistemasAcidos, []);
   const fluidosCat = useConsulta(listarFluidosCatalogo, []);
@@ -132,34 +150,111 @@ export function ComparacaoPage() {
     () => new Map((sistemasCat.dados ?? []).map((s) => [s.id_sistema, s])),
     [sistemasCat.dados],
   );
+  const porEmpresa = useMemo(
+    () => new Map((empresasCat.dados ?? []).map((e) => [e.id, e])),
+    [empresasCat.dados],
+  );
+  const porProjeto = useMemo(
+    () => new Map((projetosCat.dados ?? []).map((p) => [p.id, p])),
+    [projetosCat.dados],
+  );
 
-  // amostras do laboratório com coreflooding e PVbt, dentro do projeto aberto
-  const amostras = useMemo<AmostraPvbt[]>(() => {
+  // Todas as amostras com PVbt (de todos os projetos e empresas que o usuário tem acesso)
+  const todasAmostras = useMemo<AmostraPvbt[]>(() => {
     const por = new Map<string, AmostraPvbt>();
     for (const e of base.dados ?? []) {
-      if (e.pvbt == null || !e.amostra_uuid) continue;
-      if (projetoId && e.projeto_id !== projetoId) continue;
-      const a = por.get(e.amostra_uuid) ?? {
-        uuid: e.amostra_uuid,
-        codigo: e.id_amostra ?? e.amostra_uuid,
+      if (e.pvbt == null) continue;
+      const chave = e.amostra_uuid ?? `${e.fonte}:${e.id_amostra || e.id_experimento}`;
+      const proj = e.projeto_id ? porProjeto.get(e.projeto_id) : undefined;
+      const emp = proj ? porEmpresa.get(proj.empresa_id) : undefined;
+
+      const empresaId = emp?.id ?? (e.fonte === "Petrobras" ? "fonte:Petrobras" : e.fonte === "Literatura" ? "fonte:Literatura" : null);
+      const empresaSigla = emp?.sigla ?? (e.fonte === "Petrobras" ? "PETROBRAS" : e.fonte === "Literatura" ? "LITERATURA" : e.fonte);
+      const empresaNome = emp?.nome ?? (e.fonte === "Petrobras" ? "Petrobras" : e.fonte === "Literatura" ? "Literatura Científica" : e.fonte);
+      const projetoId = proj?.id ?? (e.fonte === "Petrobras" ? `petrobras:${e.estudo ?? "geral"}` : e.fonte === "Literatura" ? `lit:${e.id_referencia ?? "geral"}` : e.projeto_id);
+      const projetoCodigo = proj?.codigo ?? (e.fonte === "Petrobras" ? (e.estudo ?? "Petrobras") : e.fonte === "Literatura" ? (e.id_referencia ?? "Literatura") : "—");
+      const projetoNome = proj?.nome ?? (e.fonte === "Petrobras" ? (e.estudo ?? "Base Petrobras") : e.fonte === "Literatura" ? (e.referencia_autor ?? e.id_referencia ?? "Literatura") : "—");
+
+      const a = por.get(chave) ?? {
+        uuid: chave,
+        amostraUuidLab: e.amostra_uuid ?? null,
+        codigo: e.id_amostra || e.id_experimento || chave,
         litologia: e.litologia,
+        fonte: e.fonte,
+        empresaId,
+        empresaSigla,
+        empresaNome,
+        projetoId,
+        projetoCodigo,
+        projetoNome,
         ensaios: [],
       };
       a.ensaios.push(e);
-      por.set(e.amostra_uuid, a);
+      por.set(chave, a);
     }
     return [...por.values()].sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR", { numeric: true }));
-  }, [base.dados, projetoId]);
+  }, [base.dados, porProjeto, porEmpresa]);
 
-  const porUuid = useMemo(() => new Map(amostras.map((a) => [a.uuid, a])), [amostras]);
+  // Amostras considerando o escopo de literatura (por padrão mostra todas as empresas e projetos de laboratório/Petrobras)
+  const amostras = useMemo(
+    () =>
+      todasAmostras.filter((a) => {
+        if (!filtros.incluirLiteratura && a.fonte === "Literatura" && filtros.empresa !== "fonte:Literatura") {
+          return false;
+        }
+        return true;
+      }),
+    [todasAmostras, filtros.incluirLiteratura, filtros.empresa],
+  );
 
-  // Opções para os selects de filtro (puxando todos os ácidos, sistemas ácidos, fluidos e litologias do catálogo)
+  // Mapa completo por uuid (para que séries salvas com amostras de qualquer projeto/empresa ou literatura sempre funcionem)
+  const porUuid = useMemo(() => new Map(todasAmostras.map((a) => [a.uuid, a])), [todasAmostras]);
+
+  // Opções para os selects de filtro (empresas, projetos, ácidos, sistemas ácidos, fluidos e litologias do catálogo)
   const opcoesFiltro = useMemo(() => {
+    // Empresas cadastradas + fontes com dados
+    const empresasOpcoes = new Map<string, { id: string; sigla: string; nome: string }>();
+    for (const emp of empresasCat.dados ?? []) {
+      empresasOpcoes.set(emp.id, { id: emp.id, sigla: emp.sigla, nome: emp.nome });
+    }
+    for (const a of todasAmostras) {
+      if (a.empresaId && !empresasOpcoes.has(a.empresaId)) {
+        empresasOpcoes.set(a.empresaId, { id: a.empresaId, sigla: a.empresaSigla, nome: a.empresaNome });
+      }
+    }
+
+    // Projetos cadastrados + projetos das amostras (filtrados pela empresa se alguma estiver selecionada)
+    const projetosOpcoes = new Map<string, { id: string; codigo: string; nome: string; empresaId: string | null; empresaSigla: string }>();
+    for (const proj of projetosCat.dados ?? []) {
+      const emp = porEmpresa.get(proj.empresa_id);
+      if (filtros.empresa && proj.empresa_id !== filtros.empresa) continue;
+      projetosOpcoes.set(proj.id, {
+        id: proj.id,
+        codigo: proj.codigo,
+        nome: proj.nome,
+        empresaId: proj.empresa_id,
+        empresaSigla: emp?.sigla ?? "—",
+      });
+    }
+    for (const a of todasAmostras) {
+      if (!a.projetoId) continue;
+      if (filtros.empresa && a.empresaId !== filtros.empresa) continue;
+      if (!projetosOpcoes.has(a.projetoId)) {
+        projetosOpcoes.set(a.projetoId, {
+          id: a.projetoId,
+          codigo: a.projetoCodigo,
+          nome: a.projetoNome,
+          empresaId: a.empresaId,
+          empresaSigla: a.empresaSigla,
+        });
+      }
+    }
+
     const litologiasMap = new Map<string, string>();
     for (const l of litologiasCat.dados ?? []) {
       if (l.nome?.trim()) litologiasMap.set(l.nome.trim().toLowerCase(), l.nome.trim());
     }
-    for (const a of amostras) {
+    for (const a of todasAmostras) {
       if (a.litologia?.trim()) {
         const k = a.litologia.trim().toLowerCase();
         if (!litologiasMap.has(k)) litologiasMap.set(k, a.litologia.trim());
@@ -185,7 +280,7 @@ export function ComparacaoPage() {
       addFluido(s.componente_1);
       addFluido(s.componente_2);
     }
-    for (const a of amostras) {
+    for (const a of todasAmostras) {
       for (const e of a.ensaios) addFluido(e.acido);
     }
 
@@ -194,7 +289,7 @@ export function ComparacaoPage() {
     );
 
     const temperaturas = new Set<number>();
-    for (const a of amostras) {
+    for (const a of todasAmostras) {
       for (const e of a.ensaios) {
         const t = tempDoEnsaio(e);
         if (t != null) temperaturas.add(t);
@@ -202,16 +297,40 @@ export function ComparacaoPage() {
     }
 
     return {
+      empresas: [...empresasOpcoes.values()].sort((a, b) => a.sigla.localeCompare(b.sigla, "pt-BR")),
+      projetos: [...projetosOpcoes.values()].sort((a, b) =>
+        `${a.empresaSigla} ${a.codigo}`.localeCompare(`${b.empresaSigla} ${b.codigo}`, "pt-BR"),
+      ),
       litologias: [...litologiasMap.values()].sort((a, b) => a.localeCompare(b, "pt-BR")),
       fluidos: [...fluidosMap.values()].sort((a, b) => a.localeCompare(b, "pt-BR")),
       sistemas: sistemasLista,
       temperaturas: [...temperaturas].sort((a, b) => a - b),
     };
-  }, [amostras, litologiasCat.dados, sistemasCat.dados, fluidosCat.dados]);
+  }, [todasAmostras, empresasCat.dados, projetosCat.dados, porEmpresa, filtros.empresa, litologiasCat.dados, sistemasCat.dados, fluidosCat.dados]);
+
+  const qtdFiltrosCoreAtivos = useMemo(
+    () =>
+      [
+        filtros.litologia,
+        filtros.acido,
+        filtros.temperatura,
+        filtros.vazaoMin,
+        filtros.vazaoMax,
+        filtros.kMin,
+        filtros.kMax,
+        filtros.phiMin,
+        filtros.phiMax,
+      ].filter((v) => v.trim() !== "").length,
+    [filtros],
+  );
 
   const qtdFiltrosAtivos = useMemo(
-    () => Object.values(filtros).filter((v) => v.trim() !== "").length,
-    [filtros],
+    () =>
+      qtdFiltrosCoreAtivos +
+      (filtros.empresa ? 1 : 0) +
+      (filtros.projeto ? 1 : 0) +
+      (filtros.incluirLiteratura ? 1 : 0),
+    [qtdFiltrosCoreAtivos, filtros.empresa, filtros.projeto, filtros.incluirLiteratura],
   );
 
   const ensaioPassaNosFiltros = (e: PontoPvbt): boolean => {
@@ -262,43 +381,53 @@ export function ComparacaoPage() {
   const filtradas = useMemo(() => {
     const t = busca.trim().toLowerCase();
     return amostras.filter((a) => {
+      if (filtros.empresa && a.empresaId !== filtros.empresa) return false;
+      if (filtros.projeto && a.projetoId !== filtros.projeto) return false;
       if (filtros.litologia && (a.litologia ?? "").trim().toLowerCase() !== filtros.litologia.toLowerCase()) return false;
       if (t) {
         const textoAmostra = [
           a.codigo,
           a.litologia ?? "",
+          a.empresaSigla,
+          a.empresaNome,
+          a.projetoCodigo,
+          a.projetoNome,
           ...a.ensaios.map((e) => `${descreverSistemaEnsaio(e, porSistema)} ${e.id_experimento ?? ""} ${tempDoEnsaio(e) ?? ""}C`),
         ]
           .join(" ")
           .toLowerCase();
         if (!textoAmostra.includes(t)) return false;
       }
-      if (qtdFiltrosAtivos > 0) {
+      if (qtdFiltrosCoreAtivos > 0) {
         const temEnsaioCompativel = a.ensaios.some(ensaioPassaNosFiltros);
         if (!temEnsaioCompativel) return false;
       }
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amostras, busca, filtros, qtdFiltrosAtivos, porSistema]);
+  }, [amostras, busca, filtros, qtdFiltrosCoreAtivos, porSistema]);
 
   // séries prontas para o gráfico: PVbt × vazão de cada ensaio das amostras da série
   const { prontas, semVazao } = useMemo(() => {
     let sem = 0;
     const prontas: SerieGrafico[] = series.map((s, i) => {
       const pontos = s.amostras
-        .flatMap((u) => porUuid.get(u)?.ensaios ?? [])
-        .flatMap((e) => {
+        .flatMap((u) => {
+          const am = porUuid.get(u);
+          return (am?.ensaios ?? []).map((e) => ({ am: am!, e }));
+        })
+        .flatMap(({ am, e }) => {
           if ((e.vazao_ml_min ?? 0) <= 0 || (e.pvbt ?? 0) <= 0) {
             sem++;
             return [];
           }
           const ac = descreverSistemaEnsaio(e, porSistema);
+          const ctx = am.projetoCodigo && am.projetoCodigo !== "—" ? `${am.empresaSigla} · ${am.projetoCodigo}` : am.empresaSigla;
           return [
             {
               x: Number(e.vazao_ml_min),
               y: Number(e.pvbt),
-              detalhe: `${e.id_amostra} · ${e.id_experimento}${ac ? ` · ${ac}` : ""}${
+              detalhe: `[${ctx}] ${e.id_amostra} · ${e.id_experimento}${ac ? ` · ${ac}` : ""}${
                 e.temperatura_nominal_c != null ? ` · ${fmt(e.temperatura_nominal_c, 0)} °C` : ""
               }`,
             },
@@ -373,10 +502,10 @@ export function ComparacaoPage() {
     <div>
       <CabecalhoPagina
         titulo="Comparação de resultados"
-        subtitulo="Filtre pelos fluidos e sistemas ácidos do catálogo, clique nas amostras selecionadas para ver seus detalhes completos e compare PVbt × Q"
+        subtitulo="Compare resultados de PVbt × Q entre vários projetos e empresas, filtre pelos fluidos e sistemas ácidos do catálogo e clique nas amostras para inspecionar seus detalhes"
       />
 
-      <div className="px-7 pb-10 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
+      <div className="px-7 pb-10 grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-6 items-start">
         <div className="flex flex-col gap-6">
           <Cartao
             titulo={editando ? "Editando série" : "Nova série"}
@@ -389,7 +518,7 @@ export function ComparacaoPage() {
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-neutral-400)]" />
                   <input
                     className="input !pl-9"
-                    placeholder="Buscar por código, litotipo ou ácido…"
+                    placeholder="Buscar por amostra, empresa, projeto, litotipo ou ácido…"
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
                   />
@@ -400,7 +529,7 @@ export function ComparacaoPage() {
                   className={`btn ${
                     mostrarFiltros || qtdFiltrosAtivos > 0 ? "btn-primary" : "btn-secondary"
                   } !px-3 flex items-center gap-1.5 shrink-0`}
-                  title="Filtrar amostras por ácido/fluido do catálogo, temperatura, vazão, porosidade e permeabilidade"
+                  title="Filtrar amostras por empresa, projeto, ácido/fluido do catálogo, temperatura, vazão, porosidade e permeabilidade"
                 >
                   <SlidersHorizontal size={14} />
                   <span>Filtros</span>
@@ -410,6 +539,86 @@ export function ComparacaoPage() {
                     </span>
                   )}
                 </button>
+              </div>
+
+              {/* Seletores rápidos de Empresas e Projetos (permite comparar vários projetos e empresas) */}
+              <div className="rounded-lg border border-[var(--color-neutral-200)] bg-[var(--color-neutral-100)]/65 p-2.5 flex flex-col gap-2 text-[12px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-blue-800)] flex items-center gap-1">
+                    <Building2 size={12} /> Empresas & Projetos
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {projetoIdContexto && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltros((f) => ({
+                            ...f,
+                            empresa: "",
+                            projeto: f.projeto === projetoIdContexto ? "" : projetoIdContexto,
+                          }))
+                        }
+                        className={`rounded px-2 py-0.5 text-[10px] font-semibold border cursor-pointer transition-colors ${
+                          filtros.projeto === projetoIdContexto
+                            ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
+                            : "border-[var(--color-neutral-300)] bg-white text-[var(--color-neutral-700)] hover:border-[var(--color-blue)]"
+                        }`}
+                        title="Alternar entre apenas o projeto aberto no menu lateral ou todos os projetos"
+                      >
+                        {filtros.projeto === projetoIdContexto ? "Só projeto atual ✓" : "Todos os projetos"}
+                      </button>
+                    )}
+                    <label className="inline-flex items-center gap-1 text-[11px] text-[var(--color-neutral-700)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={filtros.incluirLiteratura}
+                        onChange={(e) => setFiltros((f) => ({ ...f, incluirLiteratura: e.target.checked }))}
+                      />
+                      <span>+ Literatura</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] font-semibold text-[var(--color-neutral-600)]">Empresa / Instituição</span>
+                    <select
+                      className="input !h-8 !py-1 text-[12px]"
+                      value={filtros.empresa}
+                      onChange={(e) =>
+                        setFiltros((f) => ({
+                          ...f,
+                          empresa: e.target.value,
+                          projeto: "",
+                        }))
+                      }
+                    >
+                      <option value="">Todas as empresas ({opcoesFiltro.empresas.length})</option>
+                      {opcoesFiltro.empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.sigla} — {emp.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] font-semibold text-[var(--color-neutral-600)] flex items-center gap-1">
+                      <FolderKanban size={11} /> Projeto
+                    </span>
+                    <select
+                      className="input !h-8 !py-1 text-[12px]"
+                      value={filtros.projeto}
+                      onChange={(e) => setFiltros((f) => ({ ...f, projeto: e.target.value }))}
+                    >
+                      <option value="">Todos os projetos ({opcoesFiltro.projetos.length})</option>
+                      {opcoesFiltro.projetos.map((proj) => (
+                        <option key={proj.id} value={proj.id}>
+                          {proj.empresaSigla} · {proj.codigo}
+                          {proj.nome && proj.nome !== proj.codigo ? ` (${proj.nome})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
 
               {/* Painel de Filtros Expansível */}
@@ -595,7 +804,7 @@ export function ComparacaoPage() {
                 <p className="m-0 py-6 text-center text-[13px] text-[var(--color-neutral-600)]">
                   {amostras.length
                     ? "Nenhuma amostra encontrada com esses filtros."
-                    : "Ainda não há amostra com coreflooding e PVbt neste projeto."}
+                    : "Ainda não há amostras com coreflooding e PVbt disponíveis."}
                 </p>
               ) : (
                 <ul className="m-0 p-0 list-none max-h-[380px] overflow-y-auto flex flex-col divide-y divide-[var(--color-neutral-200)] border border-[var(--color-neutral-200)] rounded-lg">
@@ -614,6 +823,10 @@ export function ComparacaoPage() {
                     ];
                     const estaMarcada = marcadas.has(a.uuid);
                     const emDetalhe = amostraDetalheUuid === a.uuid;
+                    const rotuloContexto =
+                      a.projetoCodigo && a.projetoCodigo !== "—" && a.projetoCodigo !== a.empresaSigla
+                        ? `${a.empresaSigla} · ${a.projetoCodigo}`
+                        : a.empresaSigla;
 
                     return (
                       <li
@@ -640,12 +853,17 @@ export function ComparacaoPage() {
                           title={`Clique para ver todos os detalhes da amostra ${a.codigo}`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-heading font-bold text-[14px] text-[var(--color-red)] group-hover:underline">
-                              {a.codigo}
-                            </span>
-                            <span className="text-[11px] font-semibold text-[var(--color-blue-800)] flex items-center gap-1 group-hover:text-[var(--color-blue)]">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-heading font-bold text-[14px] text-[var(--color-red)] group-hover:underline truncate">
+                                {a.codigo}
+                              </span>
+                              <span className="shrink-0 inline-block rounded bg-[var(--color-blue-100)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-blue-800)]">
+                                {rotuloContexto}
+                              </span>
+                            </div>
+                            <span className="shrink-0 text-[11px] font-semibold text-[var(--color-blue-800)] flex items-center gap-1 group-hover:text-[var(--color-blue)]">
                               <Eye size={12} className="text-[var(--color-blue)]" />
-                              Ver detalhes ({a.ensaios.length})
+                              Detalhes ({a.ensaios.length})
                             </span>
                           </div>
                           <span className="block text-[12px] text-[var(--color-neutral-700)] truncate">
@@ -702,10 +920,11 @@ export function ComparacaoPage() {
                             type="button"
                             onClick={() => abrirDetalhesAmostra(a.uuid)}
                             className="flex items-center gap-1 px-2 py-1 bg-transparent border-0 cursor-pointer text-inherit"
-                            title={`Ver detalhes de ${a.codigo}`}
+                            title={`Ver detalhes de ${a.codigo} (${a.empresaSigla} · ${a.projetoCodigo})`}
                           >
                             <Eye size={12} />
                             <span>{a.codigo}</span>
+                            <span className="opacity-75 text-[10px] font-normal">({a.empresaSigla})</span>
                           </button>
                           <button
                             type="button"
@@ -736,7 +955,7 @@ export function ComparacaoPage() {
                   </span>
                   <input
                     className="input"
-                    placeholder="ex.: BLEND, HCl 15% + IC"
+                    placeholder="ex.: LCPETRO vs Petrobras — HCl 15%"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     onKeyDown={(e) => {
@@ -775,13 +994,13 @@ export function ComparacaoPage() {
             <ul className="m-0 p-0 list-none flex flex-col">
               {!series.length && (
                 <li className="px-5 py-6 text-center text-[13px] text-[var(--color-neutral-600)]">
-                  Marque amostras, dê um nome e clique em "Criar série".
+                  Marque amostras (de um ou mais projetos/empresas), dê um nome e clique em "Criar série".
                 </li>
               )}
               {prontas.map((s) => {
                 const orig = series.find((x) => x.id === s.id)!;
                 const amostrasDaSerie = orig.amostras.map((u) => porUuid.get(u)).filter((a): a is AmostraPvbt => Boolean(a));
-                const faltam = orig.amostras.length - amostrasDaSerie.length;
+                const empresasDaSerie = [...new Set(amostrasDaSerie.map((a) => a.empresaSigla))];
                 return (
                   <li
                     key={s.id}
@@ -796,7 +1015,7 @@ export function ComparacaoPage() {
                         <span className="block font-semibold text-[14px] text-[var(--color-blue-800)] truncate">{s.nome}</span>
                         <span className="block text-[12px] text-[var(--color-neutral-600)]">
                           {amostrasDaSerie.length} amostra(s) · {s.pontos.length} ponto(s)
-                          {faltam ? ` · ${faltam} fora deste projeto` : ""}
+                          {empresasDaSerie.length > 0 ? ` · ${empresasDaSerie.join(", ")}` : ""}
                         </span>
                       </span>
                       <button
@@ -828,10 +1047,11 @@ export function ComparacaoPage() {
                                 ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
                                 : "border-[var(--color-neutral-300)] bg-[var(--color-neutral-100)] text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
                             }`}
-                            title={`Clique para ver os detalhes da amostra ${a.codigo}`}
+                            title={`Clique para ver os detalhes da amostra ${a.codigo} (${a.empresaSigla} · ${a.projetoCodigo})`}
                           >
                             <Eye size={11} />
-                            {a.codigo}
+                            <span>{a.codigo}</span>
+                            <span className="opacity-70 text-[9px]">({a.empresaSigla})</span>
                           </button>
                         ))}
                       </div>
@@ -927,18 +1147,20 @@ function ModalDetalheAmostraCore(p: {
 }) {
   const { amostra, porSistema, selecionada, aoAlternarSelecao, aoFechar } = p;
   const e0 = amostra.ensaios[0];
+  const uuidLab = amostra.amostraUuidLab;
 
-  // Busca dados completos da amostra em v_amostras, observações do controle e registros detalhados de analise_coreflooding
-  const ficha = useConsulta(() => obterAmostra(amostra.uuid), [amostra.uuid]);
-  const controle = useConsulta(() => obterControleDaAmostra(amostra.uuid), [amostra.uuid]);
+  // Busca dados completos da amostra em v_amostras, observações do controle e registros detalhados de analise_coreflooding (quando é amostra do laboratório)
+  const ficha = useConsulta(() => (uuidLab ? obterAmostra(uuidLab) : Promise.resolve(null)), [uuidLab]);
+  const controle = useConsulta(() => (uuidLab ? obterControleDaAmostra(uuidLab) : Promise.resolve(null)), [uuidLab]);
   const corefloods = useConsulta(async () => {
+    if (!uuidLab) return [];
     const { data } = await supabase
       .from("analise_coreflooding")
       .select("*")
-      .eq("amostra_id", amostra.uuid)
+      .eq("amostra_id", uuidLab)
       .order("id", { ascending: true });
     return (data ?? []) as CorefloodExtra[];
-  }, [amostra.uuid]);
+  }, [uuidLab]);
 
   const cfPorId = useMemo(
     () => new Map((corefloods.dados ?? []).map((c) => [c.id, c])),
@@ -947,7 +1169,7 @@ function ModalDetalheAmostraCore(p: {
 
   const resumo = ficha.dados;
   const origemTxt = useMemo(() => {
-    if (!resumo) return null;
+    if (!resumo) return e0?.estudo ?? e0?.referencia_autor ?? null;
     if (resumo.tipo_origem === "testemunho") {
       return [
         resumo.poco && `Poço ${resumo.poco}`,
@@ -960,7 +1182,7 @@ function ModalDetalheAmostraCore(p: {
         .join(" · ");
     }
     return [resumo.afloramento_local, resumo.fornecedor].filter(Boolean).join(" · ");
-  }, [resumo]);
+  }, [resumo, e0]);
 
   const diam = resumo?.diametro_cm ?? e0?.diametro_cm;
   const comp = resumo?.comprimento_cm ?? e0?.comprimento_cm;
@@ -970,10 +1192,16 @@ function ModalDetalheAmostraCore(p: {
   const pConf = e0?.p_confinamento_psi ?? resumo?.pressao_confinamento_psi;
 
   const itensCore: { rotulo: string; valor: string }[] = [
+    {
+      rotulo: "Empresa / Projeto",
+      valor: `${amostra.empresaSigla}${amostra.projetoCodigo && amostra.projetoCodigo !== "—" ? ` · ${amostra.projetoCodigo}` : ""}`,
+    },
     { rotulo: "Litologia", valor: resumo?.litologia ?? amostra.litologia ?? "—" },
     {
       rotulo: "Origem / Procedência",
-      valor: resumo ? `${resumo.tipo_origem}${origemTxt ? ` · ${origemTxt}` : ""}` : "—",
+      valor: resumo
+        ? `${resumo.tipo_origem}${origemTxt ? ` · ${origemTxt}` : ""}`
+        : `${amostra.fonte}${origemTxt ? ` · ${origemTxt}` : ""}`,
     },
     {
       rotulo: "Dimensões do Core (D × L)",
@@ -1007,17 +1235,6 @@ function ModalDetalheAmostraCore(p: {
       valor: resumo?.k_liquido_depois_md != null ? `${fmt(resumo.k_liquido_depois_md, 3)} mD` : "—",
     },
     {
-      rotulo: "Perm. Fabricante",
-      valor:
-        resumo?.permeabilidade_fabricante_min_md != null &&
-        resumo?.permeabilidade_fabricante_max_md != null &&
-        resumo.permeabilidade_fabricante_min_md !== resumo.permeabilidade_fabricante_max_md
-          ? `${fmt(resumo.permeabilidade_fabricante_min_md, 1)}–${fmt(resumo.permeabilidade_fabricante_max_md, 1)} mD`
-          : resumo?.permeabilidade_fabricante_md != null
-          ? `${fmt(resumo.permeabilidade_fabricante_md, 1)} mD`
-          : "—",
-    },
-    {
       rotulo: "Pressão de Confinamento",
       valor: pConf != null ? `${fmt(pConf, 0)} psi` : "—",
     },
@@ -1044,7 +1261,7 @@ function ModalDetalheAmostraCore(p: {
       subtitulo={
         resumo
           ? `${resumo.empresa} · ${resumo.projeto} · Status: ${STATUS_ROTULO[resumo.status] ?? resumo.status}`
-          : "Propriedades físicas do core, petrofísica e parâmetros dos ensaios de acidificação"
+          : `${amostra.empresaNome} · ${amostra.projetoNome}`
       }
       acoes={
         <div className="flex flex-wrap items-center gap-2">
@@ -1064,13 +1281,15 @@ function ModalDetalheAmostraCore(p: {
               </>
             )}
           </button>
-          <Link
-            to={`/amostras/${amostra.uuid}`}
-            className="btn btn-secondary !py-1.5 no-underline flex items-center gap-1.5"
-            title="Abrir ficha completa da amostra"
-          >
-            <ExternalLink size={14} /> Abrir ficha completa
-          </Link>
+          {uuidLab && (
+            <Link
+              to={`/amostras/${uuidLab}`}
+              className="btn btn-secondary !py-1.5 no-underline flex items-center gap-1.5"
+              title="Abrir ficha completa da amostra"
+            >
+              <ExternalLink size={14} /> Abrir ficha completa
+            </Link>
+          )}
           <button
             type="button"
             onClick={aoFechar}

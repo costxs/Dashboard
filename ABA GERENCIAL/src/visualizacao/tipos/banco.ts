@@ -286,6 +286,10 @@ export interface DadoLiteraturaRda {
   litologia: string
   composicao_rocha: string | null
   calcita_pct: number | null
+  dolomita_pct?: number | null
+  razao_ca_mg?: number | null
+  dim_h_in?: number | null
+  dim_d_in?: number | null
   id_sistema: string
   nome_sistema: string
   acido: string
@@ -304,8 +308,15 @@ export interface DadoLiteraturaRda {
   shear_rate_s1: number | null
   taxa_reacao_mol_cm2_s: number | null
   taxa_reacao_mol_m2_s: number | null
+  coef_difusao_cm2_s?: number | null
+  metodo_coef_difusao?: string | null
   metodo_quantificacao: string | null
   obtencao_dado: string | null
+  cor_celula?: string | null
+  variavel_original?: string | null
+  sistema_original?: string | null
+  conferido?: boolean
+  observacao?: string | null
   criado_em?: string | null
 }
 

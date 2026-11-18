@@ -192,8 +192,7 @@ export const AmostraPage: React.FC = () => {
             antes={cfgVisual.chave === 'coreflooding'
               ? <PermeabilidadeCoreflood amostraId={a.id} amostra={{ codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} />
               : undefined}
-            extra={cfgVisual.chave === 'coreflooding' ? <PvbtDaAmostra amostraId={a.id} codigo={a.codigo} />
-              : cfgVisual.chave === 'rda' ? <RdaDaAmostra codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} /> : undefined}
+            extra={cfgVisual.chave === 'coreflooding' ? <PvbtDaAmostra amostraId={a.id} codigo={a.codigo} /> : undefined}
           />
         )}
 
@@ -202,7 +201,7 @@ export const AmostraPage: React.FC = () => {
         )}
 
         {cfgAtiva?.chave === 'rda' && (
-          <SeriesRdaLaboratorio amostraId={a.id} codigo={a.codigo} projetoId={a.projeto_id} podeEditar={podeEditar}
+          <SeriesRdaLaboratorio amostraId={a.id} codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} podeEditar={podeEditar}
             aoMudar={() => { setVersaoRda((v) => v + 1); void carregar() }} />
         )}
 

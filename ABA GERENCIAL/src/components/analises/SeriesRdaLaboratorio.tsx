@@ -17,10 +17,11 @@ import { lancarResultadoRda, type ResultadoDoEnsaio } from '../../importador/rda
 import { supabase } from '../../lib/supabase'
 import { GraficoLevich, ListaProblemas } from '../../literatura/reatividade/pecas'
 import { explicarErro020, listarListas, literaturaComparavel, seriesRdaDaAmostra, type RdaLaboratorio } from '../../literatura/reatividade/servico'
+import { RdaDaAmostra } from '../../visualizacao/components/analises/RdaDaAmostra'
 import { listarAmostras, listarSistemasAcidos } from '../../servicos/api'
 import { fmt, mensagemErro } from '../../utils/formatacao'
 
-interface Props { amostraId: string; codigo: string; projetoId: string; podeEditar: boolean; aoMudar: () => void }
+interface Props { amostraId: string; codigo: string; projetoId: string; litologia?: string; podeEditar: boolean; aoMudar: () => void }
 interface LinhaDisco { amostra_id: string; rpm: string; taxa: string; curva: string; data: string }
 
 const UN_COMPRIMENTO: UnComprimento[] = ['in', 'cm', 'mm']
@@ -42,7 +43,7 @@ function lerCurva(texto: string): { tempo_min: number; ca_mg_l: number }[] {
   return pts
 }
 
-export const SeriesRdaLaboratorio: React.FC<Props> = ({ amostraId, codigo, projetoId, podeEditar, aoMudar }) => {
+export const SeriesRdaLaboratorio: React.FC<Props> = ({ amostraId, codigo, projetoId, litologia, podeEditar, aoMudar }) => {
   const series = useConsulta(() => seriesRdaDaAmostra(amostraId), [amostraId])
   const [aberto, setAberto] = useState(false)
   const [sucesso, setSucesso] = useState<string | null>(null)
@@ -163,6 +164,7 @@ export const SeriesRdaLaboratorio: React.FC<Props> = ({ amostraId, codigo, proje
         aoGravar={(msg) => { setLancando(null); setSucesso(msg); series.recarregar(); aoMudar() }} />
     )}
 
+    <RdaDaAmostra codigo={codigo} projetoId={projetoId} litologia={litologia} />
     <LiteraturaComparavelCard amostraId={amostraId} meus={meus} />
     </>
   )

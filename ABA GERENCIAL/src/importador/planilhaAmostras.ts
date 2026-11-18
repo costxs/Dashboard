@@ -300,17 +300,20 @@ export function casarLitologia(original: string, catalogo: string[]): { nome: st
 export function lerUtilizacao(s: string): Omit<SugestaoRda, "_aba" | "_linha" | "codigo"> {
   const partes = s.split(/\s+-\s+/).map((p) => p.trim());
   const conc = /\[\s*([\d.,]+)\s*([a-z%/ ]*)\]/i.exec(s);
-  const acido = /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +]*?)\s*\[/.exec(s);
-  const temp = /([\d.,]+)\s*°\s*C/i.exec(s);
+  const acido = conc ? /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +]*?)\s*\[/.exec(s) : null;
+  const semColchete = !conc
+    ? /\b(HCl|GLDA|MAS|EDTA|HF|[ÁA]cido\s+[A-Za-zÀ-ú]+)\s+([\d.,]+)\s*(wt\s*%|vol\s*%|%|M|N|mM)\b/i.exec(s)
+    : null;
+  const temp = /T?\s*([\d.,]+)\s*(?:°\s*C|\bC\b)/i.exec(s);
   const rpm = /@\s*([\d.,]+)/.exec(s);
   const formacao = partes.find((p, i) => i > 1 && !/°|@|\[/.test(p)) ?? null;
   const num = (x: string | undefined) => (x == null ? null : numero(x));
   return {
     texto: s,
     ensaio: partes.length > 1 && !/\[/.test(partes[0]) ? partes[0] : null,
-    acido: acido ? acido[1].trim() : null,
-    concentracao: num(conc?.[1]),
-    unidade: conc ? (conc[2].trim() || null) : null,
+    acido: acido ? acido[1].trim() : semColchete ? semColchete[1].trim() : null,
+    concentracao: num(conc?.[1] ?? semColchete?.[2]),
+    unidade: conc ? (conc[2].trim() || null) : semColchete ? (semColchete[3].replace(/\s+/g, "") || null) : null,
     formacao,
     temperatura_c: num(temp?.[1]),
     rotacao_rpm: num(rpm?.[1]),
