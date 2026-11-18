@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Simbolos } from "../components/ui/Simbolos";
 import { useNavigate } from "react-router-dom";
-import { ArrowDown, ArrowUp, ChartScatter, Disc, Layers, LayoutGrid, LayoutList, List, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartScatter, Disc, Layers, LayoutGrid, LayoutList, List, Lock, MapPin, RotateCcw } from "lucide-react";
 import { GraficoDispersao } from "../components/charts/GraficoDispersao";
 import { Select } from "../components/ui/Select";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
@@ -12,18 +12,32 @@ import { useContexto } from "../store/useContexto";
 import type { AmostraResumo, StatusAmostra, TipoOrigem } from "../tipos/banco";
 import { classeStatus, STATUS_ROTULO } from "../utils/status";
 import {
-  agruparAmostras, dimensoes, filtrarAmostras, fluidoDe, opcoesDeFiltro, prefixoDe, tipoDe, tituloPrefixo,
+  agruparAmostras,
+  dimensoes,
+  ehVisaoLimitadaLcpetro,
+  experimentosDaAmostra,
+  filtrarAmostras,
+  fluidoDe,
+  litologiaSegura,
+  ondeAmostraEsta,
+  opcoesDeFiltro,
+  prefixoDe,
+  tipoDe,
+  tituloPrefixo,
 } from "../utils/bancoAmostras";
 
 const ROTULO_TIPO: Record<string, string> = { plug: "Plug", disco: "Disco", outro: "Outro" };
 
 const TODOS = "Todos";
+type EscopoLcpetro = "Todas do laboratório" | "Só internas (LC PETRO)" | "Só projetos externos";
 type Filtros = {
+  escopo: EscopoLcpetro;
   tipo: string; prefixo: string; fluido: string;
   litologia: string; origem: string; status: string; bacia: string; campo: string; poco: string;
   kMin: string; kMax: string;
 };
 const filtrosIniciais: Filtros = {
+  escopo: "Todas do laboratório",
   tipo: TODOS, prefixo: TODOS, fluido: TODOS,
   litologia: TODOS, origem: TODOS, status: TODOS, bacia: TODOS, campo: TODOS, poco: TODOS, kMin: "", kMax: "",
 };
@@ -31,6 +45,7 @@ const filtrosIniciais: Filtros = {
 export function SamplesListPage() {
   const navigate = useNavigate();
   const empresaId = useContexto((s) => s.empresaId);
+  const empresaSigla = useContexto((s) => s.empresaSigla);
   const projetoId = useContexto((s) => s.projetoId);
   const busca = useContexto((s) => s.busca);
   const definirBusca = useContexto((s) => s.definirBusca);
@@ -38,13 +53,19 @@ export function SamplesListPage() {
   const [f, setF] = useState<Filtros>(filtrosIniciais);
   const [ordemK, setOrdemK] = useState<"asc" | "desc" | null>(null);
 
+  // Empresa interna LC PETRO vê todas as amostras do laboratório independente de projeto ou empresa
+  const noLcpetro = (empresaSigla ?? "").trim().toUpperCase() === "LCPETRO";
+
   const litologias = useConsulta(listarLitologias, []);
-  const opcoes = useConsulta(() => opcoesFiltro(projetoId ?? undefined, empresaId ?? undefined), [projetoId, empresaId]);
+  const opcoes = useConsulta(
+    () => opcoesFiltro(noLcpetro ? undefined : (projetoId ?? undefined), noLcpetro ? undefined : (empresaId ?? undefined)),
+    [noLcpetro, projetoId, empresaId],
+  );
   const num = (s: string) => (s.trim() === "" ? undefined : Number(s.replace(",", ".")));
 
   const amostras = useConsulta(() => listarAmostras({
-    projetoId: projetoId ?? undefined,
-    empresaId: empresaId ?? undefined,
+    projetoId: noLcpetro ? undefined : (projetoId ?? undefined),
+    empresaId: noLcpetro ? undefined : (empresaId ?? undefined),
     busca: busca || undefined,
     litologias: f.litologia !== TODOS ? [f.litologia] : undefined,
     tipoOrigem: f.origem === "Afloramento" ? "afloramento" : f.origem === "Testemunho" ? "testemunho" : undefined,
@@ -52,13 +73,16 @@ export function SamplesListPage() {
     bacia: f.bacia !== TODOS ? f.bacia : undefined,
     campo: f.campo !== TODOS ? f.campo : undefined,
     poco: f.poco !== TODOS ? f.poco : undefined,
-  }), [projetoId, empresaId, busca, f.litologia, f.origem, f.status, f.bacia, f.campo, f.poco]);
+  }), [noLcpetro, projetoId, empresaId, busca, f.litologia, f.origem, f.status, f.bacia, f.campo, f.poco]);
 
-  // tipo, prefixo e fluido filtram a lista já carregada (as opções saem dela)
-  const todas = amostras.dados ?? [];
+  const todas = (amostras.dados ?? []).filter((a) => {
+    if (!noLcpetro) return true;
+    if (f.escopo === "Só internas (LC PETRO)") return (a.empresa ?? "").toUpperCase() === "LCPETRO";
+    if (f.escopo === "Só projetos externos") return (a.empresa ?? "").toUpperCase() !== "LCPETRO";
+    return true;
+  });
   const opcoesBanco = opcoesDeFiltro(todas);
   const semTodos = (v: string) => (v === TODOS ? "" : v);
-  // k mín./k máx. usam o k mostrado na lista; a faixa do fabricante entra se cruzar o intervalo
   const [kMin, kMax] = [num(f.kMin), num(f.kMax)];
   const lista = filtrarAmostras(todas, { tipo: semTodos(f.tipo), prefixo: semTodos(f.prefixo), fluido: semTodos(f.fluido), litologia: "", status: "" })
     .filter((a) => {
@@ -67,7 +91,6 @@ export function SamplesListPage() {
       return k != null && !(kMin != null && k.max < kMin) && !(kMax != null && k.min > kMax);
     });
   if (ordemK) {
-    // ordena pelo valor mostrado (na faixa, o mínimo); sem k vai para o fim
     const valor = (a: AmostraResumo) => melhorK(a)?.min;
     lista.sort((a, b) => {
       const [x, y] = [valor(a), valor(b)];
@@ -79,15 +102,16 @@ export function SamplesListPage() {
   const limpar = () => { setF(filtrosIniciais); definirBusca(""); };
   const testemunho = f.origem === "Testemunho";
   const pontosGrafico = lista.filter((s) => s.porosidade_pct != null && s.k_liquido_md != null && Number(s.k_liquido_md) > 0)
-    .map((s) => ({ x: Number(s.porosidade_pct), y: Number(s.k_liquido_md), rotulo: s.codigo, detalhe: s.litologia, id: s.id }));
+    .map((s) => ({ x: Number(s.porosidade_pct), y: Number(s.k_liquido_md), rotulo: s.codigo, detalhe: litologiaSegura(s, ehVisaoLimitadaLcpetro(s, empresaSigla)), id: s.id }));
 
-  const COLUNAS = 9;
+  const COLUNAS = 10;
   const cabecalho = (
     <thead>
       <tr>
         <th>Código</th>
         <th>Litotipo</th>
-        <th>Localização / poço</th>
+        <th>Onde está / Localização</th>
+        <th>Experimentos</th>
         <th>Dimensões</th>
         <th>Fluido</th>
         <th className="text-right"><Simbolos>φ (%)</Simbolos></th>
@@ -101,8 +125,11 @@ export function SamplesListPage() {
     </thead>
   );
   const linhaAmostra = (s: AmostraResumo) => {
-    const fluido = fluidoDe(s);
+    const limitada = ehVisaoLimitadaLcpetro(s, empresaSigla);
+    const fluido = limitada ? null : fluidoDe(s);
     const k = melhorK(s);
+    const exps = experimentosDaAmostra(s);
+    const onde = ondeAmostraEsta(s);
     return (
       <tr key={s.id} className="lcp-row cursor-pointer" onClick={() => navigate(`/amostras/${s.id}`)}>
         <td className="whitespace-nowrap">
@@ -110,19 +137,58 @@ export function SamplesListPage() {
           <span className="block text-[11px] text-[var(--color-neutral-500)]">
             {[prefixoDe(s), s.significado_prefixo].filter(Boolean).join(" · ") || "—"}
           </span>
-          {!projetoId && <span className="tag tag-neutral mt-1 !px-1.5 !py-0 !text-[9px]" title="Projeto">{s.projeto}</span>}
+          {limitada ? (
+            <span className="inline-flex items-center gap-1 rounded bg-[var(--color-orange-50)] border border-[var(--color-orange-200)] text-[var(--color-orange-700)] mt-1 px-1.5 py-0.5 text-[10px] font-semibold" title="Amostra de projeto externo — dados sensíveis protegidos">
+              <Lock size={10} /> {s.empresa} · {s.projeto}
+            </span>
+          ) : (noLcpetro || !projetoId) ? (
+            <span className="tag tag-neutral mt-1 !px-1.5 !py-0 !text-[9px]" title="Projeto">{s.empresa} · {s.projeto}</span>
+          ) : null}
         </td>
-        <td className="text-[var(--color-neutral-800)]">{s.litologia}</td>
-        <td className="text-[13px]"><OrigemTexto a={s} /></td>
+        <td className="text-[var(--color-neutral-800)]">{litologiaSegura(s, limitada)}</td>
+        <td className="text-[12px]">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-[var(--color-blue-800)] flex items-center gap-1">
+              <MapPin size={12} className="text-[var(--color-orange)] shrink-0" />
+              {onde.localFisico}
+            </span>
+            {limitada ? (
+              <span className="text-[11px] text-[var(--color-neutral-500)]">
+                Alocada em <strong>{s.empresa}</strong> ({s.projeto}) · origem protegida
+              </span>
+            ) : (
+              <span className="text-[11px]"><OrigemTexto a={s} /></span>
+            )}
+          </div>
+        </td>
+        <td className="text-[12px]">
+          {exps.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {exps.map((exp) => (
+                <span key={exp} className="tag tag-blue !px-1.5 !py-0.5 !text-[10px]">{exp}</span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[11px] text-[var(--color-neutral-400)]">Sem experimentos</span>
+          )}
+        </td>
         <td className="text-[13px] tabular-nums whitespace-nowrap text-[var(--color-neutral-700)]">{dimensoes(s)}</td>
         <td className="text-[13px] text-[var(--color-neutral-700)]">
-          {fluido ? <>{fluido.texto}{fluido.previsto && <span className="ml-1 italic text-[var(--color-neutral-500)]">(previsto)</span>}</> : "—"}
+          {limitada ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-neutral-500)] italic" title="Fluido/formulação confidencial do projeto externo">
+              <Lock size={11} /> Protegido
+            </span>
+          ) : fluido ? (
+            <>{fluido.texto}{fluido.previsto && <span className="ml-1 italic text-[var(--color-neutral-500)]">(previsto)</span>}</>
+          ) : "—"}
         </td>
         <td className="text-right tabular-nums">{fmt(s.porosidade_pct, 1)}</td>
         <td className="text-right tabular-nums whitespace-nowrap">
           {k ? <>{k.texto}<span className="block text-[11px] text-[var(--color-neutral-500)]">{k.origem}</span></> : "—"}
         </td>
-        <td className="text-right tabular-nums font-heading font-extrabold text-[var(--color-blue)]">{fmt(s.pvbt, 2)}</td>
+        <td className="text-right tabular-nums font-heading font-extrabold text-[var(--color-blue)]">
+          {limitada ? <span className="text-[11px] font-normal text-[var(--color-neutral-400)]" title="Resultado protegido">🔒</span> : fmt(s.pvbt, 2)}
+        </td>
         <td><span className={classeStatus(s.status)}>{STATUS_ROTULO[s.status]}</span></td>
       </tr>
     );
@@ -134,7 +200,13 @@ export function SamplesListPage() {
     <div>
       <CabecalhoPagina
         titulo="Banco de Amostras"
-        subtitulo={<>{lista.length} amostra(s){busca && <> · busca "<strong>{busca}</strong>"</>}</>}
+        subtitulo={
+          <>
+            {lista.length} amostra(s)
+            {noLcpetro && <> · <strong>Visão Global do Laboratório LC PETRO</strong> (inclui amostras externas com dados sensíveis protegidos)</>}
+            {busca && <> · busca "<strong>{busca}</strong>"</>}
+          </>
+        }
         acoes={<>
           <div className="flex border border-[var(--color-neutral-300)] rounded-[10px] overflow-hidden shrink-0">
             <div onClick={() => setView("grupos")} title="Agrupar por tipo de amostra e prefixo do código"
@@ -158,6 +230,10 @@ export function SamplesListPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-5 items-end bg-white border-y border-[var(--color-neutral-300)] px-7 py-4">
+        {noLcpetro && (
+          <Select label="Escopo no Laboratório" value={f.escopo} onChange={(v) => mudar({ escopo: v as EscopoLcpetro })}
+            options={["Todas do laboratório", "Só internas (LC PETRO)", "Só projetos externos"]} />
+        )}
         <Select label="Tipo" value={f.tipo} onChange={(v) => mudar({ tipo: v })}
           options={[TODOS, "plug", "disco", ...(todas.some((a) => tipoDe(a) === "outro") ? ["outro"] : [])]} rotulos={ROTULO_TIPO} />
         <Select label="Prefixo" value={f.prefixo} onChange={(v) => mudar({ prefixo: v })} options={[TODOS, ...opcoesBanco.prefixos]} />
@@ -214,7 +290,6 @@ export function SamplesListPage() {
                   {cabecalho}
                   {grupo.prefixos.map((g) => (
                     <tbody key={g.prefixo}>
-                      {/* o prefixo já aparece abaixo de cada código: a faixa só entra quando ele tem significado cadastrado */}
                       {(!g.prefixo || g.significado != null) && (
                         <tr>
                           <td colSpan={COLUNAS} className="!border-b-2 !border-[var(--color-blue-200)] !bg-[var(--color-blue-50)] !py-2">
@@ -255,24 +330,43 @@ export function SamplesListPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-7 pt-4 pb-10">
-          {lista.map((s) => (
-            <div key={s.id} onClick={() => navigate(`/amostras/${s.id}`)}
-              className="bg-white border border-[var(--color-neutral-300)] border-t-4 border-t-[var(--color-orange)] rounded-[14px] px-[22px] pt-[18px] pb-[20px] cursor-pointer flex flex-col gap-3.5 hover:shadow-md hover:border-[var(--color-blue-200)] transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="m-0 font-heading font-extrabold text-[15px] tracking-[0.04em] text-[var(--color-red)]">{s.codigo}</p>
-                  <p className="mt-1 text-[14px] font-semibold text-[var(--color-blue-800)]">{s.litologia}</p>
-                  <p className="mt-1 text-[12px] text-[var(--color-neutral-600)]"><OrigemTexto a={s} /></p>
+          {lista.map((s) => {
+            const limitada = ehVisaoLimitadaLcpetro(s, empresaSigla);
+            const exps = experimentosDaAmostra(s);
+            const onde = ondeAmostraEsta(s);
+            return (
+              <div key={s.id} onClick={() => navigate(`/amostras/${s.id}`)}
+                className="bg-white border border-[var(--color-neutral-300)] border-t-4 border-t-[var(--color-orange)] rounded-[14px] px-[22px] pt-[18px] pb-[20px] cursor-pointer flex flex-col gap-3.5 hover:shadow-md hover:border-[var(--color-blue-200)] transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="m-0 font-heading font-extrabold text-[15px] tracking-[0.04em] text-[var(--color-red)]">{s.codigo}</p>
+                      {limitada && (
+                        <span className="inline-flex items-center gap-1 rounded bg-[var(--color-orange-50)] border border-[var(--color-orange-200)] text-[var(--color-orange-700)] px-1.5 py-0.5 text-[10px] font-semibold">
+                          <Lock size={10} /> {s.empresa}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[14px] font-semibold text-[var(--color-blue-800)]">{litologiaSegura(s, limitada)}</p>
+                    <p className="mt-1 text-[12px] text-[var(--color-neutral-600)]">{onde.localFisico}</p>
+                  </div>
+                  <span className={classeStatus(s.status)}>{STATUS_ROTULO[s.status]}</span>
                 </div>
-                <span className={classeStatus(s.status)}>{STATUS_ROTULO[s.status]}</span>
+                {exps.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {exps.map((exp) => (
+                      <span key={exp} className="tag tag-blue !px-1.5 !py-0.5 !text-[10px]">{exp}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-3 border-t border-[var(--color-neutral-200)] pt-3">
+                  <Metrica rotulo="Poros. (%)" valor={fmt(s.porosidade_pct, 1)} />
+                  <Metrica rotulo="k (mD)" valor={melhorK(s)?.texto ?? "—"} />
+                  <Metrica rotulo="PVbt" valor={limitada ? "🔒" : fmt(s.pvbt, 2)} destaque={!limitada} />
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-3 border-t border-[var(--color-neutral-200)] pt-3">
-                <Metrica rotulo="Poros. (%)" valor={fmt(s.porosidade_pct, 1)} />
-                <Metrica rotulo="k (mD)" valor={melhorK(s)?.texto ?? "—"} />
-                <Metrica rotulo="PVbt" valor={fmt(s.pvbt, 2)} destaque />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Layers, Plus, Search, Trash2, Edit3, ArrowRight, Disc, LayoutList, List, RotateCcw } from 'lucide-react'
+import { Layers, Plus, Search, Trash2, Edit3, ArrowRight, Disc, LayoutList, List, Lock, MapPin, RotateCcw } from 'lucide-react'
 import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge, CabecalhoPagina, Vazio } from '../components/UI'
 import { useAuth } from '../context/AuthContext'
 import { usePapeis } from '../hooks/usePapel'
@@ -12,7 +12,8 @@ import {
 import { useContexto } from '../store/useContexto'
 import type { Amostra, Projeto, Litologia } from '../tipos/banco'
 import {
-  agruparAmostras, dimensoes, filtrarAmostras, FILTROS_VAZIOS, fluidoDe, opcoesDeFiltro, prefixoDe, tipoDe, tituloPrefixo,
+  agruparAmostras, dimensoes, ehVisaoLimitadaLcpetro, experimentosDaAmostra, filtrarAmostras, FILTROS_VAZIOS, fluidoDe,
+  litologiaSegura, ondeAmostraEsta, opcoesDeFiltro, prefixoDe, tipoDe, tituloPrefixo,
   type FiltrosBanco,
 } from '../utils/bancoAmostras'
 import { fmt, fmtFaixaMd, numeroParaInput, paraNumero } from '../utils/formatacao'
@@ -36,7 +37,9 @@ const NOVA_LITOLOGIA = '__nova__'
 export const AmostrasPage: React.FC = () => {
   const navigate = useNavigate()
   const empresaId = useContexto((s) => s.empresaId)
+  const empresaSigla = useContexto((s) => s.empresaSigla)
   const projetoContexto = useContexto((s) => s.projetoId)
+  const noLcpetro = (empresaSigla ?? '').trim().toUpperCase() === 'LCPETRO'
 
   const [amostras, setAmostras] = useState<AmostraResumo[]>([])
   const [projetos, setProjetos] = useState<Projeto[]>([])
@@ -118,8 +121,12 @@ export const AmostrasPage: React.FC = () => {
     setLoading(true)
     try {
       const [ams, projs, lits] = await Promise.all([
-        listarAmostras({ projeto_id: projetoContexto ?? (projetoFiltro || null), empresa_id: empresaId, busca: termo }),
-        listarProjetos(empresaId),
+        listarAmostras({
+          projeto_id: noLcpetro ? (projetoFiltro || null) : (projetoContexto ?? (projetoFiltro || null)),
+          empresa_id: noLcpetro ? null : empresaId,
+          busca: termo,
+        }),
+        listarProjetos(noLcpetro ? null : empresaId),
         listarLitologias()
       ])
       setAmostras(ams)
@@ -265,10 +272,13 @@ export const AmostrasPage: React.FC = () => {
   )
 
   const linhaAmostra = (a: AmostraResumo) => {
-    const editavel = papeis[a.projeto_id] === 'editor'
+    const limitada = ehVisaoLimitadaLcpetro(a, empresaSigla)
+    const editavel = !limitada && papeis[a.projeto_id] === 'editor'
     const prefixo = prefixoDe(a)
-    const fluido = fluidoDe(a)
+    const fluido = limitada ? null : fluidoDe(a)
     const local = a.afloramento_local || a.fornecedor
+    const exps = experimentosDaAmostra(a)
+    const onde = ondeAmostraEsta(a)
     return (
       <tr key={a.id} className="lcp-row">
         <td>
@@ -278,9 +288,13 @@ export const AmostrasPage: React.FC = () => {
           <span className="block text-[10px] text-[var(--color-neutral-500)]">
             {[prefixo, a.significado_prefixo].filter(Boolean).join(' · ') || '—'}
           </span>
-          {!projetoContexto && (a.projeto || a.empresa) && (
-            <span className="tag tag-neutral mt-1 !px-1.5 !py-0 !text-[9px]" title="Projeto">{a.projeto || a.empresa}</span>
-          )}
+          {limitada ? (
+            <span className="inline-flex items-center gap-1 rounded bg-[var(--color-orange-50)] border border-[var(--color-orange-200)] text-[var(--color-orange-700)] mt-1 px-1.5 py-0.5 text-[9px] font-semibold" title="Amostra de projeto externo — dados sensíveis protegidos">
+              <Lock size={9} /> {a.empresa} · {a.projeto}
+            </span>
+          ) : (noLcpetro || !projetoContexto) && (a.projeto || a.empresa) ? (
+            <span className="tag tag-neutral mt-1 !px-1.5 !py-0 !text-[9px]" title="Projeto">{a.empresa} · {a.projeto}</span>
+          ) : null}
         </td>
         <td>
           <Badge variant={a.tipo_origem === 'testemunho' ? 'blue' : 'amber'}>
@@ -288,41 +302,67 @@ export const AmostrasPage: React.FC = () => {
           </Badge>
         </td>
         <td className="text-[var(--color-text)] font-medium">
-          {a.litologia}
+          {litologiaSegura(a, limitada)}
         </td>
         <td className="text-[var(--color-neutral-700)]">
-          {a.tipo_origem === 'testemunho' ? (
-            <div>
-              <span>Poço: {a.poco || '—'}</span>
-              <span className="block text-[10px] text-[var(--color-neutral-600)]">
-                {a.bacia ? `Bacia: ${a.bacia}` : ''} {a.profundidade_m ? `(${fmt(a.profundidade_m)} m)` : ''}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-semibold text-[var(--color-blue-800)] flex items-center gap-1">
+              <MapPin size={11} className="text-[var(--color-orange)] shrink-0" />
+              {onde.localFisico}
+            </span>
+            {limitada ? (
+              <span className="text-[10px] text-[var(--color-neutral-500)]">
+                Alocada em <strong>{a.empresa}</strong> ({a.projeto}) · origem protegida
               </span>
-            </div>
-          ) : (
-            <div>
-              <span>{local || '—'}</span>
-              {a.afloramento_local && a.fornecedor && <span className="block text-[10px] text-[var(--color-neutral-600)]">{a.fornecedor}</span>}
-            </div>
-          )}
+            ) : a.tipo_origem === 'testemunho' ? (
+              <div className="text-[11px]">
+                <span>Poço: {a.poco || '—'}</span>
+                <span className="block text-[10px] text-[var(--color-neutral-600)]">
+                  {a.bacia ? `Bacia: ${a.bacia}` : ''} {a.profundidade_m ? `(${fmt(a.profundidade_m)} m)` : ''}
+                </span>
+              </div>
+            ) : (
+              <div className="text-[11px]">
+                <span>{local || '—'}</span>
+                {a.afloramento_local && a.fornecedor && <span className="block text-[10px] text-[var(--color-neutral-600)]">{a.fornecedor}</span>}
+              </div>
+            )}
+          </div>
         </td>
         <td className="tabular-nums whitespace-nowrap text-[var(--color-neutral-600)]">
           {dimensoes(a)}
           {a.massa_seca_g && <span className="block text-[10px]">{fmt(a.massa_seca_g)} g</span>}
-          {(a.permeabilidade_fabricante_min_md ?? a.permeabilidade_fabricante_md) != null && (
-            <span className="block text-[10px]" title="Permeabilidade do fabricante">
-              k fab. {fmtFaixaMd(a.permeabilidade_fabricante_min_md, a.permeabilidade_fabricante_max_md, a.permeabilidade_fabricante_md)}
+          {a.porosidade_pct != null && <span className="block text-[10px]">φ {fmt(a.porosidade_pct, 1)} %</span>}
+          {(a.k_gas_md ?? a.k_liquido_md ?? a.permeabilidade_fabricante_min_md ?? a.permeabilidade_fabricante_md) != null && (
+            <span className="block text-[10px]" title="Permeabilidade">
+              k {a.k_liquido_md != null ? `${fmt(a.k_liquido_md, 2)} mD` : a.k_gas_md != null ? `${fmt(a.k_gas_md, 2)} mD` : fmtFaixaMd(a.permeabilidade_fabricante_min_md, a.permeabilidade_fabricante_max_md, a.permeabilidade_fabricante_md)}
             </span>
           )}
         </td>
         <td className="text-[var(--color-neutral-700)]">
-          {fluido ? (
+          {limitada ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-neutral-500)] italic">
+              <Lock size={11} /> Protegido
+            </span>
+          ) : fluido ? (
             <>
               {fluido.texto}
               {fluido.previsto && <span className="ml-1 italic text-[var(--color-neutral-500)]">(previsto)</span>}
             </>
           ) : '—'}
         </td>
-        <td className="text-right"><span className="numero">{nEnsaios(a)}</span></td>
+        <td className="text-right">
+          <div className="flex flex-col items-end gap-1">
+            <span className="numero">{nEnsaios(a)}</span>
+            {exps.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1 max-w-[170px]">
+                {exps.map((exp) => (
+                  <span key={exp} className="tag tag-blue !px-1.5 !py-0 !text-[9px]">{exp}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </td>
         <td>
           <span className={classeStatus(a.status)}>{rotuloStatus(a.status)}</span>
         </td>
@@ -382,14 +422,14 @@ export const AmostrasPage: React.FC = () => {
             />
           </div>
 
-          {!projetoContexto && (
+          {(noLcpetro || !projetoContexto) && (
             <div className="w-full md:w-72">
               <select
                 value={projetoFiltro}
                 onChange={(e) => setProjetoFiltro(e.target.value)}
                 className="input"
               >
-                <option value="">Todos os projetos da empresa</option>
+                <option value="">{noLcpetro ? 'Todas as amostras do laboratório (Visão Global LC PETRO)' : 'Todos os projetos da empresa'}</option>
                 {projetos.map((p) => (
                   <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
                 ))}

@@ -300,18 +300,29 @@ export function casarLitologia(original: string, catalogo: string[]): { nome: st
 export function lerUtilizacao(s: string): Omit<SugestaoRda, "_aba" | "_linha" | "codigo"> {
   const partes = s.split(/\s+-\s+/).map((p) => p.trim());
   const conc = /\[\s*([\d.,]+)\s*([a-z%/ ]*)\]/i.exec(s);
-  const acido = conc ? /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +]*?)\s*\[/.exec(s) : null;
+  const acidoBruto = conc ? /([A-Za-zÀ-ú][A-Za-zÀ-ú0-9 +.]*?)\s*\[/.exec(s)?.[1]?.trim() ?? null : null;
   const semColchete = !conc
-    ? /\b(HCl|GLDA|MAS|EDTA|HF|[ÁA]cido\s+[A-Za-zÀ-ú]+)\s+([\d.,]+)\s*(wt\s*%|vol\s*%|%|M|N|mM)\b/i.exec(s)
+    ? /\b(HCl|HAc|GLDA|MAS|MSA|EDTA|HF|[ÁA]cido\s+[A-Za-zÀ-ú]+)\s+([\d.,]+)\s*(wt\s*%|vol\s*%|%|M|N|mM)\b/i.exec(s)
     : null;
-  const temp = /T?\s*([\d.,]+)\s*(?:°\s*C|\bC\b)/i.exec(s);
+  const prefixoEnsaio = /^\s*(TR|RDA|D\.\s*D|D\.\s*E)\b[\s\-:]*/i.exec(s)?.[1]?.replace(/\s+/g, "") ?? null;
+  let acido = acidoBruto
+    ? acidoBruto.replace(/^(?:TR|RDA|D\.\s*D|D\.\s*E)\b[\s\-:]*/i, "").trim()
+    : semColchete
+      ? semColchete[1].trim()
+      : /\bFluxo\s+reativo\s+(EDTA|HCl|GLDA)\b/i.exec(s)?.[1]?.trim() ?? null;
+  if (acido && /^hcl$/i.test(acido)) acido = "HCl";
+  else if (acido && /^hac$/i.test(acido)) acido = "Ácido acético";
+  const temp =
+    /(?:^|[\s\-(])T\s*([\d.,]+)\s*(?:°?\s*C)?(?=$|[\s\-)\[])/i.exec(s) ??
+    /(?:^|[\s\-(])([\d.,]+)\s*(?:°\s*C|C\b)(?=$|[\s\-)\[])/i.exec(s);
   const rpm = /@\s*([\d.,]+)/.exec(s);
-  const formacao = partes.find((p, i) => i > 1 && !/°|@|\[/.test(p)) ?? null;
+  const formacao = partes.find((p, i) => i > 1 && !/°|@|\[|ml\b/i.test(p) && !/^\d+\s*C$/i.test(p)) ?? null;
   const num = (x: string | undefined) => (x == null ? null : numero(x));
+  const ensaio = (partes.length > 1 && !/\[/.test(partes[0]) && !/\b(HCl|HAc|EDTA|GLDA)\b/i.test(partes[0]) ? partes[0] : null) ?? prefixoEnsaio;
   return {
     texto: s,
-    ensaio: partes.length > 1 && !/\[/.test(partes[0]) ? partes[0] : null,
-    acido: acido ? acido[1].trim() : semColchete ? semColchete[1].trim() : null,
+    ensaio,
+    acido,
     concentracao: num(conc?.[1] ?? semColchete?.[2]),
     unidade: conc ? (conc[2].trim() || null) : semColchete ? (semColchete[3].replace(/\s+/g, "") || null) : null,
     formacao,

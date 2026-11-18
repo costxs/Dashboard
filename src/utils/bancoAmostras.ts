@@ -1,6 +1,6 @@
 // Banco de Amostras organizado: agrupamento por tipo de amostra e prefixo do código, dimensões
-// em pt-BR e fluido. As colunas tipo_amostra, prefixo, significado_prefixo e fluidos vêm da view
-// v_amostras (migração 011). Cópia de ABA GERENCIAL/src/utils/bancoAmostras.ts: mantenha os dois iguais.
+// em pt-BR, fluido, experimentos e visão limitada da empresa interna LC PETRO.
+// Cópia de ABA GERENCIAL/src/utils/bancoAmostras.ts: mantenha os dois iguais.
 
 export type TipoAmostra = 'plug' | 'disco' | 'outro'
 
@@ -110,5 +110,86 @@ export function opcoesDeFiltro<T extends LinhaBanco & { litologia?: string | nul
     prefixos: unicos(lista.map(prefixoDe)),
     litologias: unicos(lista.map((a) => a.litologia)),
     fluidos: unicos(lista.flatMap(nomesDeFluido)),
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Visão global da empresa interna LC PETRO (com proteção de dados sensíveis de projetos externos)
+// -----------------------------------------------------------------------------
+
+/** Verdadeiro quando o usuário está navegando pela empresa interna LC PETRO e a amostra pertence a outra empresa/projeto externo. */
+export function ehVisaoLimitadaLcpetro(
+  a: { empresa?: string | null; projeto?: string | null } | null | undefined,
+  empresaSiglaContexto?: string | null,
+): boolean {
+  if (!a) return false
+  const noLcpetro = (empresaSiglaContexto ?? '').trim().toUpperCase() === 'LCPETRO'
+  if (!noLcpetro) return false
+  const empAmostra = (a.empresa ?? '').trim().toUpperCase()
+  return Boolean(empAmostra && empAmostra !== 'LCPETRO')
+}
+
+/** Litologia segura: oculta códigos de poço (ex.: 7-LPA-1D-SPS) quando em visão limitada. */
+export function litologiaSegura(
+  a: { litologia?: string | null; tipo_origem?: string | null },
+  limitada: boolean,
+): string {
+  const lit = a.litologia ?? '—'
+  if (!limitada) return lit
+  if (a.tipo_origem === 'testemunho' || /\d+-[A-Z0-9]+-/i.test(lit)) {
+    return 'Rocha de Testemunho (reservado)'
+  }
+  return lit
+}
+
+/** Lista simples dos experimentos que a amostra possui (Petrofísica, Coreflooding, RDA, Micro-CT...). */
+export function experimentosDaAmostra(a: {
+  finalidade?: string | null
+  n_petrofisica?: number | string | null
+  n_microct?: number | string | null
+  n_coreflooding?: number | string | null
+  n_reatividade?: number | string | null
+  n_rda?: number | string | null
+  n_drx?: number | string | null
+  n_petrografia?: number | string | null
+  n_mev?: number | string | null
+}): string[] {
+  const fin = (a.finalidade ?? '').toLowerCase()
+  const lista: string[] = []
+  if (Number(a.n_petrofisica ?? 0) > 0 || fin.includes('petrof')) lista.push('Petrofísica')
+  if (Number(a.n_microct ?? 0) > 0 || fin.includes('micro')) lista.push('Micro-CT')
+  if (Number(a.n_coreflooding ?? 0) > 0 || fin.includes('coreflood')) lista.push('Coreflooding')
+  if (Number(a.n_reatividade ?? 0) > 0 || fin.includes('reatividade')) lista.push('Reatividade estática')
+  if (Number(a.n_rda ?? 0) > 0 || fin.includes('rda')) lista.push('RDA')
+  if (Number(a.n_drx ?? 0) > 0 || fin.includes('drx')) lista.push('DRX')
+  if (Number(a.n_petrografia ?? 0) > 0 || fin.includes('petrograf')) lista.push('Petrografia')
+  if (Number(a.n_mev ?? 0) > 0 || fin.includes('mev')) lista.push('MEV')
+  return lista
+}
+
+/** Onde a amostra está fisicamente no laboratório + empresa/projeto onde está alocada. */
+export function ondeAmostraEsta(a: {
+  status?: string | null
+  empresa?: string | null
+  projeto?: string | null
+}): { localFisico: string; alocacao: string; resumo: string } {
+  const st = (a.status ?? 'disponivel').toLowerCase()
+  const localFisico =
+    st === 'disponivel'
+      ? 'Acervo / Estoque LC PETRO (disponível)'
+      : st === 'reservada'
+        ? 'Estoque LC PETRO (reservada para ensaio)'
+        : st === 'em ensaio'
+          ? 'Bancada Experimental LC PETRO (em ensaio)'
+          : st === 'utilizada'
+            ? 'Acervo Pós-Ensaio LC PETRO (utilizada)'
+            : st === 'nao localizada'
+              ? 'Não localizada no estoque físico'
+              : 'Depósito / Arquivo LC PETRO'
+  const alocacao = [a.empresa, a.projeto].filter(Boolean).join(' · ') || 'LC PETRO'
+  return {
+    localFisico,
+    alocacao,
+    resumo: `${localFisico} · ${alocacao}`,
   }
 }

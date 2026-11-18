@@ -141,10 +141,12 @@ export function ProjectSelectionPage() {
                   <ChevronRight size={18} className="text-[var(--color-neutral-400)] group-hover:text-[var(--color-red)]" />
                 </button>
               ))}
-              {projetos.dados && projetos.dados.length > 1 && (
+              {(projetos.dados && (projetos.dados.length > 1 || empresa.sigla.toUpperCase() === "LCPETRO")) && (
                 <button onClick={() => entrarNoProjeto(null)}
                   className="btn btn-blue w-fit mt-2">
-                  Ver todos os projetos de {empresa.sigla}
+                  {empresa.sigla.toUpperCase() === "LCPETRO"
+                    ? "Ver todas as amostras do laboratório (Visão Global LC PETRO)"
+                    : `Ver todos os projetos de ${empresa.sigla}`}
                 </button>
               )}
               {projetos.dados?.length === 0 && (

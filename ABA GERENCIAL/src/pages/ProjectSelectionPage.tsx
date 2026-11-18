@@ -167,7 +167,9 @@ export const ProjectSelectionPage: React.FC = () => {
               ))}
               {projetos && projetos.length > 0 && (
                 <button onClick={() => entrarNoProjeto(null)} className="btn btn-blue w-fit mt-2">
-                  Ver todos os projetos de {empresa.sigla}
+                  {empresa.sigla.toUpperCase() === 'LCPETRO'
+                    ? 'Ver todas as amostras do laboratório (Visão Global LC PETRO)'
+                    : `Ver todos os projetos de ${empresa.sigla}`}
                 </button>
               )}
               {projetos?.length === 0 && (
