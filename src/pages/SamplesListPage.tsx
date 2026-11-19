@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Simbolos } from "../components/ui/Simbolos";
 import { useNavigate } from "react-router-dom";
-import { ArrowDown, ArrowUp, ChartScatter, Disc, Layers, LayoutGrid, LayoutList, List, Lock, MapPin, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartScatter, Disc, FlaskConical, Layers, LayoutGrid, LayoutList, List, Lock, MapPin, RotateCcw } from "lucide-react";
 import { GraficoDispersao } from "../components/charts/GraficoDispersao";
 import { Select } from "../components/ui/Select";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
-import { fmt, melhorK } from "../utils/formatacao";
+import { fmt, fmtData, melhorK } from "../utils/formatacao";
 import { useConsulta } from "../hooks/useConsulta";
 import { listarAmostras, listarLitologias, opcoesFiltro } from "../servicos/amostras";
+import { listarTodosEnsaiosReatividade } from "../servicos/reatividade";
 import { useContexto } from "../store/useContexto";
 import type { AmostraResumo, StatusAmostra, TipoOrigem } from "../tipos/banco";
 import { classeStatus, STATUS_ROTULO } from "../utils/status";
@@ -49,9 +50,12 @@ export function SamplesListPage() {
   const projetoId = useContexto((s) => s.projetoId);
   const busca = useContexto((s) => s.busca);
   const definirBusca = useContexto((s) => s.definirBusca);
-  const [view, setView] = useState<"grupos" | "table" | "grid" | "chart">("grupos");
+  const [view, setView] = useState<"grupos" | "table" | "grid" | "chart" | "ensaios">("grupos");
   const [f, setF] = useState<Filtros>(filtrosIniciais);
   const [ordemK, setOrdemK] = useState<"asc" | "desc" | null>(null);
+  const [filtroTipoEnsaio, setFiltroTipoEnsaio] = useState<"todos" | "estatica" | "dinamica_rda">("todos");
+  const [buscaCodigoEnsaio, setBuscaCodigoEnsaio] = useState("");
+  const ensaiosReat = useConsulta(listarTodosEnsaiosReatividade, []);
 
   // Empresa interna LC PETRO vê todas as amostras do laboratório independente de projeto ou empresa
   const noLcpetro = (empresaSigla ?? "").trim().toUpperCase() === "LCPETRO";
@@ -225,6 +229,10 @@ export function SamplesListPage() {
               className={`${VIEWBTN} border-l border-[var(--color-neutral-300)] ${view === "chart" ? "bg-[var(--color-blue)] text-white" : "text-[var(--color-neutral-700)] bg-white hover:bg-[var(--color-blue-50)]"}`}>
               <ChartScatter size={15} /> Gráfico
             </div>
+            <div onClick={() => setView("ensaios")} title="Ensaios de Reatividade (REA / RDA)"
+              className={`${VIEWBTN} border-l border-[var(--color-neutral-300)] ${view === "ensaios" ? "bg-[var(--color-blue)] text-white" : "text-[var(--color-neutral-700)] bg-white hover:bg-[var(--color-blue-50)]"}`}>
+              <FlaskConical size={15} /> Ensaios ({(ensaiosReat.dados ?? []).length})
+            </div>
           </div>
         </>}
       />
@@ -367,6 +375,109 @@ export function SamplesListPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {view === "ensaios" && (
+        <div className="px-7 py-6 space-y-4">
+          <div className="cartao p-4 flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="field min-w-[200px]">
+                <label className="label">Tipo de Ensaio</label>
+                <select
+                  value={filtroTipoEnsaio}
+                  onChange={(e) => setFiltroTipoEnsaio(e.target.value as "todos" | "estatica" | "dinamica_rda")}
+                  className="input !py-1.5 text-sm"
+                >
+                  <option value="todos">Todos (REA e RDA)</option>
+                  <option value="estatica">REA · Dissolução Estática</option>
+                  <option value="dinamica_rda">RDA · Dinâmica</option>
+                </select>
+              </div>
+              <div className="field min-w-[240px]">
+                <label className="label">Buscar por código (REA-#### / RDA-####)</label>
+                <input
+                  type="text"
+                  value={buscaCodigoEnsaio}
+                  onChange={(e) => setBuscaCodigoEnsaio(e.target.value)}
+                  placeholder="Ex.: REA-0001 ou código da amostra"
+                  className="input !py-1.5 text-sm"
+                />
+              </div>
+            </div>
+            <span className="text-xs text-[var(--color-neutral-500)]">
+              {(ensaiosReat.dados ?? []).filter((e) => {
+                if (filtroTipoEnsaio !== "todos" && e.modalidade !== filtroTipoEnsaio) return false;
+                const q = buscaCodigoEnsaio.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  e.codigo.toLowerCase().includes(q) ||
+                  (e.amostra_codigo ?? "").toLowerCase().includes(q) ||
+                  (e.sistema_nome ?? "").toLowerCase().includes(q)
+                );
+              }).length} ensaio(s) encontrado(s)
+            </span>
+          </div>
+
+          <div className="cartao overflow-x-auto">
+            <table className="table text-[13px]">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Tipo</th>
+                  <th>Amostra</th>
+                  <th>Sistema Ácido</th>
+                  <th>Litologia / Geometria</th>
+                  <th className="text-right">t₅₀ (min)</th>
+                  <th className="text-right">R²</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const filtrados = (ensaiosReat.dados ?? []).filter((e) => {
+                    if (filtroTipoEnsaio !== "todos" && e.modalidade !== filtroTipoEnsaio) return false;
+                    const q = buscaCodigoEnsaio.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      e.codigo.toLowerCase().includes(q) ||
+                      (e.amostra_codigo ?? "").toLowerCase().includes(q) ||
+                      (e.sistema_nome ?? "").toLowerCase().includes(q)
+                    );
+                  });
+                  if (filtrados.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-[var(--color-neutral-500)]">
+                          Nenhum ensaio REA ou RDA cadastrado ainda.
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return filtrados.map((e) => (
+                    <tr
+                      key={e.id}
+                      onClick={() => e.amostra_id && navigate(`/amostras/${e.amostra_id}?tab=reatividade-t50`)}
+                      className={e.amostra_id ? "lcp-row cursor-pointer" : ""}
+                    >
+                      <td className="font-heading font-extrabold text-[var(--color-red)]">{e.codigo}</td>
+                      <td>
+                        <span className={e.modalidade === "dinamica_rda" ? "tag tag-orange" : "tag tag-blue"}>
+                          {e.modalidade === "dinamica_rda" ? "RDA (Dinâmica)" : "REA (Estática)"}
+                        </span>
+                      </td>
+                      <td className="font-semibold text-[var(--color-blue-800)]">{e.amostra_codigo ?? "—"}</td>
+                      <td>{e.sistema_nome ?? "—"}</td>
+                      <td>{e.litologia} · {e.geometria === "disco" ? "Disco" : "Mini-plug"}</td>
+                      <td className="text-right tabular-nums">{e.t50_min != null ? fmt(e.t50_min, 2) : "—"}</td>
+                      <td className="text-right tabular-nums">{e.taxa_dissolucao_r2 != null ? fmt(e.taxa_dissolucao_r2, 4) : "—"}</td>
+                      <td className="whitespace-nowrap">{e.data_ensaio ? fmtData(e.data_ensaio) : "—"}</td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

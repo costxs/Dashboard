@@ -35,6 +35,7 @@ from graficos import acidificacao as acid
 from contas import criar_rotas
 from acidificacao_salva import router as rotas_acid_salva
 from comparacao import router as rotas_comparacao
+from reatividade_origin import router as reatividade_router
 
 _ORIGENS = [o.strip() for o in os.getenv("ORIGENS_PERMITIDAS", "http://localhost:5173,http://localhost:5174,http://localhost:5175").split(",") if o.strip()]
 # o computador local, os domínios *.lcpetro.io (Coolify) e os endereços da conta do LC PETRO na Vercel
@@ -106,6 +107,9 @@ def exigir_login(request: Request, authorization: str | None = Header(default=No
         raise HTTPException(401, "faça login no gerencial")
     if not _token_valido(authorization.split(" ", 1)[1]):
         raise HTTPException(401, "sessão inválida ou expirada")
+
+
+app.include_router(reatividade_router, dependencies=[Depends(exigir_login)])
 
 
 @app.get("/saude")

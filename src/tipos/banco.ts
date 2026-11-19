@@ -393,3 +393,72 @@ export interface PontoPvbt {
   estudo: string | null
   observacoes: string | null
 }
+
+/** Reatividade Estática (t50) e Dinâmica RDA (migração 025). */
+export interface ConfigGraficoReatividade {
+  legend_xy?: [number, number]
+  legend_frame?: boolean
+  legend_fontsize?: number
+  font_family?: 'Arial' | 'Times New Roman' | 'Calibri' | 'DejaVu Sans'
+  show_error_bars?: boolean
+  show_trendline?: boolean
+}
+
+export interface ReatividadeEnsaio {
+  id: string
+  codigo: string
+  amostra_id: string | null
+  id_sistema: string | null
+  id_referencia: string | null
+  geometria: 'mini_plug' | 'disco'
+  modalidade: 'estatica' | 'dinamica_rda'
+  litologia: 'calcario' | 'dolomita' | 'outro'
+  data_ensaio: string | null
+  operador: string | null
+  ph_inicial: number | null
+  h_inicial_mol_l: number | null
+  volume_solucao_ml: number | null
+  temperatura_c: number | null
+  rpm_rda: number | null
+  m0_sondagem_g: number | null
+  tempo_sondagem_min: number | null
+  mf_sondagem_g: number | null
+  t50_min: number | null
+  cal_ca_slope: number | null
+  cal_ca_intercept: number | null
+  cal_mg_slope: number | null
+  cal_mg_intercept: number | null
+  massa_molar_ca: number | null
+  massa_molar_mg: number | null
+  modo_calculo_pct: 'media_replicas' | 'razao_medias'
+  taxa_dissolucao_m: number | null
+  taxa_dissolucao_n: number | null
+  taxa_dissolucao_r2: number | null
+  config_grafico: ConfigGraficoReatividade | null
+  observacoes: string | null
+  created_at: string
+}
+
+export interface ReatividadePonto {
+  id: string
+  ensaio_id: string
+  estagio_ordem: 1 | 2 | 3 | 4
+  fracao_t50: number
+  tempo_contato_s: number
+  replica: 1 | 2 | 3
+  codigo_mini_plug: string | null
+  massa_inicial_g: number
+  massa_final_g: number
+  delta_massa_g: number | null
+  perda_massa_pct: number | null
+  fator_diluicao_ca: number | null
+  abs_ca: number | null
+  fator_diluicao_mg: number | null
+  abs_mg: number | null
+}
+
+export interface ReatividadeEnsaioComDetalhes extends ReatividadeEnsaio {
+  pontos: ReatividadePonto[]
+  sistema_nome?: string | null
+  amostra_codigo?: string | null
+}

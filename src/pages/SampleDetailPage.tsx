@@ -19,11 +19,13 @@ import {
 import { AbaAnalise } from "../components/analises/AbaAnalise";
 import { PermeabilidadeCoreflood } from "../components/analises/PermeabilidadeCoreflood";
 import { RdaDaAmostra } from "../components/analises/RdaDaAmostra";
+import { ReatividadeT50DaAmostra } from "../components/analises/ReatividadeT50DaAmostra";
 import { PvbtDaAmostra } from "../components/pvbt/PvbtDaAmostra";
 import { Aviso, Carregando, Cartao, Valor } from "../components/ui/base";
 import { ANALISES } from "../config/analises";
 import { useConsulta } from "../hooks/useConsulta";
 import { listarConferencias, obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
+import { listarReatividadeDaAmostra } from "../servicos/reatividade";
 import { useContexto } from "../store/useContexto";
 import {
   dimensoes,
@@ -65,6 +67,10 @@ export function SampleDetailPage() {
   const limitada = ehVisaoLimitadaLcpetro(amostra.dados, empresaSigla);
   const controle = useConsulta(() => (limitada ? Promise.resolve(null) : obterControleDaAmostra(id!)), [id, limitada]);
   const conferencias = useConsulta(() => listarConferencias(id!) as Promise<ConferenciaRow[]>, [id]);
+  const reatividadeT50 = useConsulta(
+    () => (limitada ? Promise.resolve([]) : listarReatividadeDaAmostra(id!)),
+    [id, limitada],
+  );
 
   if (amostra.carregando && !amostra.dados) return <Carregando />;
   if (amostra.erro || !amostra.dados) {
@@ -201,12 +207,16 @@ export function SampleDetailPage() {
     n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
   }));
   const marcados = ensaiosDaFinalidade(a.finalidade);
+  const ensaiosReatT50 = reatividadeT50.dados ?? [];
   const abas: { key: string; label: string; icon: LucideIcon; n?: number }[] = [
     { key: "geral", label: "Visão Geral", icon: ClipboardList },
     ...todas.filter((t) => t.n > 0 || marcados.includes(t.key)),
+    ...(ensaiosReatT50.length > 0
+      ? [{ key: "reatividade-t50", label: "Reatividade / RDA", icon: FlaskConical, n: ensaiosReatT50.length }]
+      : []),
   ];
   const cfgAtiva = abas.some((t) => t.key === activeTab) ? ANALISES.find((c) => c.chave === activeTab) : undefined;
-  const semEnsaio = marcados.length === 0 && todas.every((t) => t.n === 0);
+  const semEnsaio = marcados.length === 0 && todas.every((t) => t.n === 0) && ensaiosReatT50.length === 0;
 
   return (
     <div>
@@ -259,6 +269,9 @@ export function SampleDetailPage() {
           <div className="mb-5"><Aviso tipo="info">Esta amostra está como utilizada, mas não tem nenhum ensaio registrado.</Aviso></div>
         )}
         {activeTab === "geral" && <OverviewTab a={a} podeEditar={false} observacoes={controle.dados?.observacoes ?? null} />}
+        {activeTab === "reatividade-t50" && ensaiosReatT50.length > 0 && (
+          <ReatividadeT50DaAmostra ensaios={ensaiosReatT50} />
+        )}
         {cfgAtiva && <AbaAnalise key={cfgAtiva.chave} cfg={cfgAtiva} amostraId={a.id} podeEditar={false} aoMudar={amostra.recarregar}
           amostra={{ finalidade: a.finalidade, status: a.status, codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} controle={controle.dados ?? null}
           antes={cfgAtiva.chave === "coreflooding"
