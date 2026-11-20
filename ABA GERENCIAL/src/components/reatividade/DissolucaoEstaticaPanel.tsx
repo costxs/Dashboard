@@ -64,6 +64,7 @@ import {
   EditorGraficoOriginLegenda,
   type ItemLegendaPreview,
 } from './EditorGraficoOriginLegenda'
+import { GradeDissolucao } from './GradeDissolucao'
 
 type SubAba = 'sondagem' | 'dissolucao' | 'aa'
 type TipoGrafico = 't50' | 'perda_massa' | 'aa'
@@ -78,7 +79,7 @@ interface LinhaSondagemForm {
   escolhido: boolean
 }
 
-interface CelulaPontoForm {
+export interface CelulaPontoForm {
   codigo_mini_plug: string
   massa_inicial_g: string
   massa_final_g: string
@@ -1516,7 +1517,8 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                       Grade de Dissolução — 4 Estágios × Triplicata
                     </h2>
                     <p className="m-0 text-xs text-[var(--color-neutral-600)]">
-                      Digite apenas as massas inicial (m₀) e final (m_f). Perda (%) e desvio padrão amostral (ddof=1) são calculados ao vivo.
+                      Pese cada mini-plug antes (m₀) e depois (m_f). Enter desce para a próxima célula; dá para colar
+                      colunas m₀/m_f direto do Excel. Perda = (m₀ − m_f)/m₀ e DP amostral das réplicas.
                     </p>
                   </div>
                   <div className="flex items-center gap-1 rounded-lg border border-[var(--color-neutral-300)] p-0.5 bg-[var(--color-neutral-50)] text-xs">
@@ -1542,109 +1544,14 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="table text-xs">
-                    <thead>
-                      <tr>
-                        <th>Estágio</th>
-                        <th>Tempo (s)</th>
-                        <th colSpan={2} className="text-center border-l">Original</th>
-                        <th colSpan={2} className="text-center border-l">Duplicata</th>
-                        <th colSpan={2} className="text-center border-l">Triplicata</th>
-                        <th className="text-right border-l">Perda (%) ± DP</th>
-                      </tr>
-                      <tr className="text-[10px] text-[var(--color-neutral-500)]">
-                        <th />
-                        <th />
-                        <th className="border-l">m₀ (g)</th>
-                        <th>m_f (g)</th>
-                        <th className="border-l">m₀ (g)</th>
-                        <th>m_f (g)</th>
-                        <th className="border-l">m₀ (g)</th>
-                        <th>m_f (g)</th>
-                        <th className="border-l" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {([1, 2, 3, 4] as const).map((est) => {
-                        const res = resumoEstagios[est - 1]
-                        const perdaExibida =
-                          form.modo_calculo_pct === 'razao_medias'
-                            ? res.perda_razao_medias_pct
-                            : res.perda_media_replicas_pct
-                        return (
-                          <tr key={est}>
-                            <td className="font-bold text-[var(--color-blue-800)] whitespace-nowrap">
-                              T{est} ({est * 25}%)
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                step="1"
-                                value={temposEstagioS[est - 1]}
-                                onChange={(e) => {
-                                  const v = Number(e.target.value) || 0
-                                  setTemposEstagioS((prev) => {
-                                    const next: [number, number, number, number] = [...prev]
-                                    next[est - 1] = v
-                                    return next
-                                  })
-                                }}
-                                className="input !py-1 !px-1.5 text-xs w-20 tabular-nums"
-                              />
-                              <div className="text-[10px] text-[var(--color-neutral-500)] mt-0.5">
-                                {formatarTempoMinSeg(temposEstagioS[est - 1])}
-                              </div>
-                            </td>
-                            {([1, 2, 3] as const).map((rep) => {
-                              const k = `${est}-${rep}`
-                              const cel = grade[k]
-                              return (
-                                <React.Fragment key={k}>
-                                  <td className="border-l">
-                                    <input
-                                      type="number"
-                                      step="0.0001"
-                                      value={cel?.massa_inicial_g ?? ''}
-                                      onChange={(e) =>
-                                        setGrade((g) => ({
-                                          ...g,
-                                          [k]: { ...g[k], massa_inicial_g: e.target.value },
-                                        }))
-                                      }
-                                      className="input !py-1 !px-1.5 text-xs w-[78px] tabular-nums"
-                                      placeholder="m0"
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="number"
-                                      step="0.0001"
-                                      value={cel?.massa_final_g ?? ''}
-                                      onChange={(e) =>
-                                        setGrade((g) => ({
-                                          ...g,
-                                          [k]: { ...g[k], massa_final_g: e.target.value },
-                                        }))
-                                      }
-                                      className="input !py-1 !px-1.5 text-xs w-[78px] tabular-nums"
-                                      placeholder="mf"
-                                    />
-                                  </td>
-                                </React.Fragment>
-                              )
-                            })}
-                            <td className="text-right tabular-nums font-semibold border-l whitespace-nowrap">
-                              {res.n_replicas > 0
-                                ? `${fmtNum(perdaExibida, 2)}% ± ${fmtNum(res.perda_dp_pct, 2)}%`
-                                : '—'}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <GradeDissolucao
+                  grade={grade}
+                  setGrade={setGrade}
+                  tempos={temposEstagioS}
+                  setTempos={setTemposEstagioS}
+                  resumo={resumoEstagios}
+                  modo={form.modo_calculo_pct}
+                />
 
                 {/* Equação da taxa + Sobreposição comparativa */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
