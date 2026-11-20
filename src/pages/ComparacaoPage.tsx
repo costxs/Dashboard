@@ -427,9 +427,8 @@ export function ComparacaoPage() {
             {
               x: Number(e.vazao_ml_min),
               y: Number(e.pvbt),
-              detalhe: `[${ctx}] ${e.id_amostra} · ${e.id_experimento}${ac ? ` · ${ac}` : ""}${
-                e.temperatura_nominal_c != null ? ` · ${fmt(e.temperatura_nominal_c, 0)} °C` : ""
-              }`,
+              detalhe: `[${ctx}] ${e.id_amostra} · ${e.id_experimento}${ac ? ` · ${ac}` : ""}${e.temperatura_nominal_c != null ? ` · ${fmt(e.temperatura_nominal_c, 0)} °C` : ""
+                }`,
             },
           ];
         });
@@ -526,9 +525,8 @@ export function ComparacaoPage() {
                 <button
                   type="button"
                   onClick={() => setMostrarFiltros((v) => !v)}
-                  className={`btn ${
-                    mostrarFiltros || qtdFiltrosAtivos > 0 ? "btn-primary" : "btn-secondary"
-                  } !px-3 flex items-center gap-1.5 shrink-0`}
+                  className={`btn ${mostrarFiltros || qtdFiltrosAtivos > 0 ? "btn-primary" : "btn-secondary"
+                    } !px-3 flex items-center gap-1.5 shrink-0`}
                   title="Filtrar amostras por empresa, projeto, ácido/fluido do catálogo, temperatura, vazão, porosidade e permeabilidade"
                 >
                   <SlidersHorizontal size={14} />
@@ -558,11 +556,10 @@ export function ComparacaoPage() {
                             projeto: f.projeto === projetoIdContexto ? "" : projetoIdContexto,
                           }))
                         }
-                        className={`rounded px-2 py-0.5 text-[10px] font-semibold border cursor-pointer transition-colors ${
-                          filtros.projeto === projetoIdContexto
-                            ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
-                            : "border-[var(--color-neutral-300)] bg-white text-[var(--color-neutral-700)] hover:border-[var(--color-blue)]"
-                        }`}
+                        className={`rounded px-2 py-0.5 text-[10px] font-semibold border cursor-pointer transition-colors ${filtros.projeto === projetoIdContexto
+                          ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
+                          : "border-[var(--color-neutral-300)] bg-white text-[var(--color-neutral-700)] hover:border-[var(--color-blue)]"
+                          }`}
                         title="Alternar entre apenas o projeto aberto no menu lateral ou todos os projetos"
                       >
                         {filtros.projeto === projetoIdContexto ? "Só projeto atual ✓" : "Todos os projetos"}
@@ -831,13 +828,12 @@ export function ComparacaoPage() {
                     return (
                       <li
                         key={a.uuid}
-                        className={`flex items-start gap-2.5 px-3 py-2.5 transition-colors ${
-                          emDetalhe
-                            ? "bg-[var(--color-blue-50)] ring-1 ring-inset ring-[var(--color-blue)]"
-                            : estaMarcada
+                        className={`flex items-start gap-2.5 px-3 py-2.5 transition-colors ${emDetalhe
+                          ? "bg-[var(--color-blue-50)] ring-1 ring-inset ring-[var(--color-blue)]"
+                          : estaMarcada
                             ? "bg-[var(--color-blue-50)]/45"
                             : "hover:bg-[var(--color-neutral-100)]"
-                        }`}
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -910,11 +906,10 @@ export function ComparacaoPage() {
                       return (
                         <div
                           key={a.uuid}
-                          className={`inline-flex items-center rounded-md border text-[12px] font-semibold transition-all ${
-                            ativa
-                              ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white shadow-sm"
-                              : "border-[var(--color-blue-200)] bg-white text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
-                          }`}
+                          className={`inline-flex items-center rounded-md border text-[12px] font-semibold transition-all ${ativa
+                            ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white shadow-sm"
+                            : "border-[var(--color-blue-200)] bg-white text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
+                            }`}
                         >
                           <button
                             type="button"
@@ -929,11 +924,10 @@ export function ComparacaoPage() {
                           <button
                             type="button"
                             onClick={() => alternar(a.uuid)}
-                            className={`px-1.5 py-1 border-l bg-transparent border-0 cursor-pointer ${
-                              ativa
-                                ? "border-white/30 text-white/90 hover:text-white"
-                                : "border-[var(--color-neutral-200)] text-[var(--color-neutral-500)] hover:text-[var(--color-red)]"
-                            }`}
+                            className={`px-1.5 py-1 border-l bg-transparent border-0 cursor-pointer ${ativa
+                              ? "border-white/30 text-white/90 hover:text-white"
+                              : "border-[var(--color-neutral-200)] text-[var(--color-neutral-500)] hover:text-[var(--color-red)]"
+                              }`}
                             title={`Remover ${a.codigo} da seleção`}
                           >
                             <X size={11} />
@@ -1042,11 +1036,10 @@ export function ComparacaoPage() {
                             key={a.uuid}
                             type="button"
                             onClick={() => abrirDetalhesAmostra(a.uuid)}
-                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold cursor-pointer border transition-colors ${
-                              amostraDetalheUuid === a.uuid
-                                ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
-                                : "border-[var(--color-neutral-300)] bg-[var(--color-neutral-100)] text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
-                            }`}
+                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold cursor-pointer border transition-colors ${amostraDetalheUuid === a.uuid
+                              ? "border-[var(--color-blue)] bg-[var(--color-blue)] text-white"
+                              : "border-[var(--color-neutral-300)] bg-[var(--color-neutral-100)] text-[var(--color-blue-800)] hover:border-[var(--color-blue)]"
+                              }`}
                             title={`Clique para ver os detalhes da amostra ${a.codigo} (${a.empresaSigla} · ${a.projetoCodigo})`}
                           >
                             <Eye size={11} />
@@ -1242,15 +1235,15 @@ function ModalDetalheAmostraCore(p: {
       rotulo: "Outras Análises na Ficha",
       valor: resumo
         ? [
-            resumo.n_petrofisica > 0 && `${resumo.n_petrofisica} Petrofísica`,
-            resumo.n_coreflooding > 0 && `${resumo.n_coreflooding} Coreflooding`,
-            resumo.n_microct > 0 && `${resumo.n_microct} Micro-CT`,
-            resumo.n_drx > 0 && `${resumo.n_drx} DRX`,
-            resumo.n_petrografia > 0 && `${resumo.n_petrografia} Petrografia`,
-            resumo.n_mev > 0 && `${resumo.n_mev} MEV`,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "—"
+          resumo.n_petrofisica > 0 && `${resumo.n_petrofisica} Petrofísica`,
+          resumo.n_coreflooding > 0 && `${resumo.n_coreflooding} Coreflooding`,
+          resumo.n_microct > 0 && `${resumo.n_microct} Micro-CT`,
+          resumo.n_drx > 0 && `${resumo.n_drx} DRX`,
+          resumo.n_petrografia > 0 && `${resumo.n_petrografia} Petrografia`,
+          resumo.n_mev > 0 && `${resumo.n_mev} MEV`,
+        ]
+          .filter(Boolean)
+          .join(" · ") || "—"
         : "—",
     },
   ];
@@ -1354,9 +1347,8 @@ function ModalDetalheAmostraCore(p: {
                   const lwh = e.comprimento_wormhole_uct_cm ?? e.comprimento_wormhole_cm;
                   const dpTxt =
                     cf?.dp_inicial_psi != null || cf?.dp_final_psi != null
-                      ? `${fmt(cf?.dp_inicial_psi, 1)} → ${fmt(cf?.dp_final_psi, 1)}${
-                          cf?.razao_dp != null ? ` (${fmt(cf.razao_dp, 1)}×)` : ""
-                        }`
+                      ? `${fmt(cf?.dp_inicial_psi, 1)} → ${fmt(cf?.dp_final_psi, 1)}${cf?.razao_dp != null ? ` (${fmt(cf.razao_dp, 1)}×)` : ""
+                      }`
                       : "—";
 
                   return (

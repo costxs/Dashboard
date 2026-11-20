@@ -27,6 +27,8 @@ router = APIRouter(prefix="/acidificacao", tags=["acidificação"])
 CURVA_TEMPO = "ΔP × tempo (acidificação)"
 _http_salva = httpx.Client(verify=False, timeout=20)
 _cache_montar: dict[int, tuple[float, "DadosSalvos", list[acid.FaseAcid], acid.PedidoAcid]] = {}
+# config_graficos de cada ensaio lido (fonte, cores, legendas e posição da legenda escolhidas no tratamento)
+_config_graficos: dict[int, Optional[dict]] = {}
 
 
 class PedidoSalvo(BaseModel):
@@ -85,8 +87,14 @@ def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid
     em_cache = _cache_montar.get(analise_id)
     if em_cache and em_cache[0] > agora:
         return em_cache[1], em_cache[2], em_cache[3].model_copy(deep=True)
-    cf = _ler(token, "analise_coreflooding", {"id": f"eq.{analise_id}",
-              "select": "id,amostra_id,volume_poroso_usado_cm3,volume_morto_cm3,temperatura_c"})
+    campos = "id,amostra_id,volume_poroso_usado_cm3,volume_morto_cm3,temperatura_c"
+    try:
+        # config_graficos (migração 026): fonte, cores, legendas e posição da legenda escolhidas no tratamento
+        cf = _ler(token, "analise_coreflooding", {"id": f"eq.{analise_id}", "select": campos + ",config_graficos"})
+    except HTTPException as e:
+        if e.status_code != 502:
+            raise
+        cf = _ler(token, "analise_coreflooding", {"id": f"eq.{analise_id}", "select": campos})   # banco sem a 026
     if not cf:
         # o RLS esconde o que a pessoa não pode ver: para ela, o ensaio "não existe"
         raise HTTPException(404, "ensaio de coreflooding não encontrado")
@@ -114,6 +122,7 @@ def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid
         temperatura_rotulo=f"T{round(float(temp))}" if temp is not None else None,
         fases=fases,
     )
+    _config_graficos[analise_id] = cf.get("config_graficos")
     if not pedido.volume_poroso_cm3:
         raise HTTPException(404, "o ensaio não tem o volume poroso gravado")
     if len(_cache_montar) >= 16:
@@ -132,7 +141,9 @@ def grafico_salvo(p: PedidoSalvo, authorization: Optional[str] = Header(default=
     if not token and not (os.getenv("MODO_DEV") == "1" or sec):
         raise HTTPException(401, "faça login para ver os gráficos")
     dados, fases, pedido = montar(token or sec or "", p.analise_id)
-    pedido.config = acid.ConfigAcid(formato=p.formato, dpi=p.dpi, mostrar_pvbt=False)
+    # o gráfico sai como a pessoa deixou no tratamento (fonte, cores, legendas, posição da legenda)
+    pedido.config, fases = acid.config_salva(_config_graficos.get(p.analise_id), fases, p.formato, p.dpi)
+    pedido.fases = fases
     try:
         img, tipo = acid._grafico(dados, sorted(fases, key=lambda f: f.ordem), pedido, p.qual, p.formato, p.dpi)
     except ValueError as e:

@@ -80,6 +80,42 @@ export function guardarPreferencias(c: ConfigGraficos) {
   const p: Partial<ConfigGraficos> = { ...c }
   for (const k of SO_DO_ENSAIO) delete p[k]
   try { localStorage.setItem(CHAVE_PREFERENCIAS, JSON.stringify(p)) } catch { /* navegador sem localStorage: fica só nesta tela */ }
+  enviarPreferencia('permeabilidade', p)
+}
+
+// ---- preferências no banco (public.preferencias_graficos, migração 026): valem em qualquer computador ----
+// O localStorage é a cópia rápida; ao abrir a tela, o banco atualiza essa cópia e, a cada mudança, a tela grava no banco.
+type TipoPreferencia = 'permeabilidade' | 'acidificacao'
+const CHAVE_LOCAL: Record<TipoPreferencia, string> = { permeabilidade: CHAVE_PREFERENCIAS, acidificacao: 'lcpetro.graficos.acidificacao' }
+const sincronizado: Partial<Record<TipoPreferencia, boolean>> = {}
+const timers: Partial<Record<TipoPreferencia, ReturnType<typeof setTimeout>>> = {}
+
+/** grava no banco 1 s depois da última mudança; antes de ler o banco, não grava (não apaga o que está lá com o do navegador) */
+function enviarPreferencia(tipo: TipoPreferencia, config: unknown) {
+  if (!sincronizado[tipo]) return
+  clearTimeout(timers[tipo])
+  timers[tipo] = setTimeout(async () => {
+    const { data } = await supabase.auth.getSession()
+    const usuario = data.session?.user.id
+    if (!usuario) return
+    await supabase.from('preferencias_graficos')
+      .upsert({ usuario_id: usuario, tipo, config, atualizado_em: new Date().toISOString() }, { onConflict: 'usuario_id,tipo' })
+      .then(({ error }) => { if (error) console.warn(`[preferências] não gravei no banco: ${error.message}`) })
+  }, 1000)
+}
+
+/** lê as preferências do usuário no banco e atualiza a cópia do navegador; true = havia preferências no banco */
+export async function sincronizarPreferencias(tipo: TipoPreferencia): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.from('preferencias_graficos').select('config').eq('tipo', tipo).maybeSingle()
+    if (error || !data?.config || typeof data.config !== 'object') return false
+    try { localStorage.setItem(CHAVE_LOCAL[tipo], JSON.stringify(data.config)) } catch { /* sem localStorage */ }
+    return true
+  } catch {
+    return false
+  } finally {
+    sincronizado[tipo] = true
+  }
 }
 
 /** config_graficos lida do banco -> configuração da tela (null se não houver) */
@@ -181,8 +217,16 @@ export function pedirPlanilhaEtapas(arquivo: File, pedido: {
 }): Promise<Blob> {
   const form = new FormData()
   form.append('arquivo', arquivo, arquivo.name)
-  form.append('pedido', JSON.stringify(pedido))
+  form.append('pedido', JSON.stringify(semDpAuto(pedido)))
   return postar('permeabilidade/planilha-etapas', form, {})  // o navegador põe o Content-Type multipart com o boundary
+}
+
+/** dp_dci 'auto' é o padrão do serviço novo; o serviço publicado antes dele só aceita 'total' | 'dp1_dp2' e recusava o
+ *  pedido inteiro (422). Sem o campo, o novo usa 'auto' e o antigo, 'total': os dois aceitam. */
+function semDpAuto<T extends { dp_dci?: string }>(p: T): T {
+  if (p.dp_dci !== 'auto') return p
+  const { dp_dci: _auto, ...resto } = p
+  return resto as T
 }
 
 /** POST no serviço com o token da sessão; devolve o arquivo ou lança o erro já em português */
@@ -203,6 +247,10 @@ async function acordarServico(url: string, sinal?: AbortSignal): Promise<void> {
 }
 
 async function postar(caminho: string, corpo: BodyInit, cabecalhos: Record<string, string>, sinal?: AbortSignal): Promise<Blob> {
+  return (await postarResposta(caminho, corpo, cabecalhos, sinal)).blob()
+}
+
+async function postarResposta(caminho: string, corpo: BodyInit, cabecalhos: Record<string, string>, sinal?: AbortSignal): Promise<Response> {
   if (!URL_GRAFICOS) throw new Error('Falta o endereço do serviço de gráficos: coloque VITE_URL_GRAFICOS no .env.local e reinicie o npm run dev.')
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -231,7 +279,7 @@ async function postar(caminho: string, corpo: BodyInit, cabecalhos: Record<strin
         + 'tente de novo em 1 minuto. Se persistir, confira no Render se o serviço está "Live" e se este endereço está em ORIGENS_PERMITIDAS.')
     }
   }
-  if (r.ok) return r.blob()
+  if (r.ok) return r
   const detalhe = await r.json().then((j: { detail?: unknown }) => j.detail).catch(() => null)
   const texto = Array.isArray(detalhe)
     ? detalhe.map((d: { loc?: unknown[]; msg?: string }) => `${(d.loc ?? []).slice(1).join('.')}: ${d.msg}`).join('; ')
@@ -245,7 +293,9 @@ async function postar(caminho: string, corpo: BodyInit, cabecalhos: Record<strin
 /** Fase como vai para /acidificacao/* (o papel e o fluido são os escolhidos na tela) */
 export interface FaseAcid { ordem: number; papel: string; q: number; t_inicio: number; t_fim: number; fluido: string | null
   /** garrafa (JBV) ou acumulador (DCI) da fase: o serviço usa o do ácido para o volume injetado */
-  garrafa?: number | null }
+  garrafa?: number | null
+  /** cor da curva e texto da legenda escolhidos nos gráficos (sem = padrão do Origin do laboratório) */
+  cor?: string | null; legenda?: string | null }
 export interface PedidoAcid {
   amostra: string | null; sistema_acido: string | null
   comprimento_cm: number | null; diametro_cm: number | null; porosidade_pct: number | null
@@ -270,28 +320,126 @@ export interface PedidoAcid {
     dp_max?: number | null; dp_min?: number
     espessura_linha?: number
     titulo?: string | null; largura_cm?: number | null; altura_cm?: number | null
+    tamanho_fonte?: number
+    cor_vazao?: string | null
+    mostrar_legenda?: boolean
+    /** canto de cima à esquerda da legenda, em fração dos eixos (0..1), por gráfico; sem = automático */
+    legenda_pos?: Partial<Record<GraficoAcid, [number, number]>>
   }
 }
 export type GraficoAcid = 'geral' | 'pv' | 'apos'
+
+// ---- acidificação: como a pessoa deixou os gráficos (vai para a planilha, os downloads e o banco) ----
+export const CORES_ACID = { pre: ['#0000FF', '#000080', '#008080'], acido: '#FF0000', pos: ['#000000', '#00FF00', '#FF00FF', '#1F77B4', '#808000', '#800080'], vazao: '#FF8000' }
+
+/** grava em analise_coreflooding.config_graficos (migração 026); o serviço lê no /acidificacao/grafico-salvo */
+export interface ConfigGraficosAcid {
+  versao: 1
+  fonte: string
+  tamanho_fonte: number
+  espessura_linha: number
+  mostrar_vazao: boolean
+  cor_vazao: string
+  mostrar_legenda: boolean
+  dp_min: number | null
+  dp_max: number | null
+  legenda_pos: Partial<Record<GraficoAcid, [number, number]>>
+  /** por ordem da fase: cor e texto da legenda (vazio = o padrão do Origin do laboratório) */
+  fases: Record<string, { cor?: string; legenda?: string }>
+}
+
+export const CONFIG_ACID_PADRAO: ConfigGraficosAcid = {
+  versao: 1, fonte: 'Arial', tamanho_fonte: 12, espessura_linha: 1.2, mostrar_vazao: true, cor_vazao: CORES_ACID.vazao,
+  mostrar_legenda: true, dp_min: null, dp_max: null, legenda_pos: {}, fases: {},
+}
+
+const CHAVE_PREF_ACID = 'lcpetro.graficos.acidificacao'
+/** o que vale para o próximo ensaio (fonte, tamanho, espessura, vazão, posição das legendas); fases e limites são do ensaio */
+export function configAcidInicial(): ConfigGraficosAcid {
+  try {
+    const s = localStorage.getItem(CHAVE_PREF_ACID)
+    const o = s ? JSON.parse(s) as Partial<ConfigGraficosAcid> : {}
+    return { ...CONFIG_ACID_PADRAO, ...o, versao: 1, dp_min: null, dp_max: null, fases: {}, legenda_pos: o.legenda_pos ?? {} }
+  } catch {
+    return CONFIG_ACID_PADRAO
+  }
+}
+export function guardarPreferenciasAcid(c: ConfigGraficosAcid) {
+  const { fases: _f, dp_min: _a, dp_max: _b, ...pref } = c
+  try { localStorage.setItem(CHAVE_PREF_ACID, JSON.stringify(pref)) } catch { /* sem localStorage: vale só nesta tela */ }
+  enviarPreferencia('acidificacao', pref)
+}
+
+/** cor padrão de cada fase, a mesma do serviço (graficos/acidificacao.py: _cores) */
+export function coresPadraoAcid(fases: { ordem: number; papel: string }[]): Record<number, string> {
+  const c: Record<number, string> = {}
+  let ip = 0, io = 0
+  for (const f of [...fases].sort((a, b) => a.ordem - b.ordem)) {
+    if (f.papel === 'acido') c[f.ordem] = CORES_ACID.acido
+    else if (f.papel === 'pos_fluxo') c[f.ordem] = CORES_ACID.pos[io++ % CORES_ACID.pos.length]
+    else c[f.ordem] = CORES_ACID.pre[ip++ % CORES_ACID.pre.length]
+  }
+  return c
+}
+
+/** legenda padrão da fase, a mesma do serviço (graficos/acidificacao.py: _legenda) */
+export function legendaPadraoAcid(f: { papel: string; q: number; fluido: string | null }, temp?: string | null): string {
+  const nome = f.fluido || '?'
+  if (f.papel === 'acido') return `${nome} @${Number(f.q.toPrecision(6))} ml/min${temp ? ` ${temp}` : ''}`
+  const q = f.q >= 0.95 ? f.q.toFixed(1) : String(Number(f.q.toPrecision(3)))
+  return `${nome} ${q} ml/min${f.papel === 'pos_fluxo' ? ' (after)' : ''}`
+}
+
+/** o pedido com as escolhas dos gráficos (cores, legendas, fonte...); usado na prévia, nos downloads e na planilha */
+export function aplicarConfigAcid(p: PedidoAcid, c: ConfigGraficosAcid): PedidoAcid {
+  return {
+    ...p,
+    fases: p.fases.map((f) => {
+      const e = c.fases[String(f.ordem)] ?? {}
+      return { ...f, ...(e.cor ? { cor: e.cor } : {}), ...(e.legenda?.trim() ? { legenda: e.legenda.trim() } : {}) }
+    }),
+    config: {
+      ...p.config, fonte: c.fonte, tamanho_fonte: c.tamanho_fonte, espessura_linha: c.espessura_linha,
+      mostrar_vazao: c.mostrar_vazao, cor_vazao: c.cor_vazao, mostrar_legenda: c.mostrar_legenda,
+      dp_min: c.dp_min ?? 0, dp_max: c.dp_max != null && c.dp_max > 0 ? c.dp_max : null, legenda_pos: c.legenda_pos,
+    },
+  }
+}
 
 /** Pasta de trabalho do laboratório (abas 0 a 5 com fórmulas + Gráficos), montada a partir do arquivo ORIGINAL do JBV */
 export function pedirPlanilhaAcidificacao(arquivo: File, pedido: PedidoAcid): Promise<Blob> {
   const { leituras: _ignorar, ...pedidoSemLeituras } = pedido
   const form = new FormData()
   form.append('arquivo', arquivo, arquivo.name)
-  form.append('pedido', JSON.stringify(pedidoSemLeituras))
+  form.append('pedido', JSON.stringify(semDpAuto(pedidoSemLeituras)))
   return postar('acidificacao/planilha', form, {})
 }
 
+/** onde ficaram os eixos e a legenda na imagem: [x, y, largura, altura] em fração da imagem, a partir do canto de cima à esquerda */
+export interface LayoutGrafico { eixos: [number, number, number, number]; legenda: [number, number, number, number] | null }
+
 /** Graph 0 (geral), Graph 3 (ΔP × PV) ou Graph 4 (depois do ácido) */
-export function pedirGraficoAcidificacao(arquivo: File, pedido: PedidoAcid, qual: GraficoAcid, sinal?: AbortSignal): Promise<Blob> {
+export async function pedirGraficoAcidificacao(arquivo: File, pedido: PedidoAcid, qual: GraficoAcid, sinal?: AbortSignal): Promise<Blob> {
+  return (await pedirGraficoAcidificacaoComLayout(arquivo, pedido, qual, sinal)).blob
+}
+
+/** o gráfico e o layout (cabeçalho X-Grafico-Layout; null no serviço antigo, que não manda) */
+export async function pedirGraficoAcidificacaoComLayout(arquivo: File, pedido: PedidoAcid, qual: GraficoAcid, sinal?: AbortSignal):
+  Promise<{ blob: Blob; layout: LayoutGrafico | null }> {
   const form = new FormData()
   if (!pedido.leituras?.length) {
     form.append('arquivo', arquivo, arquivo.name)
   }
-  form.append('pedido', JSON.stringify(pedido))
+  form.append('pedido', JSON.stringify(semDpAuto(pedido)))
   form.append('qual', qual)
-  return postar('acidificacao/grafico', form, {}, sinal)
+  const r = await postarResposta('acidificacao/grafico', form, {}, sinal)
+  let layout: LayoutGrafico | null = null
+  try {
+    const h = r.headers.get('X-Grafico-Layout')
+    const o = h ? JSON.parse(h) : null
+    if (o && Array.isArray(o.eixos) && o.eixos.length === 4) layout = { eixos: o.eixos, legenda: Array.isArray(o.legenda) ? o.legenda : null }
+  } catch { /* sem layout: a legenda não fica arrastável */ }
+  return { blob: await r.blob(), layout }
 }
 
 export function baixarArquivo(blob: Blob, nome: string) {

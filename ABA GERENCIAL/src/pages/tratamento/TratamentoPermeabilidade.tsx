@@ -18,7 +18,7 @@ import type { Equipamento } from '../../importador/tratamentoAcidificacao'
 import { supabase } from '../../lib/supabase'
 import { listarAmostras, type AmostraResumo } from '../../servicos/api'
 import {
-  baixarArquivo, configDoBanco, configInicial, configParaGravar, montarPedido, pedirPlanilhaEtapas, type ConfigGraficos, type DadosEnsaio,
+  baixarArquivo, configDoBanco, configInicial, configParaGravar, sincronizarPreferencias, montarPedido, pedirPlanilhaEtapas, type ConfigGraficos, type DadosEnsaio,
 } from '../../servicos/graficos'
 import { useContexto } from '../../store/useContexto'
 import { fmt, fmtData, mensagemErro, numeroParaInput, paraNumero } from '../../utils/formatacao'
@@ -97,6 +97,16 @@ export const TratamentoPermeabilidade: React.FC<{ equipamento?: Equipamento; dpD
   // gráficos padrão Origin: começa com as últimas escolhas da pessoa; vira a do banco se a amostra já tiver uma
   const [cfgGraficos, setCfgGraficos] = useState<ConfigGraficos>(configInicial)
   const [origemCfg, setOrigemCfg] = useState<string | null>(null)
+  // preferências do usuário gravadas no banco (fonte, tamanho, cores...): valem por cima das do navegador
+  useEffect(() => {
+    let vivo = true
+    sincronizarPreferencias('permeabilidade').then((havia) => {
+      if (!vivo || !havia) return
+      const p = configInicial()
+      setCfgGraficos((c) => ({ ...p, titulo: c.titulo, xlim: c.xlim, ylim: c.ylim, etapas: c.etapas, unidade_tempo: c.unidade_tempo }))
+    })
+    return () => { vivo = false }
+  }, [])
 
   const ensaio: Ensaio | undefined = ensaios[iEnsaio]
   // o tempo do DCI nasce em horas: mostra na unidade do equipamento (o cálculo segue em segundos por dentro)

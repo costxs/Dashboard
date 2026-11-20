@@ -48,6 +48,8 @@ class Tabela:
     garrafas: dict          # n -> (coluna do volume atual, coluna do nome ou -1)
     nome_garrafa: str       # "garrafa" (JBV) ou "acumulador" (DCI)
     rotulo_dp: str
+    fonte_dp: str = "total"   # DCI: total | dp1_dp2 | pp_diff (o que foi usado de fato)
+    saturados: list = []      # DCI: transdutores presos no limite de leitura
     escala_t: float = 1.0
 
     def t(self, l) -> float:
@@ -62,7 +64,21 @@ class Tabela:
         return self._cols
 
 
-def ler_arquivo(conteudo: bytes) -> Tabela:
+def detectar_saturacao(valores, com_vazao, nome):
+    """Transdutor saturado = parte das leituras COM VAZÃO presa no valor máximo dele (ex.: DP2 parado em 238,7 psi)."""
+    v = [x for x, f in zip(valores, com_vazao) if f and isinstance(x, (int, float))]
+    if len(v) < 50:
+        return None
+    mx = max(v)
+    if mx < 20:
+        return None
+    tol = max(0.3, mx * 0.002)
+    fr = sum(1 for x in v if x >= mx - tol) / len(v)
+    return {"canal": nome, "limite_psi": mx, "fracao": fr} if fr >= 0.05 else None
+
+
+def ler_arquivo(conteudo: bytes, fonte_dp: str = "auto") -> Tabela:
+    """fonte_dp (só DCI): auto | total | dp1_dp2 | pp_diff — ver lerDCI.ts."""
     wb = load_workbook(io.BytesIO(conteudo), data_only=True, read_only=True)
     abas = [(ws.title, list(ws.iter_rows(values_only=True))) for ws in wb.worksheets]
     # DCI primeiro (tem "Timestamp (hours)" e "VPA n Flow Rate")
@@ -74,7 +90,7 @@ def ler_arquivo(conteudo: bytes) -> Tabela:
                 dci.append((titulo, linhas, i))
                 break
     if dci:
-        return _dci(dci)
+        return _dci(dci, fonte_dp)
     for titulo, linhas in abas:
         for i, l in enumerate(linhas):
             ks = [chave(v) for v in l]
@@ -113,6 +129,7 @@ def _jbv(linhas, i) -> Tabela:
               "temp": col(lambda k: k.startswith("t estufa")), "k": col(lambda k: k == f"permeabilidade {h} md"),
               "vol_bomba": -1}
     tb.rotulo_dp = f"dP{h.upper()}"
+    tb.fonte_dp, tb.saturados = "dph", []
     if tb.idx["dp"] < 0 or tb.idx["q"] < 0:
         raise ValueError(f"colunas dP{h.upper()} (psi) e Q (cm³/min) não encontradas")
     tb.garrafas = {}
@@ -136,7 +153,7 @@ def _jbv(linhas, i) -> Tabela:
 
 
 # --------------------------------------------------------------------------- DCI
-def _dci(achados) -> Tabela:
+def _dci(achados, fonte_dp: str = "auto") -> Tabela:
     # cabeçalho: de qualquer aba que o tenha
     kv = {}
     for _, linhas, i in achados:
@@ -212,6 +229,31 @@ def _dci(achados) -> Tabela:
         if j >= 0:
             tb.garrafas[g] = (j, -1)
     # colunas da Planilha1: as mesmas que o pesquisador copia (sem data/hora/bombas de pressão)
+    # transdutor saturado → ΔP pela diferença entrada − saída ("DPB Diff." = PP1B − PP2B), como no Origin
+    i_dps = [col(lambda k, n=n: k.startswith(f"core {c} differential pressure {n} dp{n}{c}")) for n in (1, 2, 3)]
+    com_vazao = [isinstance(l[tb.idx["q"]], (int, float)) and l[tb.idx["q"]] > 0.02 for l in tb.linhas]
+    tb.saturados = [x for x in (detectar_saturacao([l[j] for l in tb.linhas], com_vazao, f"DP{n}{c.upper()}")
+                                for n, j in zip((1, 2, 3), i_dps) if j >= 0) if x]
+    i_diff = col(lambda k: k.startswith(f"dp{c} diff"))
+    i_up, i_down = col(lambda k: k.startswith(f"core {c} upstream pressure")), tb.idx["pb"]
+    fonte = fonte_dp if fonte_dp != "auto" else ("pp_diff" if tb.saturados and (i_diff >= 0 or (i_up >= 0 and i_down >= 0)) else "total")
+    if fonte == "pp_diff":
+        if i_diff < 0:                          # sem a coluna pronta: calcula PP1 − PP2 numa coluna nova
+            tb.cab.append(f"DP{c.upper()} Diff. calculado (psi)")
+            for l in tb.linhas:
+                a, b2 = l[i_up], l[i_down]
+                l.append(a - b2 if isinstance(a, (int, float)) and isinstance(b2, (int, float)) else None)
+            i_diff = len(tb.cab) - 1
+        tb.idx["dp"] = i_diff
+        tb.rotulo_dp = f"DP{c.upper()} Diff. (PP1{c.upper()} − PP2{c.upper()})"
+    elif fonte == "dp1_dp2" and i_dps[0] >= 0 and i_dps[1] >= 0:
+        tb.cab.append("DP1 + DP2 (psi)")
+        for l in tb.linhas:
+            a, b2 = l[i_dps[0]], l[i_dps[1]]
+            l.append(a + b2 if isinstance(a, (int, float)) and isinstance(b2, (int, float)) else None)
+        tb.idx["dp"] = len(tb.cab) - 1
+        tb.rotulo_dp = "DP1 + DP2"
+    tb.fonte_dp = fonte
     manter = [i_t] + [col(lambda k, s=s: k == f"vpa {b} {s}") for s in ("volume pumped ml", "pressure psi", "flow rate ml min")]
     manter += [col(lambda k, s=s: k.startswith(s)) for s in ("oven temp", f"core {c} upstream pressure", f"core {c} downstream pressure",
                                                              f"core {c} differential pressure 1", f"core {c} differential pressure 2",
@@ -221,7 +263,8 @@ def _dci(achados) -> Tabela:
         vs = [l[j] for l in tb.linhas if isinstance(l[j], (int, float))]
         if vs and max(vs) - min(vs) > 0.01:
             manter.append(j)
-    manter += [tb.idx["k"], tb.idx["dp"]]
+    i_tot = col(lambda k: k.startswith(f"core {c} differential pressure total"))
+    manter += [tb.idx["k"], i_tot] + ([tb.idx["dp"]] if tb.idx["dp"] != i_tot else [])
     tb._cols = [j for j in manter if j is not None and j >= 0]
     return tb
 
@@ -253,25 +296,16 @@ class DCIComoJBV:
         self.meta, self.cab, self.linhas = meta, cab, linhas
 
 
-def dci_como_jbv(conteudo: bytes, dp: str = "total") -> DCIComoJBV:
-    tb = ler_arquivo(conteudo)
+def dci_como_jbv(conteudo: bytes, dp: str = "auto") -> DCIComoJBV:
+    tb = ler_arquivo(conteudo, dp)
     if tb.equipamento != "DCI":
         raise ValueError("o arquivo não é do DCI")
-    ks = [chave(v) for v in tb.cab]
-    c = tb.rotulo_dp[2].lower()                      # "DPBtot" -> "b"
-    j_dp1 = next((j for j, k in enumerate(ks) if k.startswith(f"core {c} differential pressure 1")), -1)
-    j_dp2 = next((j for j, k in enumerate(ks) if k.startswith(f"core {c} differential pressure 2")), -1)
-    soma = dp == "dp1_dp2" and j_dp1 >= 0 and j_dp2 >= 0
 
     def num(l, j):
         x = l[j] if 0 <= j < len(l) else None
         return x if isinstance(x, (int, float)) else None
 
-    def dp_de(l):
-        if soma:
-            a, b = num(l, j_dp1), num(l, j_dp2)
-            return (a + b) if a is not None and b is not None else None
-        return num(l, tb.idx["dp"])
+    dp_de = lambda l: num(l, tb.idx["dp"])  # noqa: E731   (a fonte do ΔP já foi escolhida em ler_arquivo)
 
     # só os acumuladores que mudaram de volume (os parados não são fluido em uso)
     gs = []
@@ -295,5 +329,6 @@ def dci_como_jbv(conteudo: bytes, dp: str = "total") -> DCIComoJBV:
     meta = {"Descrição da amostra": m.get("amostra"), "Data": (m.get("data") or "").split(" ")[0] or None, "Usuário": m.get("operador"),
             "Comprimento (cm)": txt(m.get("comprimento_cm"), 2), "Diâmetro (cm)": txt(m.get("diametro_cm"), 2),
             "Porosidade (%)": txt(m.get("porosidade_pct"), 2), "Viscosidade (cP)": txt(m.get("viscosidade_cp")),
-            "Fluido de tratamento": m.get("fluido"), "Equipamento": "DCI"}
+            "Fluido de tratamento": m.get("fluido"), "Equipamento": "DCI",
+            "Volume poroso (ml)": txt(m.get("volume_poroso_cm3"))}
     return DCIComoJBV({k: v for k, v in meta.items() if v not in (None, "")}, cab, linhas)

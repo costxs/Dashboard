@@ -67,13 +67,13 @@ class PedidoPlanilha(BaseModel):
     viscosidade_cp: Optional[float] = None
     ajuste: Literal["intercepto", "origem"] = "intercepto"   # reta ΔP × Q (intercepto = como o Origin do laboratório)
     aba: Optional[str] = None   # aba que o gerencial leu (a mesma da tela)
-    dp_dci: Literal["total", "dp1_dp2"] = "total"   # só DCI: ΔP = DP1+DP2+DP3 (total) ou só DP1+DP2
+    dp_dci: Literal["auto", "total", "dp1_dp2", "pp_diff"] = "auto"   # só DCI: auto (DPB Diff. se um transdutor saturar) | total | dp1_dp2 | pp_diff
     # mesmo pedido do /permeabilidade/grafico (leituras, etapas e config da tela): se vier,
     # a planilha ganha a aba "Gráficos" com o gráfico único e o ΔP × Q
     grafico: Optional[PedidoGrafico] = None
 
 
-def ler_tabela_leituras(conteudo: bytes, aba: str | None = None, dp_dci: str = "total"):
+def ler_tabela_leituras(conteudo: bytes, aba: str | None = None, dp_dci: str = "auto"):
     """(nome da aba, metadados, cabeçalho, linhas) da tabela de leituras.
 
     .xlsx, .xls antigo, HTML/XML com extensão .xls ou CSV: o formato vem do conteúdo (ver leitura.py).
@@ -106,7 +106,7 @@ def ler_tabela_leituras(conteudo: bytes, aba: str | None = None, dp_dci: str = "
     return (com_cabecalho or achadas)[0]
 
 
-def _ler_exportacao(conteudo: bytes, aba: str | None = None, dp_dci: str = "total"):
+def _ler_exportacao(conteudo: bytes, aba: str | None = None, dp_dci: str = "auto"):
     _, meta, cab, linhas = ler_tabela_leituras(conteudo, aba, dp_dci)
     return meta, cab, linhas
 
@@ -143,7 +143,7 @@ def gerar_planilha_etapas(conteudo: bytes, p: PedidoPlanilha) -> bytes:
     dados = [l for l in dados if l and isinstance(l[i_t], (int, float))]
     # Planilha1: no JBV, as colunas do arquivo; no DCI, as colunas ORIGINAIS do log (como o pesquisador copia), com o tempo
     # em horas na planilha e a etapa escolhida pelo tempo em segundos. O resumo e os dados por vazão usam o formato comum.
-    nativo = ler_arquivo(conteudo) if meta.get("Equipamento") == "DCI" else None
+    nativo = ler_arquivo(conteudo, p.dp_dci) if meta.get("Equipamento") == "DCI" else None
     if nativo is not None:
         cab_pl, dados_pl, cols, seg = nativo.cab, nativo.linhas, nativo.colunas_planilha(), nativo.t
     else:
@@ -200,6 +200,8 @@ def gerar_planilha_etapas(conteudo: bytes, p: PedidoPlanilha) -> bytes:
             ("Gerado em", datetime.now().strftime("%d/%m/%Y %H:%M"))]
     if meta.get("Equipamento") == "DCI":
         info.insert(1, ("Equipamento", "DCI"))
+        if nativo is not None:
+            info.insert(2, ("ΔP usado", nativo.rotulo_dp + (f" — {', '.join(x['canal'] for x in nativo.saturados)} saturado" if nativo.saturados else "")))
     for i, (k, v) in enumerate(info, start=4):
         r.cell(row=i, column=2, value=k).font = Font(bold=True, color="475569")
         r.cell(row=i, column=4, value=v).alignment = Alignment(horizontal="left")

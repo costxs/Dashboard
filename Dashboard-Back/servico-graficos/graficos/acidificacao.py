@@ -38,7 +38,7 @@ from .planilha_etapas import AZUL, chave, ler_tabela_leituras
 
 CORES_PRE = ["#0000FF", "#000080", "#008080"]
 COR_ACIDO = "#FF0000"
-CORES_POS = ["#000000", "#FF00FF", "#808000", "#800080", "#008000"]
+CORES_POS = ["#000000", "#00FF00", "#FF00FF", "#1F77B4", "#808000", "#800080"]   # como no Origin do laboratório
 COR_VAZAO = "#FF8000"
 
 
@@ -51,6 +51,7 @@ class FaseAcid(BaseModel):
     fluido: Optional[str] = None
     legenda: Optional[str] = None        # padrão: "KCl 2% 2.0 ml/min", "BLEND @2 ml/min", "AUP 2.0 ml/min (after)"
     cor: Optional[str] = None
+    garrafa: Optional[int] = None        # garrafa (JBV) ou acumulador (DCI) da fase; vazio = o serviço descobre
 
 
 class ConfigAcid(BaseModel):
@@ -60,9 +61,26 @@ class ConfigAcid(BaseModel):
     tamanho_fonte: float = Field(12, ge=6, le=40)
     espessura_linha: float = Field(2.0, gt=0, le=8)
     mostrar_pvbt: bool = True
-    mostrar_vazao: bool = True                    # Graph 0: vazão tracejada no eixo da direita (desligada, o ΔP ocupa o gráfico todo)
+    mostrar_vazao: Optional[bool] = None          # Graph 0: vazão no eixo da direita (padrão: sim no JBV, não no DCI — como o laboratório)
+    titulo: Optional[str] = None                  # padrão no DCI: "<amostra> - Acidizing"
+    largura_cm: Optional[float] = None
+    altura_cm: Optional[float] = None
     dp_max: Optional[float] = Field(None, gt=0)   # limite superior do ΔP (psi); vazio = ajusta aos dados
     dp_min: float = 0.0                           # limite inferior do ΔP (psi)
+    cor_vazao: Optional[str] = None               # Graph 0: cor da vazão tracejada (padrão laranja)
+    mostrar_legenda: bool = True
+    # posição da caixa da legenda arrastada na tela, por gráfico: canto de CIMA À ESQUERDA, em fração dos eixos
+    # (0,0 = canto de baixo à esquerda da área dos dados; 1,1 = de cima à direita). Vazio = posição automática.
+    legenda_pos: dict[Literal["geral", "pv", "apos"], tuple[float, float]] = {}
+
+    @field_validator("legenda_pos", mode="before")
+    @classmethod
+    def _legenda_pos_valida(cls, v):
+        # posições fora da figura (arraste errado) voltam ao automático em vez de recusar o pedido
+        if not isinstance(v, dict):
+            return {}
+        return {k: xy for k, xy in v.items() if k in ("geral", "pv", "apos") and isinstance(xy, (list, tuple)) and len(xy) == 2
+                and all(isinstance(n, (int, float)) and -1 <= n <= 2 for n in xy)}
 
 
 class PedidoAcid(BaseModel):
@@ -75,8 +93,9 @@ class PedidoAcid(BaseModel):
     temperatura_rotulo: Optional[str] = None   # ex.: "T40" (vai na legenda do ácido, como no laboratório)
     aba: Optional[str] = None                   # aba que o gerencial leu (a mesma da tela)
     volume_poroso_cm3: Optional[float] = Field(None, gt=0)   # VP já calculado (gráficos do que foi gravado); senão, das dimensões
+    fonte_volume: Optional[str] = None          # 'vazao' (Q·Δt, padrão JBV) | 'garrafa' (queda do acumulador, padrão DCI)
     houve_breakthrough: Optional[bool] = None   # o gerencial manda o que a pessoa confirmou; vazio = o serviço confere
-    dp_dci: Literal["total", "dp1_dp2"] = "total"   # só DCI: ΔP = DP1+DP2+DP3 (total) ou só DP1+DP2
+    dp_dci: Literal["auto", "total", "dp1_dp2", "pp_diff"] = "auto"   # só DCI: auto (DPB Diff. se um transdutor saturar) | total | dp1_dp2 | pp_diff
     equipamento: Optional[Literal["JBV", "DCI"]] = None
     leituras: Optional[list[tuple[float, float, Optional[float]]]] = None   # (tempo_s, q, dp) já lidos no navegador
     fases: list[FaseAcid] = []
@@ -98,7 +117,7 @@ class Dados:
     div_t = 1.0                    # segundos por unidade mostrada (DCI: 3600)
     rot_t = "s"
 
-    def __init__(self, conteudo: bytes, aba: str | None = None, dp_dci: str = "total"):
+    def __init__(self, conteudo: bytes, aba: str | None = None, dp_dci: str = "auto"):
         self.aba, self.meta, cab, linhas = ler_tabela_leituras(conteudo, aba, dp_dci)
         if self.meta.get("Equipamento") == "DCI":
             self.equipamento, self.nome_garrafa = "DCI", "acumulador"
@@ -140,6 +159,27 @@ class Dados:
 
     def _col(self, f) -> int:
         return next((j for j, k in enumerate(self.ks) if f(k)), -1)
+
+    def tx(self, l) -> float:
+        """Tempo na unidade do equipamento (DCI: horas; JBV: segundos), como o Origin do laboratório."""
+        return l[self.c["t"]] / self.div_t
+
+    def volume_garrafa(self, l, g) -> Optional[float]:
+        j = self.garrafas.get(g, (-1, -1))[0]
+        x = l[j] if j is not None and j >= 0 else None
+        return x if isinstance(x, (int, float)) else None
+
+    def garrafa_da_fase(self, f: "FaseAcid") -> Optional[int]:
+        """Garrafa/acumulador da fase: o informado ou o que mais caiu de volume dentro dela."""
+        if f.garrafa:
+            return f.garrafa
+        jan = self.janela(f)
+        melhor, dv = None, 0.0
+        for g in self.garrafas:
+            a, b = (self.volume_garrafa(jan[0], g), self.volume_garrafa(jan[-1], g)) if jan else (None, None)
+            if a is not None and b is not None and a - b > dv:
+                melhor, dv = g, a - b
+        return melhor
 
     def v(self, l, nome):
         j = self.c[nome]
@@ -267,32 +307,58 @@ def _cores(fases: list[FaseAcid]) -> dict[int, str]:
 
 
 # --------------------------------------------------------------------------- cálculos
-def geometria(p: PedidoAcid) -> dict:
+def geometria(p: PedidoAcid, d: Optional["Dados"] = None) -> dict:
+    """VP: o informado pelo gerencial > (DCI) o do cabeçalho do equipamento > π·D²/4·L·φ.
+    A porosidade devolvida é a que reproduz esse VP, para as fórmulas da planilha darem o mesmo número."""
     a = math.pi * p.diametro_cm ** 2 / 4
-    phi = p.porosidade_pct / 100
-    vp = p.volume_poroso_cm3 or a * p.comprimento_cm * phi
-    return {"area": a, "phi": phi, "vp": vp}
+    vp = p.volume_poroso_cm3
+    if not vp and d is not None and d.equipamento == "DCI":
+        try:
+            vp = float(d.meta.get("Volume poroso (ml)") or 0) or None
+        except ValueError:
+            vp = None
+    if not vp:
+        vp = a * p.comprimento_cm * p.porosidade_pct / 100
+    return {"area": a, "phi": vp / (a * p.comprimento_cm), "vp": vp}
+
+
+def _por_garrafa(d: "Dados", p: PedidoAcid) -> bool:
+    return (p.fonte_volume or ("garrafa" if d.equipamento == "DCI" else "vazao")) == "garrafa"
 
 
 def serie_acido(d: Dados, f: FaseAcid, p: PedidoAcid) -> list[tuple[float, float, float, float, float]]:
-    """(tempo, volume total, volume injetado, PV, ΔP) — igual à aba '2 - Acidizing' do Origin."""
-    g = geometria(p)
+    """(tempo, volume total, volume injetado, PV, ΔP) — igual à aba '2 - Acidizing' do Origin.
+    JBV: volume = Q·(t − t₀).  DCI: volume = volume do acumulador no início − volume agora (como o laboratório)."""
+    g = geometria(p, d)
     jan = d.janela(f)
     if not jan:
         return []
     t0 = jan[0][d.c["t"]]
+    gar = d.garrafa_da_fase(f) if _por_garrafa(d, p) else None
+    v0 = d.volume_garrafa(jan[0], gar) if gar else None
     morto = p.volume_morto_cm3 or 0.0
     vp = g["vp"] if g["vp"] > 0 else 1.0
     out = []
     for l in jan:
         t = l[d.c["t"]]
-        vt = f.q * (t - t0) / 60
+        va = d.volume_garrafa(l, gar) if gar else None
+        vt = (v0 - va) if (v0 is not None and va is not None) else f.q * (t - t0) / 60
         vi = vt - morto
         out.append((t, vt, vi, vi / vp, d.v(l, "dp")))
     return out
 
 
 # --------------------------------------------------------------------------- gráficos
+def limites_dp(dps: list[float], vazao: bool, dp_min: float = 0.0, dp_max: Optional[float] = None) -> tuple[float, float]:
+    """Eixo do ΔP do gráfico geral. Inclui o zero e os valores NEGATIVOS (depois do breakthrough o ΔP pode ficar
+    abaixo de zero pelo zero do transdutor, ~−18 psi no DCI): antes o eixo começava em 0 e escondia as fases de depois."""
+    lo_dados, hi_dados = min(min(dps, default=0), 0), max(dps, default=1.0)
+    span = (hi_dados - lo_dados) or 1.0
+    lo = dp_min if dp_min else (lo_dados - 0.07 * span if lo_dados < 0 else 0.0)
+    hi = dp_max or ((hi_dados * 1.9) if vazao and hi_dados > 0 else hi_dados + 0.08 * span)
+    return lo, (hi if hi > lo else lo + 1.0)
+
+
 def _fmt(v, casas=2):
     return f"{v:.{casas}f}".replace(".", ",")
 
@@ -305,7 +371,7 @@ def _eixos_virgula(ax, casas_x=2, casas_y=2):
 _CACHE_DADOS: dict[tuple[str, str, str], Dados] = {}
 
 
-def _obter_dados(conteudo: bytes, aba: str | None = None, dp_dci: str = "total") -> Dados:
+def _obter_dados(conteudo: bytes, aba: str | None = None, dp_dci: str = "auto") -> Dados:
     chave_cache = (hashlib.sha1(conteudo).hexdigest(), aba or "", dp_dci)
     if chave_cache in _CACHE_DADOS:
         return _CACHE_DADOS[chave_cache]
@@ -317,46 +383,100 @@ def _obter_dados(conteudo: bytes, aba: str | None = None, dp_dci: str = "total")
 
 
 def grafico(conteudo: bytes, p: PedidoAcid, qual: Literal["geral", "pv", "apos"]) -> tuple[bytes, str]:
+    img, tipo, _ = grafico_com_layout(conteudo, p, qual)
+    return img, tipo
+
+
+def grafico_com_layout(conteudo: bytes, p: PedidoAcid, qual: Literal["geral", "pv", "apos"]) -> tuple[bytes, str, dict]:
+    """O gráfico e onde ficaram os eixos e a legenda na imagem (para a tela arrastar a legenda por cima)."""
     d = Dados.de_leituras(p.leituras, p.equipamento) if p.leituras else _obter_dados(conteudo, p.aba, p.dp_dci)
     fases = sorted(p.fases or detectar_fases(d), key=lambda x: x.ordem)
-    return _grafico(d, fases, p, qual, p.config.formato, p.config.dpi)
+    layout: dict = {}
+    img, tipo = _grafico(d, fases, p, qual, p.config.formato, p.config.dpi, layout)
+    return img, tipo, layout
 
 
-def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato: str, dpi: int) -> tuple[bytes, str]:
+def config_salva(cfg: Optional[dict], fases: list[FaseAcid], formato: str = "png", dpi: int = 150) -> tuple[ConfigAcid, list[FaseAcid]]:
+    """config_graficos gravada pelo gerencial (analise_coreflooding) -> ConfigAcid e as fases com a cor e a legenda escolhidas.
+    Sem configuração gravada, o padrão do Origin. Campos estranhos ou inválidos são ignorados (o gráfico sai do mesmo jeito)."""
+    c = cfg if isinstance(cfg, dict) and cfg.get("versao") == 1 else {}
+    campos = {k: c[k] for k in ("fonte", "tamanho_fonte", "espessura_linha", "mostrar_vazao", "cor_vazao", "dp_max",
+                                "mostrar_legenda", "legenda_pos") if c.get(k) is not None}
+    if isinstance(c.get("dp_min"), (int, float)):
+        campos["dp_min"] = c["dp_min"]
+    try:
+        conf = ConfigAcid(formato=formato, dpi=dpi, mostrar_pvbt=False, **campos)
+    except ValueError:
+        conf = ConfigAcid(formato=formato, dpi=dpi, mostrar_pvbt=False)
+    por_fase = c.get("fases") if isinstance(c.get("fases"), dict) else {}
+    novas = []
+    for f in fases:
+        e = por_fase.get(str(f.ordem)) or {}
+        cor = e.get("cor") if isinstance(e.get("cor"), str) and e["cor"].startswith("#") else None
+        leg = e.get("legenda").strip() if isinstance(e.get("legenda"), str) and e["legenda"].strip() else None
+        novas.append(f.model_copy(update={"cor": cor or f.cor, "legenda": leg or f.legenda}))
+    return conf, novas
+
+
+def _legenda_em(ax, cfg: ConfigAcid, qual: str, *args, loc: str = "best", **kw):
+    """Legenda com moldura preta (Origin); na posição arrastada na tela, se houver."""
+    if not cfg.mostrar_legenda:
+        return None
+    pos = cfg.legenda_pos.get(qual)  # type: ignore[call-overload]
+    if pos:
+        kw.update(loc="upper left", bbox_to_anchor=tuple(pos), bbox_transform=ax.transAxes, borderaxespad=0)
+    else:
+        kw["loc"] = loc
+    return ax.legend(*args, frameon=True, edgecolor="black", fancybox=False, **kw)
+
+
+def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato: str, dpi: int,
+             layout: Optional[dict] = None) -> tuple[bytes, str]:
     cfg = p.config
     cores = _cores(fases)
     lw = cfg.espessura_linha
+    leg = None
     with estilo_origin(cfg.fonte, cfg.tamanho_fonte, 1.5, True):
         if qual == "geral":
-            fig, ax = plt.subplots(figsize=(30 / 2.54, 10 / 2.54))
+            dci = d.equipamento == "DCI"
+            vazao = cfg.mostrar_vazao if cfg.mostrar_vazao is not None else not dci
+            larg = cfg.largura_cm or (16 if dci else 30)
+            alt = cfg.altura_cm or (12.5 if dci else 10)
+            fig, ax = plt.subplots(figsize=(larg / 2.54, alt / 2.54))
+            dps = []
             for f in fases:
                 jan = d.janela(f)
-                ax.plot([l[d.c["t"]] / d.div_t for l in jan], [d.v(l, "dp") for l in jan], color=cores[f.ordem], lw=lw,
+                ys = [d.v(l, "dp") for l in jan]
+                dps += [y for y in ys if y is not None]
+                ax.plot([d.tx(l) for l in jan], ys, color=cores[f.ordem], lw=lw * (0.6 if dci else 1),
                         label=_legenda(f, p.temperatura_rotulo))
-            ax.set_xlabel(f"Time ({d.rot_t})", fontweight="bold"); ax.set_ylabel("DP (psi)", fontweight="bold")
-            dps = [(d.v(l, "dp") or 0) for f in fases for l in d.janela(f)]
-            dpmax = max(dps) if dps else 1.0
-            xs = [l[d.c["t"]] / d.div_t for f in fases for l in d.janela(f)]
-            # com a vazão sobra espaço em cima para a legenda; sem ela, o ΔP fecha logo acima do pico (como no Origin)
-            topo = cfg.dp_max or ((dpmax * 1.9) if cfg.mostrar_vazao else dpmax * 1.08)
+            xs = [d.tx(l) for f in fases for l in d.janela(f)]
             ax.set_xlim(0, max(xs) if xs else 1.0)
-            ax.set_ylim(cfg.dp_min, topo if topo > cfg.dp_min else cfg.dp_min + 1.0)
+            ax.set_ylim(*limites_dp(dps, vazao, cfg.dp_min, cfg.dp_max))
+            ax.set_xlabel(f"Time ({d.rot_t})", fontweight=None if dci else "bold")
+            ax.set_ylabel("DP (psi)", fontweight=None if dci else "bold")
+            titulo = cfg.titulo or (f"{p.amostra or d.meta.get('Descrição da amostra') or ''} - Acidizing".strip(" -") if dci else None)
+            if titulo:
+                ax.set_title(titulo, fontfamily="serif", fontsize=cfg.tamanho_fonte * 1.25)
             acabamento(ax)
             h2, l2 = [], []
-            if cfg.mostrar_vazao:
+            if vazao:
                 ax2 = ax.twinx()
-                ax2.plot([l[d.c["t"]] / d.div_t for l in d.linhas], [d.v(l, "q") for l in d.linhas], color=COR_VAZAO, ls="--", lw=lw * 0.75, label="Flow rate")
+                ax2.plot([d.tx(l) for l in d.linhas], [d.v(l, "q") for l in d.linhas], color=cfg.cor_vazao or COR_VAZAO, ls="--",
+                         lw=lw * 0.75, label="Flow rate")
                 ax2.set_ylabel("Flow rate (ml/min)", fontweight="bold")
-                qs = [(d.v(l, "q") or 0) for l in d.linhas]
-                qmax = max(qs) if qs else 1.0
-                ax2.set_ylim(0, (qmax * 1.15) if qmax > 0 else 1.0)
+                qmax = max(((d.v(l, "q") or 0) for l in d.linhas), default=0) or 1.0
+                ax2.set_ylim(0, qmax * 1.15)
                 ax.tick_params(right=False)
                 ax2.tick_params(direction="in", which="both")
                 _eixos_virgula(ax2)
                 h2, l2 = ax2.get_legend_handles_labels()
             _eixos_virgula(ax)
             h1, l1 = ax.get_legend_handles_labels()
-            ax.legend(h1 + h2, l1 + l2, loc="upper center" if cfg.mostrar_vazao else "upper left", frameon=True, edgecolor="black", fancybox=False)
+            # com a vazão a legenda fica no alto (o ΔP deixa espaço); sem ela, onde não cobrir a curva
+            # com a vazão, a legenda fica no eixo da direita (desenhado por último): assim a curva tracejada não passa por cima
+            leg = _legenda_em(ax2 if vazao else ax, cfg, qual, h1 + h2, l1 + l2, loc="upper center" if (vazao and not dci) else "best",
+                              fontsize=cfg.tamanho_fonte * (0.85 if dci else 1))
         elif qual == "pv":
             fa = next((f for f in fases if f.papel == "acido"), None)
             if not fa:
@@ -370,7 +490,8 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
             ax.set_xlim(x0, x1 + 0.04 * (x1 - x0) if x1 > x0 else x0 + 1)
             dp_validos = [x[4] for x in s if x[4] is not None]
             dp_max = max(dp_validos) if dp_validos else 1.0
-            ax.set_ylim(0, (dp_max * 1.2) if dp_max > 0 else 1.0)
+            dp_lo = min(dp_validos, default=0)
+            ax.set_ylim(dp_lo - 0.05 * (dp_max - dp_lo) if dp_lo < 0 else 0, (dp_max * 1.2) if dp_max > 0 else 1.0)
             if (p.volume_morto_cm3 or 0) > 0:
                 largo = -x0 > 0.3 * (x1 - x0) if x1 > x0 else False
                 ax.annotate("Dead Volume" if largo else "← Dead Volume", (x0 / 2 if largo else 0, ax.get_ylim()[1] * 0.38),
@@ -385,7 +506,7 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
                             ha="right", fontweight="bold", arrowprops={"arrowstyle": "->", "lw": 1, "color": "black"})
             ax.set_xlabel("Pore Volume (PV)", fontweight="bold"); ax.set_ylabel("DP (psi)", fontweight="bold")
             acabamento(ax); _eixos_virgula(ax)
-            ax.legend(loc="upper left", frameon=True, edgecolor="black", fancybox=False)
+            leg = _legenda_em(ax, cfg, qual, loc="upper left")
         else:  # apos
             pos = [f for f in fases if f.papel == "pos_fluxo"]
             if not pos:
@@ -393,7 +514,7 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
             fig, ax = plt.subplots(figsize=(15 / 2.54, 11 / 2.54))
             for f in pos:
                 jan = d.janela(f)
-                ax.plot([l[d.c["t"]] / d.div_t for l in jan], [d.v(l, "dp") for l in jan], color=cores[f.ordem], lw=lw * 0.6,
+                ax.plot([d.tx(l) for l in jan], [d.v(l, "dp") for l in jan], color=cores[f.ordem], lw=lw * 0.6,
                         label=_legenda(f, p.temperatura_rotulo))
             ax.set_xlabel(f"Time ({d.rot_t})"); ax.set_ylabel("DP (psi)")
             if cfg.dp_max:
@@ -401,10 +522,21 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
             elif cfg.dp_min:
                 ax.set_ylim(bottom=cfg.dp_min)
             acabamento(ax); _eixos_virgula(ax)
-            ax.legend(loc="upper right", frameon=True, edgecolor="black", fancybox=False)
+            leg = _legenda_em(ax, cfg, qual, loc="upper right")
         fig.tight_layout()
+        # recorte "tight" calculado aqui (o mesmo que o savefig faria) para dizer à tela onde ficaram os eixos e a legenda
+        fig.canvas.draw()
+        rend = fig.canvas.get_renderer()
+        caixa = fig.get_tightbbox(rend).padded(plt.rcParams["savefig.pad_inches"])
+        if layout is not None:
+            def fracao(bb):  # pixels da figura -> fração da imagem salva, a partir do canto de cima à esquerda
+                b = bb.transformed(fig.dpi_scale_trans.inverted())
+                return [round((b.x0 - caixa.x0) / caixa.width, 5), round((caixa.y1 - b.y1) / caixa.height, 5),
+                        round(b.width / caixa.width, 5), round(b.height / caixa.height, 5)]
+            layout["eixos"] = fracao(ax.get_window_extent(rend))
+            layout["legenda"] = fracao(leg.get_window_extent(rend)) if leg is not None else None
         buf = io.BytesIO()
-        fig.savefig(buf, format=formato, dpi=dpi if formato == "png" else None, bbox_inches="tight")
+        fig.savefig(buf, format=formato, dpi=dpi if formato == "png" else None, bbox_inches=caixa)
         plt.close(fig)
     return buf.getvalue(), {"png": "image/png", "svg": "image/svg+xml", "pdf": "application/pdf"}[formato]
 
@@ -441,13 +573,13 @@ def gerar_planilha(conteudo: bytes, p: PedidoAcid) -> bytes:
     if not acido:
         raise ValueError("nenhuma fase marcada como ácido")
     d.exigir_pontos(acido)
-    g = geometria(p)
+    g = geometria(p, d)
     wb = Workbook()
 
     # 0- Initial Data (com fórmulas, como no Origin)
     ws = wb.active; ws.title = "0- Initial Data"
     pos = [f for f in fases if f.papel == "pos_fluxo"]
-    linhas = [("Sample", p.amostra or d.meta.get("Descrição da amostra")), ("Acid System", p.sistema_acido or acido.fluido),
+    linhas = [("Sample", p.amostra or d.meta.get("Descrição da amostra")), ("Acid System", p.sistema_acido or d.meta.get("Fluido de tratamento") or acido.fluido),
               ("Acid Flow Rate (cc/min)", acido.q), ("Diameter (cm)", p.diametro_cm), ("Length (cm)", p.comprimento_cm),
               ("Porosity", g["phi"]), ("Dead volume (ml)", p.volume_morto_cm3),
               ("Pore Volume (cm³)", "=PI()*((B4^2)/4)*B5*B6"), ("Transversal Area (cm²)", "=(PI()*(B4^2))/4"),
@@ -473,18 +605,29 @@ def gerar_planilha(conteudo: bytes, p: PedidoAcid) -> bytes:
 
     # 2 - Acidizing (com fórmulas)
     ws = _aba_origin(wb, "2 - Acidizing")
-    for col, (n, u, c, fx) in enumerate([("Time", d.rot_t, "", ""), ("Volume injetado Total", "ml", "", "Q·(t − t₀)·60" if d.div_t > 1 else "Q·(t − t₀)/60"),
-                                         ("Injected Volume", "ml", "", "Total − Dead volume"), ("Pore Volume (PV)", "", "", "Injected ÷ Pore Volume"),
+    gar = _por_garrafa(d, p) and d.garrafa_da_fase(acido) is not None
+    fx_tot = "volume do acumulador do ácido (queda = volume injetado)" if gar else (
+        "Q·(t − t₀)·60" if d.div_t > 1 else "Q·(t − t₀)/60")
+    fx_inj = "−(C − C₁) − Dead volume" if gar else "Total − Dead volume"
+    for col, (n, u, c, fx) in enumerate([("Time", d.rot_t, "", ""), ("Injected Volume Tot" if gar else "Volume injetado Total", "ml", "", fx_tot),
+                                         ("Injected Volume", "ml", "", fx_inj), ("Pore Volume (PV)", "", "", "Injected ÷ Pore Volume"),
                                          ("DP", "psi", _legenda(acido, p.temperatura_rotulo), "")], start=2):
         _bloco(ws, col, n, u, c, fx)
     ini = "'0- Initial Data'"
+    jan = d.janela(acido)
+    g_ac = d.garrafa_da_fase(acido) if gar else None
+    # tempo em horas (DCI): horas × 60 = minutos; em segundos (JBV): ÷ 60
+    fator = "*60" if d.div_t > 1 else "/60"
     for i, (t, _vt, _vi, _pv, dp) in enumerate(serie_acido(d, acido, p)):
         r = 5 + i
         ws.cell(row=r, column=2, value=t / d.div_t)
-        # tempo em horas (DCI): horas × 60 = minutos; em segundos (JBV): ÷ 60
-        conv = "*60" if d.div_t > 1 else "/60"
-        ws.cell(row=r, column=3, value=f"={ini}!$B$3*(B{r}-$B$5){conv}").number_format = "0.00000"
-        ws.cell(row=r, column=4, value=f"=C{r}-{ini}!$B$7").number_format = "0.00000"
+        va = d.volume_garrafa(jan[i], g_ac) if g_ac else None
+        if g_ac and va is not None:           # como o Origin: coluna com o volume do acumulador e a queda desde a 1ª linha
+            ws.cell(row=r, column=3, value=va).number_format = "0.0000"
+            ws.cell(row=r, column=4, value=f"=-(C{r}-$C$5)-{ini}!$B$7").number_format = "0.00000"
+        else:
+            ws.cell(row=r, column=3, value=f"={ini}!$B$3*(B{r}-$B$5){fator}").number_format = "0.00000"
+            ws.cell(row=r, column=4, value=f"=C{r}-{ini}!$B$7").number_format = "0.00000"
         ws.cell(row=r, column=5, value=f"=D{r}/{ini}!$B$8").number_format = "0.00000"
         ws.cell(row=r, column=6, value=dp)
 

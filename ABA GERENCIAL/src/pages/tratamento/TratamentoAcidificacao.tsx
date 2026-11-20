@@ -18,7 +18,10 @@ import {
 import type { Ensaio } from '../../importador/tratamentoPermeabilidade'
 import { supabase } from '../../lib/supabase'
 import { listarAmostras, listarSistemasAcidos, type AmostraResumo } from '../../servicos/api'
-import { baixarArquivo, pedirPlanilhaAcidificacao, URL_GRAFICOS, type PedidoAcid } from '../../servicos/graficos'
+import {
+  aplicarConfigAcid, baixarArquivo, configAcidInicial, guardarPreferenciasAcid, pedirPlanilhaAcidificacao, sincronizarPreferencias, URL_GRAFICOS,
+  type ConfigGraficosAcid, type PedidoAcid,
+} from '../../servicos/graficos'
 import { useContexto } from '../../store/useContexto'
 import type { SistemaAcido } from '../../tipos/banco'
 import { fmt, mensagemErro, numeroParaInput, paraNumero } from '../../utils/formatacao'
@@ -124,6 +127,17 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
   // exportação no padrão do Origin (serviço de gráficos)
   const [baixando, setBaixando] = useState(false)
   const [erroExportar, setErroExportar] = useState<string | null>(null)
+  // como a pessoa deixou os gráficos (fonte, cores, legendas, posição da legenda): planilha, downloads e gravação
+  const [cfgGraficos, setCfgGraficos] = useState<ConfigGraficosAcid>(configAcidInicial)
+  const mudarCfgGraficos = (c: ConfigGraficosAcid) => { setCfgGraficos(c); guardarPreferenciasAcid(c); setGravado(null) }
+  // as preferências do usuário gravadas no banco (de outro computador, por exemplo) valem por cima das do navegador
+  useEffect(() => {
+    let vivo = true
+    sincronizarPreferencias('acidificacao').then((havia) => {
+      if (vivo && havia) setCfgGraficos((c) => ({ ...configAcidInicial(), fases: c.fases, dp_min: c.dp_min, dp_max: c.dp_max }))
+    })
+    return () => { vivo = false }
+  }, [])
 
   const ensaio: Ensaio | undefined = ensaios[iEnsaio]
   // o tempo do DCI nasce em horas: mostra na unidade do equipamento (o cálculo segue em segundos por dentro)
@@ -225,6 +239,8 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
     setErroGravar(null)
     setErroExportar(null)
     setVolumeMorto(numeroParaInput(mortoPadrao))
+    // cores, legendas e limites são do ensaio; fonte, tamanho e posição das legendas seguem as preferências
+    setCfgGraficos((c) => ({ ...c, fases: {}, dp_min: null, dp_max: null }))
   }
 
   async function carregar(arquivo?: File | null) {
@@ -355,7 +371,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
       const ensaioGravar: Ensaio = { ...ensaio, metadados: { ...ensaio.metadados, comprimento_cm: L, diametro_cm: D, porosidade_pct: phi } }
       await gravarAcidificacao(supabase, {
         amostraId: amostra.id, equipamento: equipamentoArquivo, ensaio: ensaioGravar, resultado,
-        fases: escolhidas, idSistema: idSistema || null, arquivo: nomeArquivo,
+        fases: escolhidas, idSistema: idSistema || null, arquivo: nomeArquivo, configGraficos: cfgGraficos,
       })
       if (morto != null) guardarMorto(equipamentoArquivo, morto)
       setGravado({ amostraId: amostra.id, codigo: amostra.codigo, pvbt: bt?.pvbt ?? null })
@@ -381,7 +397,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
   const sistemaEscolhido = sistemas.find((s) => s.id_sistema === idSistema)?.nome_sistema ?? null
   const pedidoOrigin = useMemo<PedidoAcid | null>(() => {
     if (!ensaio || !fases.length) return null
-    return {
+    return aplicarConfigAcid({
       amostra: amostra?.codigo ?? codigoArquivo ?? null,
       sistema_acido: sistemaEscolhido ?? (fa ? fluidoDe(fa.ordem).trim() || null : null),
       comprimento_cm: L, diametro_cm: D, porosidade_pct: phi,
@@ -399,10 +415,10 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
         ordem: f.ordem, papel: papelDe(f.ordem), q: f.q, t_inicio: f.t_inicio_s, t_fim: f.t_fim_s, fluido: fluidoDe(f.ordem).trim() || null,
         garrafa: f.garrafa,
       })),
-    }
+    }, cfgGraficos)
     // fluidoDe lê "fluidos" e "fases"
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, resultado?.volume_poroso_cm3, dpDCI, usarFiltrado])
+  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, resultado?.volume_poroso_cm3, dpDCI, usarFiltrado, cfgGraficos])
 
   async function baixarPlanilhaOrigin() {
     if (!arquivoOriginal || !pedidoOrigin) return
@@ -770,7 +786,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
           {/* os gráficos que vão para a planilha Excel (aba "Gráficos"), gerados pelo serviço */}
           <Card titulo="Gráficos da planilha Excel">
             {URL_GRAFICOS && arquivoOriginal && pedidoOrigin ? (
-              <GraficosOriginAcid arquivo={arquivoOriginal} pedido={pedidoOrigin}
+              <GraficosOriginAcid arquivo={arquivoOriginal} pedido={pedidoOrigin} config={cfgGraficos} aoMudar={mudarCfgGraficos}
                 nomeBase={(amostra?.codigo || nomeArquivo.replace(/\.[^.]+$/, '') || 'acidificacao').replace(/[\\/:*?"<>|\s]+/g, '_')} />
             ) : (
               <Alert tipo="info" mensagem={!URL_GRAFICOS ? 'Falta VITE_URL_GRAFICOS no .env.local para usar o serviço de gráficos.' : 'Os gráficos aparecem quando houver fases.'} />

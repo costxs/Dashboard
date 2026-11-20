@@ -253,3 +253,37 @@ def test_acid_fase_fora_do_arquivo_explica(cliente):
     pedido = {**PEDIDO_ACID, "fases": [{"ordem": 1, "papel": "acido", "q": 2, "t_inicio": 99999, "t_fim": 99999.5}]}
     r = _post_acid(cliente, "/acidificacao/planilha", pedido=pedido)
     assert r.status_code == 422 and "aba" in r.text and "leituras" in r.text, r.text
+
+
+# ------------------------------------------------------------------ legenda arrastável e configuração gravada
+def test_acid_layout_e_legenda_arrastada(cliente):
+    r = _post_acid(cliente, "/acidificacao/grafico", qual="geral")
+    assert r.status_code == 200, r.text
+    lay = json.loads(r.headers["X-Grafico-Layout"])
+    ex, ey, ew, eh = lay["eixos"]
+    assert 0 < ex < 0.5 and 0 <= ey < 0.5 and 0.3 < ew <= 1 and 0.3 < eh <= 1
+    assert lay["legenda"] is not None
+    # a legenda arrastada para o canto de baixo à direita: o canto de cima à esquerda dela vai para (0,6; 0,4) dos eixos
+    pedido = {**PEDIDO_ACID, "config": {"legenda_pos": {"geral": [0.6, 0.4]}}}
+    r2 = _post_acid(cliente, "/acidificacao/grafico", pedido=pedido, qual="geral")
+    assert r2.status_code == 200, r2.text
+    l2 = json.loads(r2.headers["X-Grafico-Layout"])
+    ex, ey, ew, eh = l2["eixos"]
+    lx, ly = l2["legenda"][:2]
+    assert abs((lx - ex) / ew - 0.6) < 0.02 and abs(1 - (ly - ey) / eh - 0.4) < 0.02
+    # posição absurda volta ao automático em vez de recusar o pedido
+    r3 = _post_acid(cliente, "/acidificacao/grafico", pedido={**PEDIDO_ACID, "config": {"legenda_pos": {"geral": [9, 9]}}}, qual="geral")
+    assert r3.status_code == 200, r3.text
+
+
+def test_acid_config_salva_aplica_cores_e_legendas():
+    from graficos.acidificacao import FaseAcid, config_salva
+    fases = [FaseAcid(ordem=1, papel="pre_fluxo", q=2, t_inicio=0, t_fim=10), FaseAcid(ordem=2, papel="acido", q=2, t_inicio=10, t_fim=20)]
+    cfg = {"versao": 1, "fonte": "Times New Roman", "tamanho_fonte": 16, "legenda_pos": {"pv": [0.1, 0.9]},
+           "fases": {"2": {"cor": "#00AA00", "legenda": "Meu ácido"}, "1": {"legenda": "  "}}}
+    conf, novas = config_salva(cfg, fases, "svg", 100)
+    assert conf.fonte == "Times New Roman" and conf.tamanho_fonte == 16 and conf.legenda_pos == {"pv": (0.1, 0.9)}
+    assert novas[1].cor == "#00AA00" and novas[1].legenda == "Meu ácido" and novas[0].legenda is None
+    assert fases[1].cor is None  # não mexe nas fases originais (que ficam em cache)
+    padrao, _ = config_salva(None, fases)
+    assert padrao.fonte == "Arial" and padrao.legenda_pos == {}

@@ -30,6 +30,16 @@ SINAIS = {
                       "where table_schema = 'public' and table_name = 'perfis' and column_name = 'situacao')",
     "20261021000021": "select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
                       "where n.nspname = 'app' and p.proname = 'projetos_com_papel')",
+    "20261112000020": "select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                      "where n.nspname = 'public' and p.proname = 'lit_cadastrar_serie')",
+    "20261116000021": "select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                      "where n.nspname = 'public' and p.proname = 'rda_literatura_comparavel')",
+    "20261116000022":"select exists (select 1 from information_schema.columns "
+                      "where table_schema = 'public' and table_name = 'arquivos' and column_name = 'posicao')",
+    "20261116000023": "select exists (select 1 from information_schema.columns "
+                      "where table_schema = 'public' and table_name = 'analise_rda' and column_name = 'id_ensaio_planilha')",
+    "20261120000026": "select exists (select 1 from information_schema.columns "
+                      "where table_schema = 'public' and table_name = 'analise_coreflooding' and column_name = 'config_graficos')",
 }
 
 

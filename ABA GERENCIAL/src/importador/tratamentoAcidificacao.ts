@@ -412,6 +412,8 @@ export interface GravarAcidificacao {
   fases: Record<number, FaseEscolhida>;
   idSistema?: string | null;
   arquivo?: string | null;
+  /** como a pessoa deixou os gráficos (servicos/graficos.ts: ConfigGraficosAcid) -> analise_coreflooding.config_graficos */
+  configGraficos?: unknown;
 }
 
 export async function gravarAcidificacao(sb: SupabaseClient, g: GravarAcidificacao): Promise<{ analiseId: number; curvas: number[] }> {
@@ -423,7 +425,7 @@ export async function gravarAcidificacao(sb: SupabaseClient, g: GravarAcidificac
       : e.code === "42703" || e.code === "PGRST204" ? `${t}: rode as migrações 018 e 019 no Supabase (${e.message})` : `${t}: ${e.message}`);
   const r3 = (x: number | null) => (x == null ? null : Math.round(x * 1000) / 1000);
 
-  const { data: a, error: e1 } = await sb.from("analise_coreflooding").insert({
+  const linha: Record<string, unknown> = {
     amostra_id: g.amostraId, data_ensaio: dataDoCabecalho(m.data), id_sistema: g.idSistema ?? null,
     vazao_ml_min: r.q_ml_min, temperatura_c: r3(r.temperatura_c),
     pressao_confinamento_psi: r3(r.p_confinamento_psi), contrapressao_psi: r3(r.contrapressao_psi),
@@ -435,8 +437,12 @@ export async function gravarAcidificacao(sb: SupabaseClient, g: GravarAcidificac
     razao_dp_depois_antes: r.razao_dp_depois_antes != null && r.razao_dp_depois_antes >= 0 ? r3(r.razao_dp_depois_antes) : null,
     pvbt_equipamento: r.pvbt_equipamento, arquivo_origem: g.arquivo ?? null, responsavel: m.usuario ?? null,
     observacoes: `Tratamento automático (${g.equipamento}): fases ${r.fases.map((f) => f.rotulo).join(" → ")}.`,
-  }).select("id").single();
-  if (e1) throw erro(e1, "analise_coreflooding");
+  };
+  const inserir = (l: Record<string, unknown>) => sb.from("analise_coreflooding").insert(l).select("id").single();
+  let { data: a, error: e1 } = await inserir(g.configGraficos != null ? { ...linha, config_graficos: g.configGraficos } : linha);
+  // banco sem a migração 026 (coluna config_graficos): grava o ensaio sem a configuração dos gráficos
+  if (e1 && g.configGraficos != null && /config_graficos/.test(e1.message)) ({ data: a, error: e1 } = await inserir(linha));
+  if (e1 || !a) throw erro(e1 ?? { message: "o banco não devolveu o id" }, "analise_coreflooding");
 
   const { error: e2 } = await sb.from("acidificacao_fases").insert(r.fases.map((f) => ({
     analise_id: a.id, ordem: f.ordem, garrafa: f.garrafa, rotulo: f.rotulo,

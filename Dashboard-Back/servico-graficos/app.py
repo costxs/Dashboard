@@ -51,6 +51,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Grafico-Layout"],
 )
 app.include_router(criar_rotas(_ORIGENS, _ORIGEM_LOCAL))
 app.include_router(rotas_acid_salva)
@@ -191,7 +192,7 @@ async def acidificacao_grafico(arquivo: UploadFile | None = File(default=None), 
     if not conteudo and not p.leituras:
         raise HTTPException(422, "envie o arquivo ou as leituras no pedido")
     try:
-        img, tipo = acid.grafico(conteudo, p, qual)  # type: ignore[arg-type]
+        img, tipo, layout = acid.grafico_com_layout(conteudo, p, qual)  # type: ignore[arg-type]
     except HTTPException:
         raise
     except (ValueError, KeyError, TypeError, IndexError) as e:
@@ -200,4 +201,6 @@ async def acidificacao_grafico(arquivo: UploadFile | None = File(default=None), 
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, f"Erro ao gerar gráfico: {e}") from e
-    return Response(img, media_type=tipo, headers={"Content-Disposition": f'inline; filename="acidificacao_{qual}.{p.config.formato}"'})
+    # X-Grafico-Layout: onde ficaram os eixos e a legenda na imagem (a tela arrasta a legenda por cima)
+    return Response(img, media_type=tipo, headers={"Content-Disposition": f'inline; filename="acidificacao_{qual}.{p.config.formato}"',
+                                                   "X-Grafico-Layout": json.dumps(layout)})

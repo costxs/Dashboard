@@ -41,7 +41,7 @@ function LegendaOrigin({ series }: { series: SerieGrafico[] }) {
       <rect width={largura} height={series.length * linha + 8} fill="#fff" stroke="#000" strokeWidth={1} />
       {series.map((s, i) => (
         <g key={s.id} transform={`translate(0,${i * linha + 4 + linha / 2})`}>
-          <line x1={6} x2={36} y1={0} y2={0} stroke="#000" strokeWidth={1} />
+          <line x1={6} x2={36} y1={0} y2={0} stroke={s.cor} strokeWidth={1.5} />
           <Forma forma={s.marcador} cx={21} cy={0} cor={s.cor} r={5} />
           <text x={44} y={5}>{s.nome}</text>
         </g>
@@ -64,7 +64,7 @@ export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieG
     return { dominio: [lo, hi], marcas };
   };
   const ex = folga(todos.map((d) => d.x));
-  const ey = folga(todos.map((d) => d.y), Math.min(0.5, (p.series.length * 24 + 24) / ((p.altura ?? 520) - 80)));
+  const ey = folga(todos.map((d) => d.y), Math.min(0.5, (p.series.length * 24 + 24) / ((p.altura ?? 640) - 112)));
   const marcasX = ex.marcas, marcasYTopo = ey.marcas, topoY = ey.dominio;
 
   useImperativeHandle(ref, () => ({
@@ -103,16 +103,19 @@ export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieG
   }
 
   const eixo = { type: "number" as const, scale: "log" as const, allowDataOverflow: true, stroke: "#000", strokeWidth: 1.5 };
+  // gráfico QUADRADO, como no Origin: a caixa é quadrada e as margens somam o mesmo na horizontal
+  // (18 + 64 do eixo Y + 4 do eixo da direita + 26 = 112) e na vertical (28 + 8 do eixo de cima + 30 do eixo X + 46 = 112),
+  // então a área dos pontos também fica quadrada — na tela e no PNG/SVG baixado
   return (
-    <div ref={caixa}>
-      <ResponsiveContainer width="100%" height={p.altura ?? 520}>
-        <ScatterChart margin={{ top: 14, right: 26, bottom: 46, left: 18 }}>
+    <div ref={caixa} className="mx-auto w-full aspect-square" style={{ maxWidth: p.altura ?? 640 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ScatterChart margin={{ top: 28, right: 26, bottom: 46, left: 18 }}>
           <CartesianGrid vertical={false} horizontal={false} />
           {/* eixos de baixo e da esquerda com números; cima e direita só a moldura, como no Origin */}
-          <XAxis xAxisId="x" dataKey="x" domain={ex.dominio} ticks={marcasX} tickFormatter={dec2} {...eixo}
+          <XAxis xAxisId="x" dataKey="x" domain={ex.dominio} ticks={marcasX} tickFormatter={dec2} {...eixo} height={30}
             tick={{ fontSize: 14, fill: TEXTO }} tickLine={{ stroke: "#000" }} tickSize={6}
             label={{ value: "Q (mL/min)", position: "insideBottom", offset: -30, fontSize: 18, fill: TEXTO }} />
-          <XAxis xAxisId="xt" dataKey="x" orientation="top" domain={ex.dominio} ticks={marcasX} {...eixo} tick={false} tickLine={{ stroke: "#000" }} tickSize={6} />
+          <XAxis xAxisId="xt" dataKey="x" orientation="top" domain={ex.dominio} ticks={marcasX} {...eixo} tick={false} tickLine={{ stroke: "#000" }} tickSize={6} height={8} />
           <YAxis yAxisId="y" dataKey="y" domain={topoY} ticks={marcasYTopo} tickFormatter={dec2} {...eixo} width={64}
             tick={{ fontSize: 14, fill: TEXTO }} tickLine={{ stroke: "#000" }} tickSize={6}
             label={{ value: "PVBT", angle: -90, position: "insideLeft", offset: 6, fontSize: 18, fill: TEXTO, style: { textAnchor: "middle" } }} />
@@ -131,7 +134,7 @@ export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieG
           {p.series.map((s) => (
             <Scatter key={s.id} name={s.nome} xAxisId="x" yAxisId="y" isAnimationActive={false}
               data={[...s.pontos].sort((a, b) => a.x - b.x).map((d) => ({ ...d, serie: s.nome, cor: s.cor }))}
-              line={{ stroke: "#000", strokeWidth: 1 }} legendType="none"
+              line={{ stroke: s.cor, strokeWidth: 1.5 }} legendType="none"
               shape={(q: { cx?: number; cy?: number }) => <Forma forma={s.marcador} cx={q.cx ?? 0} cy={q.cy ?? 0} cor={s.cor} />} />
           ))}
           <LegendaOrigin series={p.series} />

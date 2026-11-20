@@ -107,7 +107,8 @@ def test_dci_tempo_em_horas_na_planilha_de_acidificacao(cliente):
     ws = load_workbook(io.BytesIO(r.content))["2 - Acidizing"]
     # coluna do tempo na unidade do equipamento e a fórmula do volume converte horas em minutos
     assert ws["B5"].value < 5, "o tempo deveria estar em horas (o ensaio fictício dura < 1 h), não em segundos"
-    assert str(ws["C5"].value).endswith("*60")
+    # DCI: o volume é o do acumulador do ácido (como o Origin do laboratório), não Q × tempo
+    assert isinstance(ws["C5"].value, float) and ws["D6"].value.startswith("=-(C6-$C$5)-")
     # o PV não muda com a unidade: o mesmo valor que o cálculo em segundos
     t0_s = ws["B5"].value * 3600
     assert any(abs(f.t_inicio - t0_s) < 5 or f.t_inicio <= t0_s <= f.t_fim for f in detectar_fases(d))
@@ -117,3 +118,59 @@ def test_jbv_continua_em_segundos(cliente):
     from graficos.acidificacao import Dados
     d = Dados((AQUI / "acidificacao_ficticio.xlsx").read_bytes())
     assert d.div_t == 1 and d.rot_t == "s"
+
+
+def test_dci_transdutor_saturado_usa_dpb_diff():
+    from graficos.leitor import dci_como_jbv, ler_arquivo
+    sat = (AQUI / "dci_permeabilidade_saturado_ficticio.xlsx").read_bytes()
+    tb = ler_arquivo(sat)                                                  # auto
+    assert tb.fonte_dp == "pp_diff" and any(x["canal"] == "DP2B" for x in tb.saturados)
+    assert ler_arquivo(sat, "total").fonte_dp == "total"                   # a pessoa pode forçar o DPBtot
+    assert dci_como_jbv(sat).cab[1] == "dPH1 (psi)"
+    # ΔP baixo não é confundido com saturação
+    normal = ler_arquivo((AQUI / "dci_permeabilidade_ficticio.xlsx").read_bytes())
+    assert normal.fonte_dp == "total" and normal.saturados == []
+
+
+def test_dci_acidificacao_igual_origin_acumulador_e_horas():
+    """DCI: volume pela queda do acumulador, VP do cabeçalho, tempo em horas — como a aba "2 - Acidizing" do laboratório."""
+    import math
+    from graficos.acidificacao import Dados, PedidoAcid, detectar_fases, gerar_planilha, geometria, serie_acido
+    c = (AQUI / "dci_acidificacao_ficticio.xlsx").read_bytes()
+    d = Dados(c)
+    p = PedidoAcid(comprimento_cm=5.08, diametro_cm=2.54, porosidade_pct=14.9, volume_morto_cm3=0.4)   # φ "arredondado" do banco
+    vp_cab = math.pi * 2.54 ** 2 / 4 * 5.08 * 0.15
+    assert abs(geometria(p, d)["vp"] - vp_cab) < 1e-5                       # usa o VP do cabeçalho do equipamento
+    fa = next(f for f in detectar_fases(d) if f.papel == "acido")
+    s = serie_acido(d, fa, p)
+    jan = d.janela(fa)
+    g = d.garrafa_da_fase(fa)
+    v0 = d.volume_garrafa(jan[0], g)
+    for i in (0, 30, len(s) - 1):
+        t, vt, vi, pv, _ = s[i]
+        assert abs(t - jan[i][d.c["t"]]) < 1e-9                             # série em segundos (a planilha converte)
+        assert abs(vt - (v0 - d.volume_garrafa(jan[i], g))) < 1e-9          # queda do acumulador
+        assert abs(pv - (vt - 0.4) / geometria(p, d)["vp"]) < 1e-9
+    wb = load_workbook(io.BytesIO(gerar_planilha(c, p)))
+    ac = wb["2 - Acidizing"]
+    assert ac["B2"].value == "h" and ac["C1"].value == "Injected Volume Tot"
+    assert isinstance(ac["C5"].value, float) and ac["D6"].value.startswith("=-(C6-$C$5)-")
+    ini = wb["0- Initial Data"]
+    assert abs(ini["B6"].value - vp_cab / (math.pi * 2.54 ** 2 / 4 * 5.08)) < 1e-6   # φ que reproduz o VP
+    assert ini["B2"].value == "HCl[15 wt%]"                                   # sistema ácido do nome do projeto
+
+
+def test_dci_grafico_geral_mostra_dp_negativo(cliente):
+    """Depois do breakthrough o ΔP do DCI pode ficar negativo; o gráfico geral não pode cortar em zero."""
+    from graficos.acidificacao import Dados, detectar_fases, limites_dp
+    d = Dados((AQUI / "dci_acidificacao_negativo_ficticio.xlsx").read_bytes())
+    fs = detectar_fases(d)
+    assert [f.papel for f in fs] == ["pre_fluxo", "acido", "pos_fluxo", "pos_fluxo", "pos_fluxo", "pos_fluxo"]
+    dps = [d.v(l, "dp") for f in fs for l in d.janela(f)]
+    lo, hi = limites_dp(dps, False)
+    assert min(dps) < -10 and lo < min(dps) and hi > max(dps)
+    pedido = {"comprimento_cm": 5.08, "diametro_cm": 2.54, "porosidade_pct": 15, "volume_morto_cm3": 0.4, "config": {"formato": "svg"}}
+    with open(AQUI / "dci_acidificacao_negativo_ficticio.xlsx", "rb") as f:
+        svg = cliente.post("/acidificacao/grafico", files={"arquivo": ("dci.xlsx", f)},
+                           data={"pedido": json.dumps(pedido), "qual": "geral"}).text
+    assert "TESTE-D - Acidizing" in svg and "Flow rate" not in svg      # como o Origin do DCI: título e sem a vazão
