@@ -11,10 +11,13 @@ interface EstadoContexto {
   projetoId: string | null       // null = todos os projetos da empresa
   projetoNome: string | null
   menuRecolhido: boolean
+  /** Gaveta do menu no celular (não fica guardada no navegador). */
+  menuMobileAberto: boolean
 
   escolherEmpresa: (e: { id: string; sigla: string; nome: string } | null) => void
   escolherProjeto: (p: { id: string; nome: string } | null) => void
   alternarMenu: () => void
+  abrirMenuMobile: (aberto: boolean) => void
   limpar: () => void
 }
 
@@ -27,6 +30,7 @@ export const useContexto = create<EstadoContexto>()(
       projetoId: null,
       projetoNome: null,
       menuRecolhido: false,
+      menuMobileAberto: false,
 
       escolherEmpresa: (e) =>
         set({
@@ -38,10 +42,14 @@ export const useContexto = create<EstadoContexto>()(
         }),
       escolherProjeto: (p) => set({ projetoId: p?.id ?? null, projetoNome: p?.nome ?? null }),
       alternarMenu: () => set((s) => ({ menuRecolhido: !s.menuRecolhido })),
+      abrirMenuMobile: (aberto) => set({ menuMobileAberto: aberto }),
       limpar: () =>
         set({ empresaId: null, empresaSigla: null, empresaNome: null, projetoId: null, projetoNome: null }),
     }),
-    { name: 'lcpetro-gerencial-contexto' },
+    {
+      name: 'lcpetro-gerencial-contexto',
+      partialize: ({ menuMobileAberto: _m, ...resto }) => resto,
+    },
   ),
 )
 

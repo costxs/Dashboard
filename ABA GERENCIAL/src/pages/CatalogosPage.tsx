@@ -443,7 +443,7 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
             <div>
               {criandoNovaCategoria ? (
                 <div className="field w-full">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-2 items-center justify-between">
                     <span className="rotulo">Nova Categoria *</span>
                     <button
                       type="button"
@@ -480,7 +480,7 @@ export const CatalogosPage: React.FC<{ embutida?: boolean }> = ({ embutida }) =>
                 </div>
               ) : (
                 <div className="field w-full">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-2 items-center justify-between">
                     <span className="rotulo">Categoria</span>
                     <button
                       type="button"

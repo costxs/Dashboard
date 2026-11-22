@@ -483,3 +483,50 @@ select.input {
 .animate-fade-in {
   animation: surgir 0.25s ease-out;
 }
+
+/* ===================== celular / telas estreitas ===================== */
+@media (max-width: 767px) {
+  /* tabelas largas rolam para o lado dentro do cartão, em vez de estourar a página */
+  .table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table th {
+    padding: 10px 14px 10px 0;
+  }
+  .table td {
+    padding: 10px 14px 10px 0;
+  }
+
+  /* 16px evita o zoom automático do iPhone ao tocar no campo */
+  .input,
+  select.input,
+  textarea.input {
+    font-size: 16px;
+    padding: 9px 12px;
+  }
+  select.input {
+    padding-right: 30px;
+  }
+
+  .cartao-topo {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+
+  .modal-fundo {
+    padding: 12px 8px;
+  }
+
+  .aba {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+  }
+}

@@ -201,7 +201,7 @@ export const AmostraPage: React.FC = () => {
                       if (n === 0 && !marcado) return null
                       const Icon = ICONES[cfg.chave]
                       return (
-                        <div key={cfg.chave} className="flex items-center justify-between rounded-xl border border-[var(--color-blue-200)] bg-[var(--color-blue-50)]/50 px-4 py-3">
+                        <div key={cfg.chave} className="flex flex-wrap gap-2 items-center justify-between rounded-xl border border-[var(--color-blue-200)] bg-[var(--color-blue-50)]/50 px-4 py-3">
                           <div className="flex items-center gap-2.5">
                             <Icon size={16} className="text-[var(--color-blue)]" />
                             <span className="font-heading font-bold text-[13px] text-[var(--color-blue-800)]">{cfg.titulo}</span>

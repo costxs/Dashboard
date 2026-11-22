@@ -131,10 +131,10 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide text-[var(--color-neutral-500)]">
-                  <th className="text-left font-semibold px-3.5 py-1.5 w-[24%]">Réplica</th>
+                  <th className="text-left font-semibold px-2.5 sm:px-3.5 py-1.5 w-[24%]">Réplica</th>
                   <th className="text-left font-semibold px-2 py-1.5">m₀ (g)</th>
                   <th className="text-left font-semibold px-2 py-1.5">m_f (g)</th>
-                  <th className="text-right font-semibold px-2 py-1.5">Δm (g)</th>
+                  <th className="hidden sm:table-cell text-right font-semibold px-2 py-1.5">Δm (g)</th>
                   <th className="text-right font-semibold px-3.5 py-1.5">Perda (%)</th>
                 </tr>
               </thead>
@@ -151,7 +151,7 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
                   const pct = dm != null ? (dm / m0!) * 100 : null
                   return (
                     <tr key={rep} className="border-t border-[var(--color-neutral-100)]">
-                      <td className="px-3.5 py-1.5 text-[var(--color-neutral-700)] font-medium">{NOMES[rep - 1]}</td>
+                      <td className="px-2.5 sm:px-3.5 py-1.5 text-[var(--color-neutral-700)] font-medium">{NOMES[rep - 1]}</td>
                       {CAMPOS.map((campo, col) => (
                         <td key={campo} className="px-2 py-1.5">
                           <input
@@ -170,7 +170,7 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
                           />
                         </td>
                       ))}
-                      <td className="px-2 py-1.5 text-right tabular-nums text-[var(--color-neutral-700)]">
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-right tabular-nums text-[var(--color-neutral-700)]">
                         {fmt(dm, 4)}
                       </td>
                       <td className="px-3.5 py-1.5 text-right tabular-nums font-semibold">

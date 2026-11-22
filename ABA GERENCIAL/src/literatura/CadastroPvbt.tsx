@@ -56,7 +56,7 @@ export function CadastroPvbt() {
         Cadastro dos dados de PVbt da literatura e da Petrobras, com as mesmas colunas da planilha do banco de PVbt.
         As colunas calculadas da planilha (volume poroso, velocidades, PVbt por Darcy/microCT…) o banco calcula sozinho.
       </p>
-      <div className="flex gap-1 border-b border-[var(--color-neutral-300)]">
+      <div className="flex gap-1 overflow-x-auto border-b border-[var(--color-neutral-300)]">
         {abas.map(([k, r, n]) => (
           <button key={k} onClick={() => setSub(k)} className={`aba ${sub === k ? 'ativa' : ''}`}>{r}{n != null ? ` (${n})` : ''}</button>
         ))}

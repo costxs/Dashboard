@@ -879,7 +879,7 @@ export const AbaAnalise: React.FC<{
           {/* Linhas-filhas: fases minerais (DRX), composição (petrografia), EDS (MEV) */}
           {cfg.filha && (
             <div className="flex flex-col gap-3 rounded-[10px] border border-[var(--color-blue-200)] bg-[var(--color-blue-50)] p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap gap-2 items-center justify-between">
                 <span className="rotulo !text-[var(--color-blue-800)]">{cfg.filha.titulo}</span>
                 {temPct && (
                   <span className={`text-[12px] font-semibold tabular-nums ${Math.abs(somaPct - 100) > 1 ? 'text-[var(--color-orange-700)]' : 'text-[var(--color-blue-700)]'}`}>

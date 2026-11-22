@@ -24,7 +24,7 @@ export const LiteraturaPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-[var(--color-neutral-300)]">
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-[var(--color-neutral-300)]">
         {([['geral', 'Geral'], ['propria', 'Própria (LC PETRO)']] as const).map(([k, r]) => (
           <button key={k} onClick={() => setParams({ aba: k })} className={`aba ${aba === k ? 'ativa' : ''}`}>{r}</button>
         ))}
