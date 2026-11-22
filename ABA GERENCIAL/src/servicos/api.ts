@@ -232,6 +232,35 @@ export async function atualizarProjeto(id: string, dados: Partial<Gravavel['proj
   return atualizar('projetos', 'id', id, dados, 'alterar o projeto')
 }
 
+/** O que impede ou acompanha a exclusão de um projeto. */
+export async function contarVinculosProjeto(id: string): Promise<{ amostras: number; publicacoes: number; workPackages: number }> {
+  const contar = async (tabela: 'amostras' | 'publicacoes' | 'work_packages') => {
+    const { count, error } = await supabase.from(tabela).select('*', { count: 'exact', head: true }).eq('projeto_id', id)
+    if (error) throw new Error(tratarErro(error))
+    return count ?? 0
+  }
+  const [amostras, publicacoes, workPackages] = await Promise.all([contar('amostras'), contar('publicacoes'), contar('work_packages')])
+  return { amostras, publicacoes, workPackages }
+}
+
+/**
+ * Exclui o projeto (só administrador). Amostras e publicações seguram o projeto no banco:
+ * precisam ser movidas ou excluídas antes. Work packages e permissões saem junto (cascata).
+ */
+export async function excluirProjeto(projeto: Pick<Projeto, 'id' | 'codigo'>): Promise<void> {
+  const v = await contarVinculosProjeto(projeto.id)
+  const bloqueios = [
+    v.amostras > 0 ? `${v.amostras} amostra(s)` : '',
+    v.publicacoes > 0 ? `${v.publicacoes} publicação(ões)` : '',
+  ].filter(Boolean)
+  if (bloqueios.length > 0) {
+    throw new Error(
+      `O projeto ${projeto.codigo} não pode ser excluído: tem ${bloqueios.join(' e ')}. Mova para outro projeto ou exclua antes; se só quiser tirá-lo das listas, use "Desativar".`,
+    )
+  }
+  await apagar('projetos', 'id', projeto.id, `excluir o projeto ${projeto.codigo}`)
+}
+
 export async function listarMembros(projetoId?: string, empresaId?: string): Promise<Membro[]> {
   let query = supabase.from('membros').select('*, perfis:usuario_id(email, nome)')
   if (projetoId) query = query.eq('projeto_id', projetoId)
@@ -257,6 +286,24 @@ export async function adicionarMembro(dados: Gravavel['membros']): Promise<Linha
 
 export async function removerMembro(id: number): Promise<void> {
   await apagar('membros', 'id', id, 'remover o acesso')
+}
+
+/** Troca o papel (leitor/editor) de um vínculo existente. Só administrador. */
+export async function alterarPapelMembro(id: number, papel: 'leitor' | 'editor'): Promise<void> {
+  const { data, error } = await supabase.from('membros').update({ papel }).eq('id', id).select('id')
+  if (error) throw new Error(`Não foi possível alterar o papel. ${tratarErro(error)}`)
+  if (!data || data.length === 0) throw new Error('Nada foi alterado: o vínculo não existe mais ou seu usuário não é administrador.')
+}
+
+/** Nível geral da pessoa: administrador (vê e edita tudo) e se a conta está ativa. Só administrador. */
+export async function alterarNivelPerfil(id: string, dados: { administrador?: boolean; ativo?: boolean }): Promise<void> {
+  const { data, error } = await supabase.from('perfis').update(dados).eq('id', id).select('id, administrador, ativo')
+  if (error) throw new Error(`Não foi possível alterar o nível de acesso. ${tratarErro(error)}`)
+  const linha = (data ?? [])[0] as { administrador: boolean; ativo: boolean } | undefined
+  if (!linha) throw new Error('Nada foi alterado: seu usuário não é administrador.')
+  if ((dados.administrador != null && linha.administrador !== dados.administrador) || (dados.ativo != null && linha.ativo !== dados.ativo)) {
+    throw new Error('O banco não aceitou a mudança de nível (só administrador pode alterá-lo).')
+  }
 }
 
 export async function listarPerfis(): Promise<Perfil[]> {

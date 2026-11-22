@@ -6,7 +6,7 @@ import { useContexto } from '../store/useContexto'
 import { Card, Button, Input, Select, Modal, Alert, Badge , SeloContexto } from '../components/UI'
 import {
   listarEmpresas, criarEmpresa, atualizarEmpresa, excluirEmpresa, enviarLogoEmpresa, apagarLogoEmpresa,
-  listarProjetos, criarProjeto, atualizarProjeto,
+  listarProjetos, criarProjeto, atualizarProjeto, excluirProjeto, contarVinculosProjeto,
   listarMembros, adicionarMembro, removerMembro,
   listarPerfis
 } from '../servicos/api'
@@ -35,6 +35,8 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
   const empresaAtualId = useContexto((st) => st.empresaId)
   const limparContexto = useContexto((st) => st.limpar)
   const escolherEmpresa = useContexto((st) => st.escolherEmpresa)
+  const projetoAtualId = useContexto((st) => st.projetoId)
+  const escolherProjeto = useContexto((st) => st.escolherProjeto)
 
   useEffect(() => () => { if (previaFoto) URL.revokeObjectURL(previaFoto) }, [previaFoto])
 
@@ -152,6 +154,28 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
     try {
       await atualizarProjeto(proj.id, { ativo: ativar })
       setFeedback({ tipo: 'sucesso', msg: `Projeto ${proj.codigo} ${ativar ? 'ativado' : 'desativado'}.` })
+      await carregar()
+    } catch (err: any) {
+      setFeedback({ tipo: 'erro', msg: err.message })
+    }
+  }
+
+  async function handleExcluirProjeto(proj: Projeto) {
+    try {
+      const v = await contarVinculosProjeto(proj.id)
+      if (v.amostras > 0 || v.publicacoes > 0) {
+        // o banco recusaria: explica antes de pedir confirmação
+        await excluirProjeto(proj)
+        return
+      }
+      const extras = [
+        v.workPackages > 0 ? `${v.workPackages} work package(s)` : '',
+        'as permissões de acesso ligadas a ele',
+      ].filter(Boolean).join(' e ')
+      if (!(await confirmar(`Excluir o projeto ${proj.codigo} (${proj.nome})? ${extras[0].toUpperCase()}${extras.slice(1)} saem junto. Não dá para desfazer.`))) return
+      await excluirProjeto(proj)
+      if (projetoAtualId === proj.id) escolherProjeto(null)
+      setFeedback({ tipo: 'sucesso', msg: `Projeto ${proj.codigo} excluído.` })
       await carregar()
     } catch (err: any) {
       setFeedback({ tipo: 'erro', msg: err.message })
@@ -287,7 +311,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
               {projetos.map((proj) => {
                 const emp = empresas.find((e) => e.id === proj.empresa_id)
                 return (
-                  <div key={proj.id} className="py-3 flex items-center justify-between">
+                  <div key={proj.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="codigo text-[13px]">
@@ -308,6 +332,9 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
                       <Button size="sm" variant="outline" onClick={() => handleAlternarProjeto(proj)}>
                         {proj.ativo ? 'Desativar' : 'Ativar'}
                       </Button>
+                      <button type="button" className="btn-icone perigo" title="Excluir projeto" onClick={() => void handleExcluirProjeto(proj)}>
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 )

@@ -1,9 +1,11 @@
 import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useMemo, useState } from 'react'
-import { Check, Inbox, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { Check, Inbox, Pencil, Plus, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import { Alert, Badge, Button, Card, Input, Modal, Select } from '../components/UI'
 import {
-  decidirAcesso, listarEmpresas, listarMembros, listarPerfis, listarProjetos,
+  adicionarMembro, alterarNivelPerfil, alterarPapelMembro, decidirAcesso, listarEmpresas, listarMembros,
+  listarPerfis, listarProjetos, removerMembro,
 } from '../servicos/api'
 import { convidarUsuario } from '../servicos/usuarios'
 import type { Empresa, Membro, Papel, Perfil, Projeto } from '../tipos/banco'
@@ -28,6 +30,8 @@ export const AcessosPage: React.FC = () => {
   const [aviso, setAviso] = useState<string | null>(null)
   const [aprovando, setAprovando] = useState<Perfil | null>(null)
   const [cadastrando, setCadastrando] = useState(false)
+  const [editando, setEditando] = useState<Perfil | null>(null)
+  const { perfil: eu } = useAuth()
 
   async function carregar() {
     setCarregando(true)
@@ -46,10 +50,13 @@ export const AcessosPage: React.FC = () => {
   const semMigracao = perfis.length > 0 && perfis.every((p) => p.situacao === undefined)
   const pendentes = perfis.filter((p) => p.situacao === 'pendente')
   const recusados = perfis.filter((p) => p.situacao === 'recusado')
-  const gerencial = useMemo(() => perfis
+  // todos os usuários já aprovados (administradores, editores e leitores), com os vínculos de cada um
+  const cadastrados = useMemo(() => perfis
     .filter((p) => p.situacao !== 'pendente' && p.situacao !== 'recusado')
-    .map((p) => ({ p, editorEm: membros.filter((m) => m.usuario_id === p.id && m.papel === 'editor') }))
-    .filter(({ p, editorEm }) => p.administrador || editorEm.length > 0), [perfis, membros])
+    .map((p) => ({ p, vinculos: membros.filter((m) => m.usuario_id === p.id) }))
+    .sort((a, b) => Number(b.p.administrador) - Number(a.p.administrador)
+      || Number(b.vinculos.some((m) => m.papel === 'editor')) - Number(a.vinculos.some((m) => m.papel === 'editor'))
+      || (a.p.nome || a.p.email).localeCompare(b.p.nome || b.p.email)), [perfis, membros])
   const escopo = (m: Membro) => {
     const e = empresas.find((x) => x.id === m.empresa_id)
     const pr = projetos.find((x) => x.id === m.projeto_id)
@@ -118,30 +125,44 @@ export const AcessosPage: React.FC = () => {
         )}
       </Card>
 
-      {/* 2. usuários do painel gerencial */}
-      <Card titulo="Usuários do painel gerencial" subtitulo="Administradores e editores: só eles entram neste painel"
+      {/* 2. usuários cadastrados: nível e acessos editáveis */}
+      <Card titulo="Usuários cadastrados" subtitulo="Administradores e editores entram neste painel; leitores só no dashboard. Use “Editar acesso” para mudar o nível."
         icone={<ShieldCheck size={18} />}
         acoes={<Button size="sm" variant="primary" icon={<UserPlus size={14} />} onClick={() => setCadastrando(true)}>Cadastrar usuário</Button>}>
         {carregando ? (
           <p className="m-0 py-4 text-center text-[13px] text-[var(--color-neutral-500)]">Carregando…</p>
-        ) : gerencial.length === 0 ? (
-          <p className="m-0 py-4 text-center text-[13px] text-[var(--color-neutral-500)]">Nenhum usuário com acesso ao painel gerencial.</p>
+        ) : cadastrados.length === 0 ? (
+          <p className="m-0 py-4 text-center text-[13px] text-[var(--color-neutral-500)]">Nenhum usuário cadastrado.</p>
         ) : (
           <div className="-mx-6 overflow-x-auto px-6">
             <table className="table text-[13px]">
-              <thead><tr><th>Usuário</th><th>Nível</th><th>Onde edita</th><th>Situação</th></tr></thead>
+              <thead><tr><th>Usuário</th><th>Nível</th><th>Acessos</th><th>Situação</th><th className="text-right !pr-0">Ações</th></tr></thead>
               <tbody>
-                {gerencial.map(({ p, editorEm }) => (
-                  <tr key={p.id} className="lcp-row">
-                    <td className="font-medium">
-                      {p.nome || '—'}
-                      <span className="block text-[11px] text-[var(--color-neutral-500)]">{p.email}</span>
-                    </td>
-                    <td>{p.administrador ? <Badge variant="red">Administrador</Badge> : <Badge variant="green">Editor</Badge>}</td>
-                    <td className="text-[var(--color-neutral-700)]">{p.administrador ? 'Tudo' : editorEm.map(escopo).join(' · ')}</td>
-                    <td>{p.ativo ? <Badge variant="blue">Ativo</Badge> : <Badge variant="slate">Desativado</Badge>}</td>
-                  </tr>
-                ))}
+                {cadastrados.map(({ p, vinculos }) => {
+                  const editor = vinculos.some((m) => m.papel === 'editor')
+                  return (
+                    <tr key={p.id} className="lcp-row">
+                      <td className="font-medium">
+                        {p.nome || '—'}
+                        <span className="block text-[11px] text-[var(--color-neutral-500)]">{p.email}</span>
+                      </td>
+                      <td>
+                        {p.administrador ? <Badge variant="red">Administrador</Badge>
+                          : editor ? <Badge variant="green">Editor</Badge>
+                          : vinculos.length > 0 ? <Badge variant="blue">Leitor</Badge>
+                          : <Badge variant="slate">Sem acesso</Badge>}
+                      </td>
+                      <td className="text-[var(--color-neutral-700)]">
+                        {p.administrador ? 'Tudo' : vinculos.length === 0 ? '—'
+                          : vinculos.map((m) => `${escopo(m)} (${m.papel})`).join(' · ')}
+                      </td>
+                      <td>{p.ativo ? <Badge variant="blue">Ativo</Badge> : <Badge variant="slate">Desativado</Badge>}</td>
+                      <td className="!pr-0 text-right">
+                        <Button size="sm" variant="outline" icon={<Pencil size={13} />} onClick={() => setEditando(p)}>Editar acesso</Button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -151,6 +172,11 @@ export const AcessosPage: React.FC = () => {
       {aprovando && (
         <ModalAprovar perfil={aprovando} empresas={empresas} projetos={projetos} aoFechar={() => setAprovando(null)}
           aoAprovar={async (msg) => { setAprovando(null); setAviso(msg); await carregar() }} />
+      )}
+      {editando && (
+        <ModalEditarAcesso perfil={editando} eu={eu?.id ?? null} vinculos={membros.filter((m) => m.usuario_id === editando.id)}
+          empresas={empresas} projetos={projetos} aoFechar={() => setEditando(null)}
+          aoSalvar={async (msg) => { setEditando(null); setAviso(msg); await carregar() }} />
       )}
       {cadastrando && (
         <ModalCadastrar empresas={empresas} projetos={projetos} aoFechar={() => setCadastrando(false)}
@@ -299,6 +325,137 @@ const ModalCadastrar: React.FC<{
           <Button variant="primary" icon={<UserPlus size={14} />} onClick={cadastrar} loading={salvando} disabled={falta != null}>
             Enviar convite
           </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+type VinculoForm = { id?: number; escopo: Escopo; papel: Papel }
+
+/**
+ * Edita o acesso de um usuário já cadastrado: nível geral (administrador ou não), conta ativa e
+ * cada vínculo com empresa/projeto (papel leitor/editor, incluir, remover). Só administrador
+ * (o banco recusa os demais). O próprio administrador não pode tirar o seu nível nem se desativar.
+ */
+const ModalEditarAcesso: React.FC<{
+  perfil: Perfil; eu: string | null; vinculos: Membro[]; empresas: Empresa[]; projetos: Projeto[]
+  aoFechar: () => void; aoSalvar: (msg: string) => void
+}> = ({ perfil, eu, vinculos, empresas, projetos, aoFechar, aoSalvar }) => {
+  const souEu = perfil.id === eu
+  const [admin, setAdmin] = useState(perfil.administrador)
+  const [ativo, setAtivo] = useState(perfil.ativo)
+  const [lista, setLista] = useState<VinculoForm[]>(() => vinculos.map((m) => ({
+    id: m.id, papel: m.papel as Papel,
+    escopo: m.empresa_id ? { tipo: 'empresa', id: m.empresa_id } : { tipo: 'projeto', id: m.projeto_id as string },
+  })))
+  const [novoEscopo, setNovoEscopo] = useState<Escopo | null>(null)
+  const [novoPapel, setNovoPapel] = useState<Papel>('editor')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  const rotulo = (e: Escopo) => {
+    if (e.tipo === 'empresa') { const x = empresas.find((y) => y.id === e.id); return x ? `Empresa ${x.sigla} · ${x.nome}` : 'Empresa removida' }
+    const x = projetos.find((y) => y.id === e.id); return x ? `Projeto ${x.codigo} · ${x.nome}` : 'Projeto removido'
+  }
+  const mesmo = (a: Escopo, b: Escopo) => a.tipo === b.tipo && a.id === b.id
+
+  function incluir() {
+    if (!novoEscopo) return
+    if (lista.some((v) => mesmo(v.escopo, novoEscopo))) { setErro('Esse acesso já está na lista: mude o papel dele.'); return }
+    setLista([...lista, { escopo: novoEscopo, papel: novoPapel }])
+    setNovoEscopo(null)
+    setErro(null)
+  }
+
+  async function salvar() {
+    setSalvando(true); setErro(null)
+    try {
+      // 1. nível geral (o próprio administrador não muda o seu)
+      if (!souEu && (admin !== perfil.administrador || ativo !== perfil.ativo)) {
+        await alterarNivelPerfil(perfil.id, { administrador: admin, ativo })
+      }
+      // 2. vínculos removidos, papéis trocados e vínculos novos
+      for (const m of vinculos) {
+        if (!lista.some((v) => v.id === m.id)) await removerMembro(m.id)
+      }
+      for (const v of lista) {
+        const antigo = vinculos.find((m) => m.id === v.id)
+        if (antigo && antigo.papel !== v.papel) await alterarPapelMembro(antigo.id, v.papel as 'leitor' | 'editor')
+        if (!v.id) {
+          await adicionarMembro({
+            usuario_id: perfil.id, papel: v.papel,
+            empresa_id: v.escopo.tipo === 'empresa' ? v.escopo.id : null,
+            projeto_id: v.escopo.tipo === 'projeto' ? v.escopo.id : null,
+          } as Parameters<typeof adicionarMembro>[0])
+        }
+      }
+      aoSalvar(`Acesso de ${perfil.nome || perfil.email} atualizado.`)
+    } catch (e) {
+      setErro(mensagemErro(e))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Modal isOpen onClose={aoFechar} titulo="Editar acesso" subtitulo={`${perfil.nome || ''} · ${perfil.email}`} maxWidth="max-w-2xl">
+      <div className="flex flex-col gap-4">
+        {erro && <Alert tipo="erro" mensagem={erro} onClose={() => setErro(null)} />}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Select label="Nível geral" value={admin ? 'admin' : 'vinculos'} disabled={salvando || souEu}
+            onChange={(e) => setAdmin(e.target.value === 'admin')}>
+            <option value="vinculos">Pelos acessos abaixo (leitor ou editor)</option>
+            <option value="admin">Administrador: tudo, inclusive aprovar acessos</option>
+          </Select>
+          <Select label="Conta" value={ativo ? 'ativa' : 'desativada'} disabled={salvando || souEu}
+            onChange={(e) => setAtivo(e.target.value === 'ativa')}>
+            <option value="ativa">Ativa</option>
+            <option value="desativada">Desativada (não vê nada)</option>
+          </Select>
+        </div>
+        {souEu && (
+          <p className="m-0 text-[12px] text-[var(--color-neutral-600)]">
+            Este é o seu usuário: você não pode tirar o seu próprio nível de administrador nem se desativar.
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <span className="rotulo">Acessos por empresa / projeto{admin ? ' (o administrador já vê tudo; os acessos ficam guardados)' : ''}</span>
+          {lista.length === 0 ? (
+            <p className="m-0 text-[13px] text-[var(--color-neutral-500)]">Nenhum acesso. Sem acesso e sem ser administrador, a pessoa não vê nada.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-[var(--color-neutral-200)] rounded-[10px] border border-[var(--color-neutral-300)]">
+              {lista.map((v, i) => (
+                <div key={v.id ?? `novo-${i}`} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="min-w-0 flex-1 text-[13px]">{rotulo(v.escopo)}{!v.id && <span className="ml-1.5 tag tag-orange">novo</span>}</span>
+                  <select className="input !w-auto !py-1 text-[13px]" value={v.papel} disabled={salvando}
+                    onChange={(e) => setLista(lista.map((x, j) => (j === i ? { ...x, papel: e.target.value as Papel } : x)))}>
+                    <option value="leitor">Leitor</option>
+                    <option value="editor">Editor</option>
+                  </select>
+                  <button type="button" className="btn-icone perigo" title="Remover este acesso" disabled={salvando}
+                    onClick={() => setLista(lista.filter((_, j) => j !== i))}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] items-end gap-2 rounded-[10px] bg-[var(--color-neutral-50)] p-3">
+            <CampoEscopo empresas={empresas} projetos={projetos} valor={novoEscopo} aoMudar={setNovoEscopo} desabilitado={salvando} />
+            <Select label="Papel" value={novoPapel} disabled={salvando} onChange={(e) => setNovoPapel(e.target.value as Papel)}>
+              <option value="leitor">Leitor</option>
+              <option value="editor">Editor</option>
+            </Select>
+            <Button variant="outline" icon={<Plus size={14} />} onClick={incluir} disabled={!novoEscopo || salvando}>Incluir</Button>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2 border-t border-[var(--color-neutral-300)]">
+          <Button variant="secondary" onClick={aoFechar} disabled={salvando}>Cancelar</Button>
+          <Button variant="primary" icon={<Check size={14} />} onClick={salvar} loading={salvando}>Salvar acesso</Button>
         </div>
       </div>
     </Modal>
