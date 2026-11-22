@@ -11,9 +11,20 @@ const LOGOS: Record<string, string> = {
 
 const CORES = ["var(--color-blue)", "var(--color-red)", "var(--color-orange-600)"];
 
-export function LogoEmpresa({ sigla, nome, tamanho = 120 }: { sigla?: string | null; nome?: string | null; tamanho?: number }) {
+export function LogoEmpresa({
+  sigla,
+  nome,
+  tamanho = 120,
+  url,
+}: {
+  sigla?: string | null;
+  nome?: string | null;
+  tamanho?: number;
+  /** foto enviada no cadastro da empresa (028); vale mais que os logos fixos */
+  url?: string | null;
+}) {
   const chave = (sigla ?? "").toUpperCase().replace(/[^A-Z]/g, "");
-  const src = LOGOS[chave];
+  const src = url || LOGOS[chave];
   if (src) {
     return <img src={src} alt={nome ?? sigla ?? ""} style={{ width: tamanho, height: tamanho }} className="object-contain" />;
   }

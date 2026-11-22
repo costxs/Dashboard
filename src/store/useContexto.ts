@@ -14,6 +14,7 @@ interface EstadoContexto {
   empresaId: string | null;
   empresaSigla: string | null;
   empresaNome: string | null;
+  empresaLogoUrl: string | null;
   projetoId: string | null;       // null = todos os projetos da empresa
   projetoNome: string | null;
 
@@ -22,7 +23,7 @@ interface EstadoContexto {
 
   definirSessao: (s: Session | null) => void;
   definirPerfil: (p: Perfil | null) => void;
-  escolherEmpresa: (e: { id: string; sigla: string; nome: string } | null) => void;
+  escolherEmpresa: (e: { id: string; sigla: string; nome: string; logo_url?: string | null } | null) => void;
   escolherProjeto: (p: { id: string; nome: string } | null) => void;
   definirBusca: (b: string) => void;
   alternarMenu: () => void;
@@ -38,6 +39,7 @@ export const useContexto = create<EstadoContexto>()(
       empresaId: null,
       empresaSigla: null,
       empresaNome: null,
+      empresaLogoUrl: null,
       projetoId: null,
       projetoNome: null,
       busca: "",
@@ -50,6 +52,7 @@ export const useContexto = create<EstadoContexto>()(
           empresaId: e?.id ?? null,
           empresaSigla: e?.sigla ?? null,
           empresaNome: e?.nome ?? null,
+          empresaLogoUrl: e?.logo_url ?? null,
           projetoId: null,
           projetoNome: null,
         }),
@@ -58,7 +61,7 @@ export const useContexto = create<EstadoContexto>()(
       alternarMenu: () => set((s) => ({ menuRecolhido: !s.menuRecolhido })),
       limpar: () =>
         set({
-          sessao: null, perfil: null, empresaId: null, empresaSigla: null, empresaNome: null,
+          sessao: null, perfil: null, empresaId: null, empresaSigla: null, empresaNome: null, empresaLogoUrl: null,
           projetoId: null, projetoNome: null, busca: "",
         }),
     }),
@@ -66,7 +69,7 @@ export const useContexto = create<EstadoContexto>()(
       name: "lcpetro-contexto",
       // no navegador fica só a escolha de empresa/projeto e o menu; a sessão é do Supabase
       partialize: (s) => ({
-        empresaId: s.empresaId, empresaSigla: s.empresaSigla, empresaNome: s.empresaNome,
+        empresaId: s.empresaId, empresaSigla: s.empresaSigla, empresaNome: s.empresaNome, empresaLogoUrl: s.empresaLogoUrl,
         projetoId: s.projetoId, projetoNome: s.projetoNome, menuRecolhido: s.menuRecolhido,
       }),
     },

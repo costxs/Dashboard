@@ -1,9 +1,11 @@
 import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
-import { Building2, FolderKanban, Plus, UserPlus, Trash2, ShieldCheck, Users } from 'lucide-react'
+import { Building2, FolderKanban, Plus, UserPlus, Trash2, ShieldCheck, Users, Pencil, ImagePlus, X } from 'lucide-react'
+import { LogoEmpresa } from '../components/LogoEmpresa'
+import { useContexto } from '../store/useContexto'
 import { Card, Button, Input, Select, Modal, Alert, Badge , SeloContexto } from '../components/UI'
 import {
-  listarEmpresas, criarEmpresa,
+  listarEmpresas, criarEmpresa, atualizarEmpresa, excluirEmpresa, enviarLogoEmpresa, apagarLogoEmpresa,
   listarProjetos, criarProjeto, atualizarProjeto,
   listarMembros, adicionarMembro, removerMembro,
   listarPerfis
@@ -25,6 +27,48 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
 
   // Formulários
   const [formEmpresa, setFormEmpresa] = useState({ sigla: '', nome: '' })
+  // empresa em edição (null = nova); foto escolhida e prévia; removerFoto = tirar a foto atual
+  const [empresaEditada, setEmpresaEditada] = useState<Empresa | null>(null)
+  const [fotoEmpresa, setFotoEmpresa] = useState<File | null>(null)
+  const [previaFoto, setPreviaFoto] = useState<string | null>(null)
+  const [removerFoto, setRemoverFoto] = useState(false)
+  const empresaAtualId = useContexto((st) => st.empresaId)
+  const limparContexto = useContexto((st) => st.limpar)
+  const escolherEmpresa = useContexto((st) => st.escolherEmpresa)
+
+  useEffect(() => () => { if (previaFoto) URL.revokeObjectURL(previaFoto) }, [previaFoto])
+
+  function abrirEmpresa(emp: Empresa | null) {
+    setEmpresaEditada(emp)
+    setFormEmpresa({ sigla: emp?.sigla ?? '', nome: emp?.nome ?? '' })
+    setFotoEmpresa(null)
+    setPreviaFoto(null)
+    setRemoverFoto(false)
+    setFeedback(null)
+    setModalEmpresa(true)
+  }
+
+  function escolherFoto(arquivo: File | null) {
+    setFotoEmpresa(arquivo)
+    setRemoverFoto(false)
+    setPreviaFoto(arquivo ? URL.createObjectURL(arquivo) : null)
+  }
+
+  async function handleExcluirEmpresa(emp: Empresa) {
+    const nProj = projetos.filter((p) => p.empresa_id === emp.id).length
+    const ok = await confirmar(
+      `Excluir a empresa ${emp.sigla} (${emp.nome})?${nProj > 0 ? ` Os ${nProj} projeto(s) dela também serão excluídos, se não tiverem amostras.` : ''} As permissões de acesso ligadas a ela saem junto. Não dá para desfazer.`,
+    )
+    if (!ok) return
+    try {
+      await excluirEmpresa(emp)
+      if (empresaAtualId === emp.id) limparContexto()
+      setFeedback({ tipo: 'sucesso', msg: `Empresa ${emp.sigla} excluída.` })
+      await carregar()
+    } catch (err: any) {
+      setFeedback({ tipo: 'erro', msg: err.message })
+    }
+  }
   const [formProjeto, setFormProjeto] = useState({ empresa_id: '', codigo: '', nome: '', descricao: '' })
   const [formMembro, setFormMembro] = useState({ usuario_id: '', papel: 'editor' as 'leitor' | 'editor', empresa_id: '', projeto_id: '' })
 
@@ -59,10 +103,20 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
     e.preventDefault()
     setSalvando(true)
     try {
-      await criarEmpresa({ sigla: formEmpresa.sigla.trim().toUpperCase(), nome: formEmpresa.nome.trim() })
-      setFeedback({ tipo: 'sucesso', msg: 'Empresa cadastrada com sucesso!' })
+      const sigla = formEmpresa.sigla.trim().toUpperCase()
+      const dados: { sigla: string; nome: string; logo_url?: string | null } = { sigla, nome: formEmpresa.nome.trim() }
+      const fotoAntiga = empresaEditada?.logo_url ?? null
+      if (fotoEmpresa) dados.logo_url = await enviarLogoEmpresa(fotoEmpresa, sigla)
+      else if (removerFoto) dados.logo_url = null
+      const salva = empresaEditada ? await atualizarEmpresa(empresaEditada.id, dados) : await criarEmpresa(dados)
+      // a foto antiga sai do storage quando foi trocada ou removida
+      if (fotoAntiga && (fotoEmpresa || removerFoto)) await apagarLogoEmpresa(fotoAntiga).catch(() => undefined)
+      // empresa aberta no menu: atualiza sigla/nome/foto sem precisar escolher de novo
+      if (empresaAtualId === salva.id) escolherEmpresa({ id: salva.id, sigla: salva.sigla, nome: salva.nome, logo_url: salva.logo_url })
+      setFeedback({ tipo: 'sucesso', msg: empresaEditada ? `Empresa ${salva.sigla} atualizada.` : 'Empresa cadastrada com sucesso!' })
       setModalEmpresa(false)
       setFormEmpresa({ sigla: '', nome: '' })
+      escolherFoto(null)
       await carregar()
     } catch (err: any) {
       setFeedback({ tipo: 'erro', msg: err.message })
@@ -153,7 +207,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" icon={<Building2 size={16} />} onClick={() => setModalEmpresa(true)}>
+          <Button variant="secondary" icon={<Building2 size={16} />} onClick={() => abrirEmpresa(null)}>
             Nova Empresa
           </Button>
           <Button variant="primary" icon={<FolderKanban size={16} />} onClick={() => setModalProjeto(true)}>
@@ -180,7 +234,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
           subtitulo="Operadoras e instituições de fomento"
           icone={<Building2 size={18} />}
           acoes={
-            <Button size="sm" variant="outline" icon={<Plus size={14} />} onClick={() => setModalEmpresa(true)}>
+            <Button size="sm" variant="outline" icon={<Plus size={14} />} onClick={() => abrirEmpresa(null)}>
               Adicionar
             </Button>
           }
@@ -190,18 +244,25 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
           ) : (
             <div className="divide-y divide-[var(--color-neutral-200)]">
               {empresas.map((emp) => (
-                <div key={emp.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="tag tag-solid">
-                        {emp.sigla}
-                      </span>
-                      <span className="text-sm font-semibold text-[var(--color-text)]">{emp.nome}</span>
+                <div key={emp.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <LogoEmpresa sigla={emp.sigla} nome={emp.nome} url={emp.logo_url} tamanho={40} />
+                    <div className="min-w-0">
+                      <span className="tag tag-solid">{emp.sigla}</span>
+                      <p className="m-0 mt-0.5 text-sm font-semibold text-[var(--color-text)] truncate">{emp.nome}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-[var(--color-neutral-500)] tabular-nums">
-                    {projetos.filter((p) => p.empresa_id === emp.id).length} projetos
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--color-neutral-500)] tabular-nums mr-1">
+                      {projetos.filter((p) => p.empresa_id === emp.id).length} projetos
+                    </span>
+                    <button type="button" className="btn-icone" title="Editar empresa e foto" onClick={() => abrirEmpresa(emp)}>
+                      <Pencil size={14} />
+                    </button>
+                    <button type="button" className="btn-icone perigo" title="Excluir empresa" onClick={() => void handleExcluirEmpresa(emp)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -332,11 +393,46 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
       <Modal
         isOpen={modalEmpresa}
         onClose={() => setModalEmpresa(false)}
-        titulo="Cadastrar Nova Empresa"
+        titulo={empresaEditada ? `Editar ${empresaEditada.sigla}` : 'Cadastrar Nova Empresa'}
         subtitulo="Identificação da operadora ou instituição"
       >
         <form onSubmit={handleSalvarEmpresa} className="space-y-4">
           {avisoNoModal}
+          {/* Foto / logo da empresa (028) */}
+          <div className="flex flex-wrap items-center gap-4 rounded-[10px] border border-[var(--color-neutral-300)] bg-[var(--color-neutral-50)] p-4">
+            <div className="rounded-xl bg-white p-2 border border-[var(--color-neutral-200)]">
+              <LogoEmpresa
+                sigla={formEmpresa.sigla}
+                nome={formEmpresa.nome}
+                url={previaFoto ?? (removerFoto ? null : empresaEditada?.logo_url)}
+                tamanho={72}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="rotulo">Foto / logo da empresa</span>
+              <div className="flex flex-wrap gap-2">
+                <label className="btn btn-secondary btn-sm cursor-pointer">
+                  <ImagePlus size={14} /> {previaFoto || empresaEditada?.logo_url ? 'Trocar foto' : 'Escolher foto'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => { escolherFoto(e.target.files?.[0] ?? null); e.target.value = '' }}
+                  />
+                </label>
+                {(previaFoto || (empresaEditada?.logo_url && !removerFoto)) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { escolherFoto(null); setRemoverFoto(Boolean(empresaEditada?.logo_url)) }}
+                  >
+                    <X size={14} /> Tirar foto
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] text-[var(--color-neutral-500)]">PNG, JPG, WEBP ou SVG até 2 MB. Sem foto, aparecem as iniciais.</span>
+            </div>
+          </div>
           <Input
             label="Sigla da Empresa"
             placeholder="Ex.: TOTAL, PETROBRAS, EQUINOR, UFPA"
@@ -353,7 +449,7 @@ export const EmpresasProjetosPage: React.FC<{ embutida?: boolean; secao?: 'empre
           />
           <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-neutral-300)]">
             <Button variant="secondary" onClick={() => setModalEmpresa(false)}>Cancelar</Button>
-            <Button variant="primary" type="submit" loading={salvando}>Salvar Empresa</Button>
+            <Button variant="primary" type="submit" loading={salvando}>{empresaEditada ? 'Salvar alterações' : 'Salvar Empresa'}</Button>
           </div>
         </form>
       </Modal>

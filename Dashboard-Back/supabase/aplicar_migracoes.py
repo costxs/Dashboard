@@ -40,6 +40,10 @@ SINAIS = {
                       "where table_schema = 'public' and table_name = 'analise_rda' and column_name = 'id_ensaio_planilha')",
     "20261120000026": "select exists (select 1 from information_schema.columns "
                       "where table_schema = 'public' and table_name = 'analise_coreflooding' and column_name = 'config_graficos')",
+    "20261121000027": "select exists (select 1 from information_schema.columns "
+                      "where table_schema = 'public' and table_name = 'reatividade_pontos' and column_name = 'amostra_id')",
+    "20261121000028": "select exists (select 1 from information_schema.columns "
+                      "where table_schema = 'public' and table_name = 'empresas' and column_name = 'logo_url')",
 }
 
 

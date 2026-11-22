@@ -2,15 +2,16 @@
 // em pt-BR, fluido, experimentos e visão limitada da empresa interna LC PETRO.
 // Cópia de ABA GERENCIAL/src/utils/bancoAmostras.ts: mantenha os dois iguais.
 
-export type TipoAmostra = 'plug' | 'disco' | 'outro'
+export type TipoAmostra = 'plug' | 'disco' | 'mini_plug' | 'outro'
 
 export const TITULO_TIPO: Record<TipoAmostra, string> = {
   plug: 'Plugs · coreflooding',
   disco: 'Discos · RDA',
+  mini_plug: 'Mini-plugs · reatividade estática',
   outro: 'Outras',
 }
-export const ROTULO_TIPO_AMOSTRA: Record<TipoAmostra, string> = { plug: 'Plug', disco: 'Disco', outro: 'Outro' }
-const ORDEM_TIPO: TipoAmostra[] = ['plug', 'disco', 'outro']
+export const ROTULO_TIPO_AMOSTRA: Record<TipoAmostra, string> = { plug: 'Plug', disco: 'Disco', mini_plug: 'Mini-plug', outro: 'Outro' }
+const ORDEM_TIPO: TipoAmostra[] = ['plug', 'disco', 'mini_plug', 'outro']
 const PREVISTO = /\s*\(previsto\)\s*$/i
 
 /** O que estas funções leem de uma linha de v_amostras. */
@@ -37,7 +38,9 @@ export interface GrupoTipo<T> {
 }
 
 export function tipoDe(a: LinhaBanco): TipoAmostra {
-  return a.tipo_amostra === 'plug' || a.tipo_amostra === 'disco' ? a.tipo_amostra : 'outro'
+  return a.tipo_amostra === 'plug' || a.tipo_amostra === 'disco' || a.tipo_amostra === 'mini_plug'
+    ? a.tipo_amostra
+    : 'outro'
 }
 
 /** Prefixo em maiúsculas (é como o catálogo prefixos_codigo guarda). */

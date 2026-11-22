@@ -96,11 +96,15 @@ export function resumirEstagiosEnsaio(e: ReatividadeEnsaio, pontos: ReatividadeP
 /** Consulta os ensaios de reatividade de uma amostra; falha silenciosamente caso a tabela não exista. */
 export async function listarReatividadeDaAmostra(amostraId: string): Promise<ReatividadeEnsaioComDetalhes[]> {
   try {
-    const { data, error } = await supabase
-      .from("reatividade_ensaios")
-      .select("*")
-      .eq("amostra_id", amostraId)
-      .order("created_at", { ascending: false });
+    // 027: a amostra pode ser a rocha do ensaio ou um mini-plug de uma réplica/teste piloto
+    const vinc = await supabase
+      .from("v_reatividade_ensaios_amostra")
+      .select("ensaio_id")
+      .eq("amostra_id", amostraId);
+    const consulta = supabase.from("reatividade_ensaios").select("*").order("created_at", { ascending: false });
+    const { data, error } = vinc.error
+      ? await consulta.eq("amostra_id", amostraId) // banco ainda sem a 027
+      : await consulta.in("id", [...new Set(((vinc.data ?? []) as { ensaio_id: string }[]).map((v) => v.ensaio_id))]);
     if (error || !data || data.length === 0) return [];
 
     const ensaios = data as ReatividadeEnsaio[];

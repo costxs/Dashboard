@@ -22,6 +22,8 @@ import { confirmar } from '../Confirmar'
 import { listarAmostras, listarSistemasAcidos, type AmostraResumo } from '../../servicos/api'
 import {
   atualizarConfigGraficoReatividade,
+  buscarAmostrasPorCodigos,
+  cadastrarMiniPlugs,
   excluirEnsaioReatividade,
   exportarExcelReatividadeBlob,
   gerarGraficoAABlob,
@@ -31,7 +33,9 @@ import {
   listarPontosPorEnsaios,
   obterEnsaioReatividadeCompleto,
   salvarEnsaioReatividade,
+  type AmostraEncontrada,
   type EstiloOriginPayload,
+  type RochaDeOrigem,
   type SeriePerdaMassaPayload,
 } from '../../servicos/reatividade'
 import {
@@ -64,7 +68,8 @@ import {
   EditorGraficoOriginLegenda,
   type ItemLegendaPreview,
 } from './EditorGraficoOriginLegenda'
-import { GradeDissolucao } from './GradeDissolucao'
+import { GradeDissolucao, StatusMiniPlug } from './GradeDissolucao'
+import { codigoMiniPlug, sugestaoMiniPlug } from './miniPlugs'
 
 type SubAba = 'sondagem' | 'dissolucao' | 'aa'
 type TipoGrafico = 't50' | 'perda_massa' | 'aa'
@@ -179,9 +184,9 @@ function gradeVazia(): Record<string, CelulaPontoForm> {
 
 function sondagensIniciais(): LinhaSondagemForm[] {
   return [
-    { key: 's1', ordem: 1, codigo_mini_plug: 'MP-1', massa_inicial_g: '', tempo_contato_min: '2', massa_final_g: '', escolhido: false },
-    { key: 's2', ordem: 2, codigo_mini_plug: 'MP-2', massa_inicial_g: '', tempo_contato_min: '4', massa_final_g: '', escolhido: true },
-    { key: 's3', ordem: 3, codigo_mini_plug: 'MP-3', massa_inicial_g: '', tempo_contato_min: '6', massa_final_g: '', escolhido: false },
+    { key: 's1', ordem: 1, codigo_mini_plug: '', massa_inicial_g: '', tempo_contato_min: '2', massa_final_g: '', escolhido: false },
+    { key: 's2', ordem: 2, codigo_mini_plug: '', massa_inicial_g: '', tempo_contato_min: '4', massa_final_g: '', escolhido: true },
+    { key: 's3', ordem: 3, codigo_mini_plug: '', massa_inicial_g: '', tempo_contato_min: '6', massa_final_g: '', escolhido: false },
   ]
 }
 
@@ -250,6 +255,9 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
   const [erroGrafico, setErroGrafico] = useState<string | null>(null)
   const [versaoGrafico, setVersaoGrafico] = useState(0)
 
+  // Mini-plugs já cadastrados como amostra (chave = código normalizado)
+  const [existentes, setExistentes] = useState<Map<string, AmostraEncontrada>>(new Map())
+
   // Carrega catálogos e ensaios salvos
   const recarregarCatalogos = useCallback(async () => {
     setCarregandoLista(true)
@@ -303,6 +311,61 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
       if (urlGrafico) URL.revokeObjectURL(urlGrafico)
     }
   }, [urlGrafico])
+
+  // Rocha do ensaio e códigos dos mini-plugs digitados (sondagens + grade)
+  const rocha = useMemo(() => amostras.find((a) => a.id === form.amostra_id) ?? null, [amostras, form.amostra_id])
+  const codigosMiniPlug = useMemo(() => {
+    const r = rocha?.codigo
+    const lista = [
+      ...sondagens.map((s) => codigoMiniPlug(s.codigo_mini_plug, r)),
+      ...Object.values(grade).map((c) => codigoMiniPlug(c.codigo_mini_plug, r)),
+    ].filter(Boolean)
+    return [...new Set(lista)].sort()
+  }, [sondagens, grade, rocha])
+  const chaveCodigos = codigosMiniPlug.join('|')
+
+  // Quais códigos já são amostras (consulta com atraso para não disparar a cada tecla)
+  useEffect(() => {
+    if (!chaveCodigos) {
+      setExistentes(new Map())
+      return
+    }
+    let ativo = true
+    const t = setTimeout(() => {
+      buscarAmostrasPorCodigos(chaveCodigos.split('|'))
+        .then((m) => ativo && setExistentes(m))
+        .catch(() => undefined)
+    }, 400)
+    return () => {
+      ativo = false
+      clearTimeout(t)
+    }
+  }, [chaveCodigos])
+
+  /** Preenche os códigos vazios com a sugestão baseada na rocha (P1.. e T1-O, T1-D, T1-T…). */
+  const preencherCodigosMiniPlug = () => {
+    if (!rocha) {
+      setMsg({ tipo: 'info', texto: 'Escolha primeiro a Amostra (Rocha) do ensaio: os códigos dos mini-plugs partem dela.' })
+      return
+    }
+    setSondagens((prev) =>
+      prev.map((s, i) =>
+        s.codigo_mini_plug.trim() ? s : { ...s, codigo_mini_plug: sugestaoMiniPlug(rocha.codigo, 'piloto', i + 1) },
+      ),
+    )
+    setGrade((g) => {
+      const novo = { ...g }
+      for (let est = 1; est <= 4; est++) {
+        for (let rep = 1; rep <= 3; rep++) {
+          const k = `${est}-${rep}`
+          if (!novo[k].codigo_mini_plug.trim()) {
+            novo[k] = { ...novo[k], codigo_mini_plug: sugestaoMiniPlug(rocha.codigo, 'ponto', est, rep) }
+          }
+        }
+      }
+      return novo
+    })
+  }
 
   // Cálculos ao vivo de t50 a partir da sondagem escolhida
   const sondagemEscolhida = useMemo(() => {
@@ -664,7 +727,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
         {
           key: `s-${Date.now()}-${ordem}`,
           ordem,
-          codigo_mini_plug: `MP-${ordem}`,
+          codigo_mini_plug: '',
           massa_inicial_g: '',
           tempo_contato_min: String(ultimoTempo + 2),
           massa_final_g: '',
@@ -860,6 +923,37 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
 
       const esc = sondsValidas.find((s) => s.escolhido) ?? sondsValidas[0]
 
+      // Mini-plugs: cada código vira (ou já é) uma amostra da categoria mini_plug
+      const rochaCod = rocha?.codigo
+      const sondsCod = sondsValidas.map((s) => ({ ...s, codigo_mini_plug: codigoMiniPlug(s.codigo_mini_plug ?? '', rochaCod) || null }))
+      const ptsCod = pontosValidos.map((p) => ({ ...p, codigo_mini_plug: codigoMiniPlug(p.codigo_mini_plug ?? '', rochaCod) || undefined }))
+      const todosCodigos = [
+        ...new Set([...sondsCod.map((s) => s.codigo_mini_plug), ...ptsCod.map((p) => p.codigo_mini_plug)].filter((c): c is string => !!c)),
+      ]
+      const mapaMiniPlugs = todosCodigos.length > 0 ? await buscarAmostrasPorCodigos(todosCodigos) : new Map<string, AmostraEncontrada>()
+      const faltando = todosCodigos.filter((c) => !mapaMiniPlugs.has(c))
+      if (faltando.length > 0) {
+        if (!rocha) {
+          throw new Error(
+            `Os mini-plugs ${faltando.join(', ')} ainda não estão cadastrados. Escolha a Amostra (Rocha) de origem na aba 2 para cadastrá-los junto com o ensaio.`,
+          )
+        }
+        const ok = await confirmar(
+          `Cadastrar ${faltando.length} mini-plug(s) novo(s) como amostra (categoria Mini-plug, cortados de ${rocha.codigo}, projeto ${rocha.projeto ?? ''})? ${faltando.join(', ')}`,
+        )
+        if (!ok) {
+          setMsg({ tipo: 'info', texto: 'Nada foi gravado. Corrija os códigos dos mini-plugs ou confirme o cadastro deles.' })
+          return
+        }
+        const massas = new Map<string, number>()
+        for (const x of [...sondsCod, ...ptsCod]) {
+          if (x.codigo_mini_plug && !massas.has(x.codigo_mini_plug)) massas.set(x.codigo_mini_plug, x.massa_inicial_g)
+        }
+        const novos = await cadastrarMiniPlugs(faltando, rocha as unknown as RochaDeOrigem, massas, form.codigo.trim() || null)
+        novos.forEach((v, k) => mapaMiniPlugs.set(k, v))
+      }
+      const idMiniPlug = (c: string | null | undefined) => (c ? mapaMiniPlugs.get(c)?.id ?? null : null)
+
       const calValidas = calibracao
         .map((c) => ({
           elemento: c.elemento,
@@ -903,13 +997,14 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
           config_grafico: configGrafico,
           observacoes: form.observacoes.trim() || null,
         },
-        sondsValidas,
-        pontosValidos.map((p) => ({
+        sondsCod.map((s) => ({ ...s, amostra_id: idMiniPlug(s.codigo_mini_plug) })),
+        ptsCod.map((p) => ({
           estagio_ordem: p.estagio_ordem,
           fracao_t50: p.fracao_t50,
           tempo_contato_s: p.tempo_contato_s,
           replica: p.replica,
           codigo_mini_plug: p.codigo_mini_plug ?? null,
+          amostra_id: idMiniPlug(p.codigo_mini_plug),
           massa_inicial_g: p.massa_inicial_g,
           massa_final_g: p.massa_final_g,
           fator_diluicao_ca: p.fator_diluicao_ca ?? 2250,
@@ -925,7 +1020,9 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
       await recarregarCatalogos()
       setMsg({
         tipo: 'sucesso',
-        texto: `Ensaio ${salvo.ensaio.codigo} salvo com sucesso (${salvo.sondagens.length} sondagens, ${salvo.pontos.length} pontos).`,
+        texto: `Ensaio ${salvo.ensaio.codigo} salvo com sucesso (${salvo.sondagens.length} sondagens, ${salvo.pontos.length} pontos${
+          todosCodigos.length > 0 ? `, gravado em ${todosCodigos.length} mini-plug(s)${faltando.length > 0 ? `, ${faltando.length} cadastrado(s) agora` : ''}` : ''
+        }).`,
       })
     } catch (err) {
       setMsg({ tipo: 'erro', texto: err instanceof Error ? err.message : String(err) })
@@ -1255,9 +1352,12 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                                   prev.map((x) => (x.key === s.key ? { ...x, codigo_mini_plug: e.target.value } : x)),
                                 )
                               }
-                              className="input !py-1 !px-2 text-xs w-24"
-                              placeholder="MP-1"
+                              className="input !py-1 !px-2 text-xs w-32 uppercase"
+                              placeholder={rocha ? sugestaoMiniPlug(rocha.codigo, 'piloto', s.ordem) : 'MP-1'}
                             />
+                            <div className="mt-0.5 min-h-[14px]">
+                              <StatusMiniPlug codigo={s.codigo_mini_plug} rochaCodigo={rocha?.codigo ?? null} existentes={existentes} />
+                            </div>
                           </td>
                           <td>
                             <input
@@ -1377,7 +1477,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                       className="input !py-1.5 text-xs"
                     >
                       <option value="">— Sem vínculo —</option>
-                      {amostras.map((a) => (
+                      {amostras.filter((a) => a.tipo_amostra !== 'mini_plug').map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.codigo} · {a.litologia} ({a.projeto})
                         </option>
@@ -1551,6 +1651,9 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                   setTempos={setTemposEstagioS}
                   resumo={resumoEstagios}
                   modo={form.modo_calculo_pct}
+                  rochaCodigo={rocha?.codigo ?? null}
+                  existentes={existentes}
+                  aoPreencherCodigos={preencherCodigosMiniPlug}
                 />
 
                 {/* Equação da taxa + Sobreposição comparativa */}

@@ -28,6 +28,8 @@ export type ObtencaoDado = 'bancada' | 'tabela' | 'grafico' | 'texto'
 export interface EmpresaGravavel {
   sigla: string
   nome: string
+  /** 028: foto/logo enviada no cadastro (bucket público logos-empresas) */
+  logo_url?: string | null
 }
 
 export interface ProjetoGravavel {
@@ -92,7 +94,7 @@ export interface SistemaAcidoGravavel {
 export interface PrefixoCodigoGravavel {
   prefixo: string
   significado: string
-  tipo_amostra?: 'plug' | 'disco' | 'outro' | null
+  tipo_amostra?: 'plug' | 'disco' | 'mini_plug' | 'outro' | null
   observacao?: string | null
 }
 
@@ -124,6 +126,10 @@ export interface AmostraGravavel {
   responsavel?: string | null
   data_coleta?: string | null
   observacoes?: string | null
+  /** 027: categoria explícita (vale mais que o palpite por prefixo/comprimento). */
+  tipo_amostra?: 'plug' | 'disco' | 'mini_plug' | null
+  /** 027: rocha de onde o mini-plug foi cortado. */
+  amostra_mae_id?: string | null
 }
 
 export interface ConferenciaGravavel {
@@ -387,6 +393,8 @@ export interface ReatividadeSondagemGravavel {
   ensaio_id: string
   ordem: number
   codigo_mini_plug?: string | null
+  /** 027: amostra (mini-plug) usada no teste piloto */
+  amostra_id?: string | null
   massa_inicial_g: number
   tempo_contato_min: number
   massa_final_g: number
@@ -400,6 +408,8 @@ export interface ReatividadePontoGravavel {
   tempo_contato_s: number
   replica: 1 | 2 | 3
   codigo_mini_plug?: string | null
+  /** 027: amostra (mini-plug) usada nesta réplica */
+  amostra_id?: string | null
   massa_inicial_g: number
   massa_final_g: number
   fator_diluicao_ca?: number | null

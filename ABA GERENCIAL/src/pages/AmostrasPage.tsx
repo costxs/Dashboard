@@ -1,7 +1,7 @@
 import { confirmar } from '../components/Confirmar'
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Layers, Plus, Search, Trash2, Edit3, ArrowRight, Disc, LayoutList, List, Lock, MapPin, RotateCcw } from 'lucide-react'
+import { FlaskConical, Layers, Plus, Search, Trash2, Edit3, ArrowRight, Disc, LayoutList, List, Lock, MapPin, RotateCcw } from 'lucide-react'
 import { Card, Button, Input, Select, Modal, Alert, Textarea, Badge, CabecalhoPagina, Vazio } from '../components/UI'
 import { useAuth } from '../context/AuthContext'
 import { usePapeis } from '../hooks/usePapel'
@@ -510,7 +510,7 @@ export const AmostrasPage: React.FC = () => {
             key={grupo.tipo}
             titulo={`${grupo.titulo} (${grupo.total})`}
             subtitulo={`${grupo.prefixos.length} prefixo(s) de código`}
-            icone={grupo.tipo === 'disco' ? <Disc size={18} /> : <Layers size={18} />}
+            icone={grupo.tipo === 'disco' ? <Disc size={18} /> : grupo.tipo === 'mini_plug' ? <FlaskConical size={18} /> : <Layers size={18} />}
           >
             <div className="overflow-x-auto">
               <table className="table text-[13px]">
@@ -596,6 +596,57 @@ export const AmostrasPage: React.FC = () => {
                 />
               )}
             </div>
+          </div>
+
+          {/* Categoria (027): mini-plug é cortado de outra amostra (rocha de origem) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Select
+              label="Categoria"
+              value={formAmostra.tipo_amostra ?? ''}
+              onChange={(e) => {
+                const tipo = (e.target.value || null) as Amostra['tipo_amostra']
+                setFormAmostra({ ...formAmostra, tipo_amostra: tipo, ...(tipo !== 'mini_plug' ? { amostra_mae_id: null } : {}) })
+              }}
+            >
+              <option value="">Automática (pelo código/finalidade)</option>
+              <option value="plug">Plug</option>
+              <option value="disco">Disco</option>
+              <option value="mini_plug">Mini-plug (reatividade estática)</option>
+            </Select>
+            {formAmostra.tipo_amostra === 'mini_plug' && (
+              <div className="sm:col-span-2">
+                <Select
+                  label="Cortado da amostra (rocha de origem)"
+                  value={formAmostra.amostra_mae_id ?? ''}
+                  onChange={(e) => {
+                    const mae = amostras.find((x) => x.id === e.target.value)
+                    // herda projeto, litologia e origem da rocha (o que já estiver preenchido fica)
+                    setFormAmostra({
+                      ...formAmostra,
+                      amostra_mae_id: e.target.value || null,
+                      ...(mae
+                        ? {
+                            projeto_id: formAmostra.projeto_id || mae.projeto_id,
+                            litologia: formAmostra.litologia || mae.litologia,
+                            tipo_origem: mae.tipo_origem,
+                            afloramento_local: formAmostra.afloramento_local || mae.afloramento_local || '',
+                            poco: formAmostra.poco || mae.poco || '',
+                            campo: formAmostra.campo || mae.campo || '',
+                            bacia: formAmostra.bacia || mae.bacia || '',
+                          }
+                        : {}),
+                    })
+                  }}
+                >
+                  <option value="">Selecione a rocha de origem…</option>
+                  {amostras
+                    .filter((x) => x.id !== formAmostra.id && x.tipo_amostra !== 'mini_plug')
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>{x.codigo} — {x.litologia}</option>
+                    ))}
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Seletor de Tipo de Origem */}

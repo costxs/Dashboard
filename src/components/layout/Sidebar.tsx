@@ -21,6 +21,7 @@ export function Sidebar() {
   const alternarMenu = useContexto((s) => s.alternarMenu);
   const empresaSigla = useContexto((s) => s.empresaSigla);
   const empresaNome = useContexto((s) => s.empresaNome);
+  const empresaLogoUrl = useContexto((s) => s.empresaLogoUrl);
   const projetoNome = useContexto((s) => s.projetoNome);
 
   const navItems = [
@@ -92,7 +93,7 @@ export function Sidebar() {
       <div className={`flex flex-col items-center border-t border-white/10 bg-white/5 pt-4 pb-5 ${recolhido ? "px-2" : "px-5"}`}>
         {empresaSigla && (
           <div className="rounded-xl bg-white p-2">
-            <LogoEmpresa sigla={empresaSigla} nome={empresaNome} tamanho={recolhido ? 36 : 96} />
+            <LogoEmpresa sigla={empresaSigla} nome={empresaNome} url={empresaLogoUrl} tamanho={recolhido ? 36 : 96} />
           </div>
         )}
         {!recolhido && (

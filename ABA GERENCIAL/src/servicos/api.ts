@@ -131,6 +131,62 @@ export async function criarEmpresa(dados: Gravavel['empresas']): Promise<Empresa
   return inserir('empresas', dados, 'cadastrar a empresa')
 }
 
+export async function atualizarEmpresa(id: string, dados: Partial<Gravavel['empresas']>): Promise<Empresa> {
+  return atualizar('empresas', 'id', id, dados, 'salvar a empresa')
+}
+
+const BUCKET_LOGOS = 'logos-empresas'
+const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+
+/** Envia a foto/logo da empresa e devolve o endereço público. Só o administrador pode. */
+export async function enviarLogoEmpresa(arquivo: File, sigla: string): Promise<string> {
+  if (!TIPOS_LOGO.includes(arquivo.type)) throw new Error('A foto precisa ser PNG, JPG, WEBP ou SVG.')
+  if (arquivo.size > 2 * 1024 * 1024) throw new Error('A foto pode ter no máximo 2 MB.')
+  const ext = (arquivo.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const base = sigla.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-') || 'EMPRESA'
+  const caminho = `${base}-${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(BUCKET_LOGOS).upload(caminho, arquivo, {
+    contentType: arquivo.type,
+    cacheControl: '31536000',
+    upsert: false,
+  })
+  if (error) throw new Error(`Não foi possível enviar a foto da empresa. ${tratarErro(error)}`)
+  return supabase.storage.from(BUCKET_LOGOS).getPublicUrl(caminho).data.publicUrl
+}
+
+/** Apaga do storage uma foto enviada por enviarLogoEmpresa (endereços de outro lugar são ignorados). */
+export async function apagarLogoEmpresa(url: string | null | undefined): Promise<void> {
+  const marca = `/${BUCKET_LOGOS}/`
+  if (!url || !url.includes(marca)) return
+  const caminho = decodeURIComponent(url.slice(url.indexOf(marca) + marca.length).split('?')[0])
+  await supabase.storage.from(BUCKET_LOGOS).remove([caminho])
+}
+
+/**
+ * Exclui a empresa. Os projetos dela vão junto só se não tiverem amostras (o banco recusa
+ * apagar projeto com amostra); membros saem em cascata. A foto é apagada do storage.
+ */
+export async function excluirEmpresa(empresa: Pick<Empresa, 'id' | 'sigla' | 'logo_url'>): Promise<void> {
+  const projs = conferirLeitura<{ id: string; codigo: string }>(
+    await supabase.from('projetos').select('id, codigo').eq('empresa_id', empresa.id),
+  )
+  if (projs.length > 0) {
+    const ids = projs.map((p) => p.id)
+    const { data: comAmostra, error } = await supabase.from('amostras').select('projeto_id').in('projeto_id', ids).limit(1000)
+    if (error) throw new Error(tratarErro(error))
+    const ocupados = new Set((comAmostra ?? []).map((a: { projeto_id: string }) => a.projeto_id))
+    if (ocupados.size > 0) {
+      const nomes = projs.filter((p) => ocupados.has(p.id)).map((p) => p.codigo).join(', ')
+      throw new Error(
+        `A empresa ${empresa.sigla} não pode ser excluída: os projetos ${nomes} têm amostras. Mova ou exclua as amostras antes.`,
+      )
+    }
+    for (const p of projs) await apagar('projetos', 'id', p.id, `excluir o projeto ${p.codigo}`)
+  }
+  await apagar('empresas', 'id', empresa.id, `excluir a empresa ${empresa.sigla}`)
+  await apagarLogoEmpresa(empresa.logo_url).catch(() => undefined)
+}
+
 export async function listarProjetos(empresaId?: string | null, soAtivos = false): Promise<Projeto[]> {
   let query = supabase.from('projetos').select('*').order('codigo')
   if (empresaId) query = query.eq('empresa_id', empresaId)
@@ -367,6 +423,8 @@ const COLUNAS_AMOSTRA = [
   'diametro_cm', 'comprimento_cm', 'massa_seca_g', 'permeabilidade_fabricante_md',
   'permeabilidade_fabricante_min_md', 'permeabilidade_fabricante_max_md',
   'finalidade', 'status', 'responsavel', 'data_coleta', 'observacoes',
+  // 027: só vão na gravação quando o formulário as preenche (tolerante ao banco antigo)
+  'tipo_amostra', 'amostra_mae_id',
 ] as const satisfies readonly (keyof Gravavel['amostras'])[]
 
 export async function salvarAmostra(amostra: Partial<Gravavel['amostras']> & { id?: string }): Promise<Amostra> {

@@ -172,6 +172,122 @@ export async function salvarEnsaioReatividade(
   }
 }
 
+// -----------------------------------------------------------------------------
+// Mini-plugs (027): cada réplica/teste piloto é uma amostra da categoria mini_plug
+// -----------------------------------------------------------------------------
+
+/** Código normalizado como o cadastro de amostras grava (sem espaços nas pontas, maiúsculas). */
+export function normalizarCodigoAmostra(codigo: string | null | undefined): string {
+  return (codigo ?? '').trim().toUpperCase()
+}
+
+export interface AmostraEncontrada {
+  id: string
+  codigo: string
+  tipo_amostra: string | null
+  projeto_id: string
+}
+
+/** Amostras já cadastradas com estes códigos (só as que a pessoa enxerga). Chave = código normalizado. */
+export async function buscarAmostrasPorCodigos(codigos: string[]): Promise<Map<string, AmostraEncontrada>> {
+  const lista = [...new Set(codigos.map(normalizarCodigoAmostra).filter(Boolean))]
+  const mapa = new Map<string, AmostraEncontrada>()
+  if (lista.length === 0) return mapa
+  const { data, error } = await supabase
+    .from('v_amostras')
+    .select('id, codigo, tipo_amostra, projeto_id')
+    .in('codigo', lista)
+  if (error) throw new Error(`Erro ao procurar os mini-plugs: ${tratarErro(error)}`)
+  for (const a of (data ?? []) as AmostraEncontrada[]) mapa.set(normalizarCodigoAmostra(a.codigo), a)
+  return mapa
+}
+
+export interface RochaDeOrigem {
+  id: string
+  codigo: string
+  projeto_id: string
+  litologia: string
+  tipo_origem: 'afloramento' | 'testemunho'
+  afloramento_local?: string | null
+  fornecedor?: string | null
+  bacia?: string | null
+  campo?: string | null
+  poco?: string | null
+  reservatorio?: string | null
+}
+
+/**
+ * Cadastra mini-plugs novos, cortados da rocha do ensaio: herdam projeto, litologia e origem
+ * e entram como "utilizada" na reatividade estática. `massas` = m₀ de cada código (massa seca).
+ */
+export async function cadastrarMiniPlugs(
+  codigos: string[],
+  rocha: RochaDeOrigem,
+  massas: Map<string, number>,
+  ensaioCodigo: string | null,
+): Promise<Map<string, AmostraEncontrada>> {
+  const lista = [...new Set(codigos.map(normalizarCodigoAmostra).filter(Boolean))]
+  const mapa = new Map<string, AmostraEncontrada>()
+  if (lista.length === 0) return mapa
+  const linhas = lista.map((codigo) => ({
+    codigo,
+    projeto_id: rocha.projeto_id,
+    litologia: rocha.litologia,
+    tipo_origem: rocha.tipo_origem,
+    afloramento_local: rocha.afloramento_local ?? null,
+    fornecedor: rocha.fornecedor ?? null,
+    bacia: rocha.bacia ?? null,
+    campo: rocha.campo ?? null,
+    poco: rocha.poco ?? null,
+    reservatorio: rocha.reservatorio ?? null,
+    massa_seca_g: massas.get(codigo) ?? null,
+    finalidade: 'reatividade estática',
+    status: 'utilizada' as const,
+    tipo_amostra: 'mini_plug' as const,
+    amostra_mae_id: rocha.id,
+    observacoes: `Mini-plug cortado de ${rocha.codigo}${ensaioCodigo ? `, usado no ensaio ${ensaioCodigo}` : ''}.`,
+  }))
+  const { data, error } = await supabase.from('amostras').insert(linhas).select('id, codigo, tipo_amostra, projeto_id')
+  if (error) throw new Error(`Não foi possível cadastrar os mini-plugs. ${tratarErro(error)}`)
+  for (const a of (data ?? []) as AmostraEncontrada[]) mapa.set(normalizarCodigoAmostra(a.codigo), a)
+  return mapa
+}
+
+export interface EnsaioDaAmostra {
+  ensaio: ReatividadeEnsaio
+  /** 'rocha' = amostra escolhida no ensaio; 'mini_plug' = usada numa réplica/teste piloto */
+  papeis: Array<'rocha' | 'mini_plug'>
+}
+
+/** Ensaios de dissolução estática em que a amostra aparece (como rocha ou como mini-plug). */
+export async function listarEnsaiosDaAmostra(amostraId: string): Promise<EnsaioDaAmostra[]> {
+  const vinc = await supabase
+    .from('v_reatividade_ensaios_amostra')
+    .select('ensaio_id, papel')
+    .eq('amostra_id', amostraId)
+  let ligacoes: Array<{ ensaio_id: string; papel: 'rocha' | 'mini_plug' }>
+  if (vinc.error) {
+    // banco ainda sem a 027: só os ensaios em que ela é a rocha
+    const r = await supabase.from('reatividade_ensaios').select('id').eq('amostra_id', amostraId)
+    if (r.error) throw new Error(`Erro ao listar ensaios de reatividade: ${tratarErro(r.error)}`)
+    ligacoes = (r.data ?? []).map((e: { id: string }) => ({ ensaio_id: e.id, papel: 'rocha' as const }))
+  } else {
+    ligacoes = (vinc.data ?? []) as typeof ligacoes
+  }
+  const ids = [...new Set(ligacoes.map((l) => l.ensaio_id))]
+  if (ids.length === 0) return []
+  const { data, error } = await supabase
+    .from('reatividade_ensaios')
+    .select('*')
+    .in('id', ids)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Erro ao listar ensaios de reatividade: ${tratarErro(error)}`)
+  return ((data ?? []) as ReatividadeEnsaio[]).map((ensaio) => ({
+    ensaio,
+    papeis: [...new Set(ligacoes.filter((l) => l.ensaio_id === ensaio.id).map((l) => l.papel))],
+  }))
+}
+
 export async function atualizarConfigGraficoReatividade(
   ensaioId: string,
   config: ConfigGraficoReatividade,

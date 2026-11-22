@@ -36,7 +36,7 @@ export function ProjectSelectionPage() {
 
   function entrarNoProjeto(projeto: { id: string; nome: string } | null) {
     if (!empresa) return;
-    escolherEmpresa({ id: empresa.id, sigla: empresa.sigla, nome: empresa.nome });
+    escolherEmpresa({ id: empresa.id, sigla: empresa.sigla, nome: empresa.nome, logo_url: empresa.logo_url });
     escolherProjeto(projeto);
     navigate("/dashboard");
   }
@@ -100,7 +100,7 @@ export function ProjectSelectionPage() {
                   style={{ animationDelay: `${0.1 * (idx + 1)}s` }}
                 >
                   <div className="h-[130px] flex items-center justify-center transition-transform duration-500 group-hover:scale-[1.08] group-hover:-translate-y-1">
-                    <LogoEmpresa sigla={e.sigla} nome={e.nome} tamanho={130} />
+                    <LogoEmpresa sigla={e.sigla} nome={e.nome} url={e.logo_url} tamanho={130} />
                   </div>
                   <p className="mt-4 font-heading font-bold text-[15px] text-[var(--color-blue-800)]">{e.nome}</p>
                   <div className="mt-2 flex items-center text-xs font-bold text-[var(--color-red)] opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">

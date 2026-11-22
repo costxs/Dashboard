@@ -56,7 +56,7 @@ export const ProjectSelectionPage: React.FC = () => {
 
   function entrarNoProjeto(projeto: { id: string; nome: string } | null) {
     if (!empresa) return
-    escolherEmpresa({ id: empresa.id, sigla: empresa.sigla, nome: empresa.nome })
+    escolherEmpresa({ id: empresa.id, sigla: empresa.sigla, nome: empresa.nome, logo_url: empresa.logo_url })
     escolherProjeto(projeto)
     navigate('/')
   }
@@ -124,7 +124,7 @@ export const ProjectSelectionPage: React.FC = () => {
                   className="flex flex-col items-center justify-center p-8 bg-white border border-[var(--color-neutral-200)] rounded-2xl hover:border-[var(--color-orange)] hover:shadow-xl hover:shadow-[var(--color-orange-100)] active:scale-[0.98] transition-all duration-300 group cursor-pointer"
                 >
                   <div className="h-[130px] flex items-center justify-center transition-transform duration-500 group-hover:scale-[1.08] group-hover:-translate-y-1">
-                    <LogoEmpresa sigla={e.sigla} nome={e.nome} tamanho={130} />
+                    <LogoEmpresa sigla={e.sigla} nome={e.nome} url={e.logo_url} tamanho={130} />
                   </div>
                   <p className="mt-4 font-heading font-bold text-[15px] text-[var(--color-blue-800)]">{e.nome}</p>
                   <div className="mt-2 flex items-center text-xs font-bold text-[var(--color-red)] opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">

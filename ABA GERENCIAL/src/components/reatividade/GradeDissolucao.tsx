@@ -1,10 +1,38 @@
 // Entrada das massas da Dissolução Estática (4 estágios × triplicata), no formato do caderno
 // do laboratório: um bloco por estágio, uma linha por réplica, com Δm e perda ao vivo.
 import React, { useRef } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, PlusCircle, Wand2 } from 'lucide-react'
 import { formatarTempoMinSeg, type ResumoEstagio } from '../../importador/planilhaReatividade'
+import type { AmostraEncontrada } from '../../servicos/reatividade'
 import type { ModoCalculoPct } from '../../tipos/banco'
 import type { CelulaPontoForm } from './DissolucaoEstaticaPanel'
+import { codigoMiniPlug, sugestaoMiniPlug } from './miniPlugs'
+
+/** Situação do código do mini-plug: já é amostra (✓) ou será cadastrado ao salvar (+). */
+export const StatusMiniPlug: React.FC<{
+  codigo: string
+  rochaCodigo: string | null
+  existentes: Map<string, AmostraEncontrada>
+}> = ({ codigo, rochaCodigo, existentes }) => {
+  const c = codigoMiniPlug(codigo, rochaCodigo)
+  if (!c) return null
+  const achado = existentes.get(c)
+  if (achado) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700"
+        title={achado.tipo_amostra === 'mini_plug' ? 'Mini-plug já cadastrado' : `Amostra já cadastrada (${achado.tipo_amostra ?? 'sem categoria'})`}
+      >
+        <CheckCircle2 size={11} /> {c}
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--color-orange-700)]" title="Será cadastrado como amostra Mini-plug ao salvar o ensaio">
+      <PlusCircle size={11} /> {c} (novo)
+    </span>
+  )
+}
 
 const NOMES = ['Original', 'Duplicata', 'Triplicata'] as const
 const CAMPOS = ['massa_inicial_g', 'massa_final_g'] as const
@@ -19,6 +47,10 @@ interface Props {
   setTempos: React.Dispatch<React.SetStateAction<Tempos>>
   resumo: ResumoEstagio[]
   modo: ModoCalculoPct
+  /** código da rocha do ensaio (base das sugestões de código dos mini-plugs) */
+  rochaCodigo: string | null
+  existentes: Map<string, AmostraEncontrada>
+  aoPreencherCodigos: () => void
 }
 
 function num(s: string | undefined): number | null {
@@ -36,7 +68,17 @@ function fmt(v: number | null | undefined, casas: number): string {
 /** Ordem de digitação: T1 Original, T1 Duplicata, T1 Triplicata, T2 Original… */
 const ORDEM = ([1, 2, 3, 4] as const).flatMap((est) => ([1, 2, 3] as const).map((rep) => `${est}-${rep}`))
 
-export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setTempos, resumo, modo }) => {
+export const GradeDissolucao: React.FC<Props> = ({
+  grade,
+  setGrade,
+  tempos,
+  setTempos,
+  resumo,
+  modo,
+  rochaCodigo,
+  existentes,
+  aoPreencherCodigos,
+}) => {
   const caixa = useRef<HTMLDivElement | null>(null)
 
   const focar = (idx: number, col: number) => {
@@ -83,6 +125,15 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
 
   return (
     <div ref={caixa} className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--color-neutral-50)] border border-[var(--color-neutral-200)] px-3 py-2 text-xs text-[var(--color-neutral-700)]">
+        <span>
+          Cada réplica é um <strong>mini-plug</strong>: informe o código e o ensaio fica gravado nele.
+          Códigos que ainda não existem são cadastrados como amostra ao salvar.
+        </span>
+        <button type="button" onClick={aoPreencherCodigos} className="btn btn-secondary btn-sm">
+          <Wand2 size={13} /> Preencher códigos vazios
+        </button>
+      </div>
       {([1, 2, 3, 4] as const).map((est) => {
         const res = resumo[est - 1]
         const perda = modo === 'razao_medias' ? res.perda_razao_medias_pct : res.perda_media_replicas_pct
@@ -131,7 +182,7 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide text-[var(--color-neutral-500)]">
-                  <th className="text-left font-semibold px-2.5 sm:px-3.5 py-1.5 w-[24%]">Réplica</th>
+                  <th className="text-left font-semibold px-2.5 sm:px-3.5 py-1.5 w-[30%]">Réplica · mini-plug</th>
                   <th className="text-left font-semibold px-2 py-1.5">m₀ (g)</th>
                   <th className="text-left font-semibold px-2 py-1.5">m_f (g)</th>
                   <th className="hidden sm:table-cell text-right font-semibold px-2 py-1.5">Δm (g)</th>
@@ -151,7 +202,21 @@ export const GradeDissolucao: React.FC<Props> = ({ grade, setGrade, tempos, setT
                   const pct = dm != null ? (dm / m0!) * 100 : null
                   return (
                     <tr key={rep} className="border-t border-[var(--color-neutral-100)]">
-                      <td className="px-2.5 sm:px-3.5 py-1.5 text-[var(--color-neutral-700)] font-medium">{NOMES[rep - 1]}</td>
+                      <td className="px-2.5 sm:px-3.5 py-1.5 text-[var(--color-neutral-700)] font-medium align-top">
+                        <div>{NOMES[rep - 1]}</div>
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          value={cel?.codigo_mini_plug ?? ''}
+                          onChange={(e) => setGrade((g) => ({ ...g, [chave]: { ...g[chave], codigo_mini_plug: e.target.value } }))}
+                          placeholder={rochaCodigo ? sugestaoMiniPlug(rochaCodigo, 'ponto', est, rep) : 'código do mini-plug'}
+                          aria-label={`Código do mini-plug T${est} ${NOMES[rep - 1]}`}
+                          className="input !py-1 !px-2 !text-[11px] w-full max-w-[150px] mt-1 uppercase"
+                        />
+                        <div className="mt-0.5 min-h-[14px]">
+                          <StatusMiniPlug codigo={cel?.codigo_mini_plug ?? ''} rochaCodigo={rochaCodigo} existentes={existentes} />
+                        </div>
+                      </td>
                       {CAMPOS.map((campo, col) => (
                         <td key={campo} className="px-2 py-1.5">
                           <input

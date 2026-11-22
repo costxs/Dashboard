@@ -8,13 +8,14 @@ interface EstadoContexto {
   empresaId: string | null
   empresaSigla: string | null
   empresaNome: string | null
+  empresaLogoUrl: string | null
   projetoId: string | null       // null = todos os projetos da empresa
   projetoNome: string | null
   menuRecolhido: boolean
   /** Gaveta do menu no celular (não fica guardada no navegador). */
   menuMobileAberto: boolean
 
-  escolherEmpresa: (e: { id: string; sigla: string; nome: string } | null) => void
+  escolherEmpresa: (e: { id: string; sigla: string; nome: string; logo_url?: string | null } | null) => void
   escolherProjeto: (p: { id: string; nome: string } | null) => void
   alternarMenu: () => void
   abrirMenuMobile: (aberto: boolean) => void
@@ -27,6 +28,7 @@ export const useContexto = create<EstadoContexto>()(
       empresaId: null,
       empresaSigla: null,
       empresaNome: null,
+      empresaLogoUrl: null,
       projetoId: null,
       projetoNome: null,
       menuRecolhido: false,
@@ -37,6 +39,7 @@ export const useContexto = create<EstadoContexto>()(
           empresaId: e?.id ?? null,
           empresaSigla: e?.sigla ?? null,
           empresaNome: e?.nome ?? null,
+          empresaLogoUrl: e?.logo_url ?? null,
           projetoId: null,
           projetoNome: null,
         }),
@@ -44,7 +47,7 @@ export const useContexto = create<EstadoContexto>()(
       alternarMenu: () => set((s) => ({ menuRecolhido: !s.menuRecolhido })),
       abrirMenuMobile: (aberto) => set({ menuMobileAberto: aberto }),
       limpar: () =>
-        set({ empresaId: null, empresaSigla: null, empresaNome: null, projetoId: null, projetoNome: null }),
+        set({ empresaId: null, empresaSigla: null, empresaNome: null, empresaLogoUrl: null, projetoId: null, projetoNome: null }),
     }),
     {
       name: 'lcpetro-gerencial-contexto',

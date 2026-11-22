@@ -7,6 +7,7 @@ import {
 import { AbaAnalise } from '../components/analises/AbaAnalise'
 import { ImagensMicroct } from '../components/analises/ImagensMicroct'
 import { SeriesRdaLaboratorio } from '../components/analises/SeriesRdaLaboratorio'
+import { EnsaiosDissolucaoDaAmostra } from '../components/reatividade/EnsaiosDissolucaoDaAmostra'
 import { AbaAnalise as AbaAnaliseVisual } from '../visualizacao/components/analises/AbaAnalise'
 import { PermeabilidadeCoreflood } from '../visualizacao/components/analises/PermeabilidadeCoreflood'
 import { RdaDaAmostra } from '../visualizacao/components/analises/RdaDaAmostra'
@@ -177,7 +178,10 @@ export const AmostraPage: React.FC = () => {
                 <Valor rotulo="Local Físico" destaque>{onde.localFisico}</Valor>
                 <Valor rotulo="Status no Estoque" destaque>{rotuloStatus(a.status)}</Valor>
                 <Valor rotulo="Empresa / Projeto Alocado">{a.empresa} · {a.projeto}</Valor>
-                <Valor rotulo="Tipo de Amostra">{a.tipo_amostra === 'disco' ? 'Disco' : 'Plug'}</Valor>
+                <Valor rotulo="Tipo de Amostra">
+                  {a.tipo_amostra === 'disco' ? 'Disco' : a.tipo_amostra === 'mini_plug' ? 'Mini-plug' : 'Plug'}
+                  {a.amostra_mae_codigo ? ` · cortado de ${a.amostra_mae_codigo}` : ''}
+                </Valor>
                 <Valor rotulo="Última Conferência Física">
                   {ultimaConf ? `${(ultimaConf.resultado ?? 'ok').toUpperCase()} (${fmtData(ultimaConf.data)} · ${ultimaConf.responsaveis})` : 'Sem conferência registrada'}
                 </Valor>
@@ -333,6 +337,8 @@ export const AmostraPage: React.FC = () => {
         {cfgAtiva?.chave === 'microct' && (
           <ImagensMicroct amostraId={a.id} codigo={a.codigo} podeEditar={podeEditar} />
         )}
+
+        {cfgAtiva?.chave === 'reatividade' && <EnsaiosDissolucaoDaAmostra amostraId={a.id} />}
 
         {cfgAtiva?.chave === 'rda' && (
           <SeriesRdaLaboratorio amostraId={a.id} codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} podeEditar={podeEditar}

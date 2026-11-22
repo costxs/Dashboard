@@ -61,7 +61,7 @@ function EmpresasEProjetos() {
           <div className="flex flex-wrap gap-3">
             {empresas.dados?.map((e) => (
               <div key={e.id} className="flex items-center gap-3 rounded-xl border border-[var(--color-neutral-200)] px-3 py-2">
-                <LogoEmpresa sigla={e.sigla} nome={e.nome} tamanho={36} />
+                <LogoEmpresa sigla={e.sigla} nome={e.nome} url={e.logo_url} tamanho={36} />
                 <div><p className="m-0 font-semibold text-[13px]">{e.nome}</p><p className="m-0 text-[11px] text-[var(--color-neutral-500)]">{e.sigla}</p></div>
               </div>
             ))}

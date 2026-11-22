@@ -22,6 +22,8 @@ export interface Empresa {
   id: string
   sigla: string
   nome: string
+  /** 028: foto/logo enviada no cadastro */
+  logo_url?: string | null
 }
 
 export interface Projeto {
@@ -140,7 +142,10 @@ export interface AmostraResumo {
   n_petrografia: number
   n_mev: number
   // migração 011: banco de amostras organizado
-  tipo_amostra: 'plug' | 'disco' | 'outro' | null
+  tipo_amostra: 'plug' | 'disco' | 'mini_plug' | 'outro' | null
+  // migração 027: rocha de onde o mini-plug foi cortado
+  amostra_mae_id?: string | null
+  amostra_mae_codigo?: string | null
   prefixo: string | null
   significado_prefixo: string | null
   /** sistemas ácidos dos ensaios lançados; sem ensaio, o previsto no controle de rochas + " (previsto)" */

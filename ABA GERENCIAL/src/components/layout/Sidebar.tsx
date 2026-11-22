@@ -36,6 +36,7 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const alternarMenu = mobile ? () => abrirMenuMobile(false) : alternarRecolhido
   const empresaSigla = useContexto((s) => s.empresaSigla)
   const empresaNome = useContexto((s) => s.empresaNome)
+  const empresaLogoUrl = useContexto((s) => s.empresaLogoUrl)
   const projetoNome = useContexto((s) => s.projetoNome)
   const { isAdmin, editor } = useAuth()
 
@@ -108,7 +109,7 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
       <div className={`flex flex-col items-center border-t border-white/10 bg-white/5 pt-4 pb-4 ${recolhido ? 'px-2' : 'px-5'}`}>
         {empresaSigla && (
           <div className="rounded-xl bg-white p-2">
-            <LogoEmpresa sigla={empresaSigla} nome={empresaNome} tamanho={recolhido ? 36 : 72} />
+            <LogoEmpresa sigla={empresaSigla} nome={empresaNome} url={empresaLogoUrl} tamanho={recolhido ? 36 : 72} />
           </div>
         )}
         {!recolhido && (

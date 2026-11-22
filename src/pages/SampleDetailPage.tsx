@@ -142,7 +142,10 @@ export function SampleDetailPage() {
                 <Valor rotulo="Local Físico" destaque>{onde.localFisico}</Valor>
                 <Valor rotulo="Status no Estoque" destaque>{STATUS_ROTULO[a.status]}</Valor>
                 <Valor rotulo="Empresa / Projeto Alocado">{a.empresa} · {a.projeto}</Valor>
-                <Valor rotulo="Tipo de Amostra">{a.tipo_amostra === "disco" ? "Disco" : "Plug"}</Valor>
+                <Valor rotulo="Tipo de Amostra">
+                  {a.tipo_amostra === "disco" ? "Disco" : a.tipo_amostra === "mini_plug" ? "Mini-plug" : "Plug"}
+                  {a.amostra_mae_codigo ? ` · cortado de ${a.amostra_mae_codigo}` : ""}
+                </Valor>
                 <Valor rotulo="Última Conferência Física">
                   {ultimaConf ? `${ultimaConf.resultado.toUpperCase()} (${fmtData(ultimaConf.data)} · ${ultimaConf.responsaveis})` : "Sem conferência registrada"}
                 </Valor>
