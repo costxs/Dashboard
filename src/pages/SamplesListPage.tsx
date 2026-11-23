@@ -22,12 +22,13 @@ import {
   litologiaSegura,
   ondeAmostraEsta,
   opcoesDeFiltro,
+  faixaDeTamanhos,
   prefixoDe,
   tipoDe,
   tituloPrefixo,
 } from "../utils/bancoAmostras";
 
-const ROTULO_TIPO: Record<string, string> = { plug: "Plug", disco: "Disco", outro: "Outro" };
+const ROTULO_TIPO: Record<string, string> = { plug: "Plug", disco: "Disco", mini_plug: "Mini-plug", outro: "Outro" };
 
 const TODOS = "Todos";
 type EscopoLcpetro = "Todas do laboratório" | "Só internas (LC PETRO)" | "Só projetos externos";
@@ -36,11 +37,13 @@ type Filtros = {
   tipo: string; prefixo: string; fluido: string;
   litologia: string; origem: string; status: string; bacia: string; campo: string; poco: string;
   kMin: string; kMax: string;
+  diametroMin: string; diametroMax: string; comprimentoMin: string; comprimentoMax: string;
 };
 const filtrosIniciais: Filtros = {
   escopo: "Todas do laboratório",
   tipo: TODOS, prefixo: TODOS, fluido: TODOS,
   litologia: TODOS, origem: TODOS, status: TODOS, bacia: TODOS, campo: TODOS, poco: TODOS, kMin: "", kMax: "",
+  diametroMin: "", diametroMax: "", comprimentoMin: "", comprimentoMax: "",
 };
 
 export function SamplesListPage() {
@@ -86,9 +89,12 @@ export function SamplesListPage() {
     return true;
   });
   const opcoesBanco = opcoesDeFiltro(todas);
+  const tamanhos = faixaDeTamanhos(todas);
+  const dica = (v?: number) => (v == null ? "" : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 }));
   const semTodos = (v: string) => (v === TODOS ? "" : v);
   const [kMin, kMax] = [num(f.kMin), num(f.kMax)];
-  const lista = filtrarAmostras(todas, { tipo: semTodos(f.tipo), prefixo: semTodos(f.prefixo), fluido: semTodos(f.fluido), litologia: "", status: "" })
+  const lista = filtrarAmostras(todas, { tipo: semTodos(f.tipo), prefixo: semTodos(f.prefixo), fluido: semTodos(f.fluido), litologia: "", status: "",
+    diametroMin: f.diametroMin, diametroMax: f.diametroMax, comprimentoMin: f.comprimentoMin, comprimentoMax: f.comprimentoMax })
     .filter((a) => {
       if ((kMin == null || Number.isNaN(kMin)) && (kMax == null || Number.isNaN(kMax))) return true;
       const k = melhorK(a);
@@ -243,7 +249,7 @@ export function SamplesListPage() {
             options={["Todas do laboratório", "Só internas (LC PETRO)", "Só projetos externos"]} />
         )}
         <Select label="Tipo" value={f.tipo} onChange={(v) => mudar({ tipo: v })}
-          options={[TODOS, "plug", "disco", ...(todas.some((a) => tipoDe(a) === "outro") ? ["outro"] : [])]} rotulos={ROTULO_TIPO} />
+          options={[TODOS, "plug", "disco", "mini_plug", ...(todas.some((a) => tipoDe(a) === "outro") ? ["outro"] : [])]} rotulos={ROTULO_TIPO} />
         <Select label="Prefixo" value={f.prefixo} onChange={(v) => mudar({ prefixo: v })} options={[TODOS, ...opcoesBanco.prefixos]} />
         <Select label="Litotipo" value={f.litologia} onChange={(v) => mudar({ litologia: v })}
           options={[TODOS, ...(litologias.dados ?? []).map((l) => l.nome)]} />
@@ -253,6 +259,18 @@ export function SamplesListPage() {
         <button className="btn btn-secondary w-full" type="button" onClick={limpar}>
           <RotateCcw size={14} /> Limpar filtros
         </button>
+        {([
+          ["Diâmetro de (cm)", "diametroMin", tamanhos.diametro?.min],
+          ["Diâmetro até (cm)", "diametroMax", tamanhos.diametro?.max],
+          ["Comprimento de (cm)", "comprimentoMin", tamanhos.comprimento?.min],
+          ["Comprimento até (cm)", "comprimentoMax", tamanhos.comprimento?.max],
+        ] as const).map(([rotulo, campo, ref]) => (
+          <div className="field" key={campo}>
+            <label>{rotulo}</label>
+            <input className="input" inputMode="decimal" placeholder={dica(ref)} value={f[campo]}
+              onChange={(e) => mudar({ [campo]: e.target.value })} />
+          </div>
+        ))}
         <Select label="Origem" value={f.origem} onChange={(v) => mudar({ origem: v, bacia: TODOS, campo: TODOS, poco: TODOS })}
           options={[TODOS, "Afloramento", "Testemunho"]} />
         <div className="field">

@@ -245,6 +245,12 @@ export function ReatividadeT50DaAmostra({ ensaios }: { ensaios: ReatividadeEnsai
   if (ensaios.length === 0) return null;
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="m-0 text-[18px] font-heading font-bold text-[var(--color-blue-800)]">Dissolução estática</h2>
+        <p className="m-0 mt-1 text-[13px] text-[var(--color-neutral-600)]">
+          Resultados e gráficos dos ensaios gravados nesta amostra (t₅₀, perda de massa e absorção atômica).
+        </p>
+      </div>
       {ensaios.map((e) => (
         <CartaoEnsaioReatividade key={e.id} ensaio={e} />
       ))}

@@ -12,7 +12,7 @@ import {
 import { useContexto } from '../store/useContexto'
 import type { Amostra, Projeto, Litologia } from '../tipos/banco'
 import {
-  agruparAmostras, dimensoes, ehVisaoLimitadaLcpetro, experimentosDaAmostra, filtrarAmostras, FILTROS_VAZIOS, fluidoDe,
+  agruparAmostras, dimensoes, ehVisaoLimitadaLcpetro, faixaDeTamanhos, experimentosDaAmostra, filtrarAmostras, FILTROS_VAZIOS, fluidoDe,
   litologiaSegura, ondeAmostraEsta, opcoesDeFiltro, prefixoDe, tipoDe, tituloPrefixo,
   type FiltrosBanco,
 } from '../utils/bancoAmostras'
@@ -251,6 +251,8 @@ export const AmostrasPage: React.FC = () => {
   // filtros do topo (aplicados na lista já carregada) e modo de exibição
   const visiveis = filtrarAmostras(amostras, filtros)
   const opcoes = opcoesDeFiltro(amostras)
+  const tamanhos = faixaDeTamanhos(amostras)
+  const dica = (v?: number) => (v == null ? '' : v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }))
   const temFiltro = Object.values(filtros).some(Boolean)
   const mudarFiltro = (parcial: Partial<FiltrosBanco>) => setFiltros((f) => ({ ...f, ...parcial }))
 
@@ -447,6 +449,7 @@ export const AmostrasPage: React.FC = () => {
             <option value="">Todos</option>
             <option value="plug">Plug</option>
             <option value="disco">Disco</option>
+            <option value="mini_plug">Mini-plug</option>
             {amostras.some((a) => tipoDe(a) === 'outro') && <option value="outro">Outro</option>}
           </Select>
           <Select label="Prefixo" value={filtros.prefixo} onChange={(e) => mudarFiltro({ prefixo: e.target.value })}>
@@ -468,6 +471,18 @@ export const AmostrasPage: React.FC = () => {
           <Button variant="secondary" icon={<RotateCcw size={14} />} onClick={() => setFiltros(FILTROS_VAZIOS)} disabled={!temFiltro}>
             Limpar filtros
           </Button>
+        </div>
+
+        {/* Tamanho da amostra */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+          <Input label="Diâmetro de (cm)" inputMode="decimal" placeholder={dica(tamanhos.diametro?.min)}
+            value={filtros.diametroMin ?? ''} onChange={(e) => mudarFiltro({ diametroMin: e.target.value })} />
+          <Input label="Diâmetro até (cm)" inputMode="decimal" placeholder={dica(tamanhos.diametro?.max)}
+            value={filtros.diametroMax ?? ''} onChange={(e) => mudarFiltro({ diametroMax: e.target.value })} />
+          <Input label="Comprimento de (cm)" inputMode="decimal" placeholder={dica(tamanhos.comprimento?.min)}
+            value={filtros.comprimentoMin ?? ''} onChange={(e) => mudarFiltro({ comprimentoMin: e.target.value })} />
+          <Input label="Comprimento até (cm)" inputMode="decimal" placeholder={dica(tamanhos.comprimento?.max)}
+            value={filtros.comprimentoMax ?? ''} onChange={(e) => mudarFiltro({ comprimentoMax: e.target.value })} />
         </div>
       </div>
 

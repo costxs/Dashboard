@@ -17,6 +17,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Alert } from '../UI'
 import { confirmar } from '../Confirmar'
 import { listarAmostras, listarSistemasAcidos, type AmostraResumo } from '../../servicos/api'
@@ -68,6 +69,7 @@ import {
   EditorGraficoOriginLegenda,
   type ItemLegendaPreview,
 } from './EditorGraficoOriginLegenda'
+import { CampoAmostraEnsaio } from './CampoAmostraEnsaio'
 import { GradeDissolucao, StatusMiniPlug } from './GradeDissolucao'
 import { codigoMiniPlug, sugestaoMiniPlug } from './miniPlugs'
 
@@ -254,6 +256,19 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
   const [carregandoGrafico, setCarregandoGrafico] = useState(false)
   const [erroGrafico, setErroGrafico] = useState<string | null>(null)
   const [versaoGrafico, setVersaoGrafico] = useState(0)
+
+  // Amostra obrigatória: aviso no campo, código vindo da planilha e link depois de salvar
+  const [faltaAmostra, setFaltaAmostra] = useState(false)
+  const [codigoSugerido, setCodigoSugerido] = useState<string | null>(null)
+  const [amostraSalva, setAmostraSalva] = useState<{ id: string; codigo: string } | null>(null)
+
+  const escolherAmostra = useCallback((a: AmostraResumo | null) => {
+    if (a) {
+      setAmostras((prev) => (prev.some((x) => x.id === a.id) ? prev : [...prev, a]))
+      setFaltaAmostra(false)
+    }
+    setForm((f) => ({ ...f, amostra_id: a?.id ?? '' }))
+  }, [])
 
   // Mini-plugs já cadastrados como amostra (chave = código normalizado)
   const [existentes, setExistentes] = useState<Map<string, AmostraEncontrada>>(new Map())
@@ -631,6 +646,9 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
     setCompararIds([])
     setPreviaImportacao(null)
     setMsg(null)
+    setFaltaAmostra(false)
+    setCodigoSugerido(null)
+    setAmostraSalva(null)
   }
 
   const carregarEnsaio = async (id: string) => {
@@ -811,6 +829,8 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
   const aplicarImportacao = () => {
     if (!previaImportacao) return
     const { metadados, sondagens: sonds, pontos: pts } = previaImportacao
+    // código da planilha vai para o campo: se não existir, o cadastro abre ali
+    if (metadados.amostra_codigo) setCodigoSugerido(metadados.amostra_codigo)
 
     setForm((f) => {
       const amostraEncontrada = metadados.amostra_codigo
@@ -892,8 +912,16 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
   }
 
   const handleSalvarEnsaio = async () => {
+    if (!form.amostra_id) {
+      setFaltaAmostra(true)
+      setAmostraSalva(null)
+      setMsg({ tipo: 'erro', texto: 'Informe a amostra do ensaio: sem ela o ensaio não é salvo. Se ela não existir, cadastre no próprio campo.' })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     setSalvando(true)
     setMsg(null)
+    setAmostraSalva(null)
     try {
       const sondsValidas = sondagens
         .map((s, idx) => ({
@@ -935,7 +963,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
       if (faltando.length > 0) {
         if (!rocha) {
           throw new Error(
-            `Os mini-plugs ${faltando.join(', ')} ainda não estão cadastrados. Escolha a Amostra (Rocha) de origem na aba 2 para cadastrá-los junto com o ensaio.`,
+            `Os mini-plugs ${faltando.join(', ')} ainda não estão cadastrados. Informe a amostra do ensaio no topo da página para cadastrá-los junto.`,
           )
         }
         const ok = await confirmar(
@@ -1017,6 +1045,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
 
       setEnsaioAtualId(salvo.ensaio.id)
       setForm((f) => ({ ...f, codigo: salvo.ensaio.codigo }))
+      if (rocha) setAmostraSalva({ id: rocha.id, codigo: rocha.codigo })
       await recarregarCatalogos()
       setMsg({
         tipo: 'sucesso',
@@ -1205,7 +1234,22 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
         </div>
       </div>
 
+      <CampoAmostraEnsaio
+        amostras={amostras}
+        valor={form.amostra_id}
+        aoEscolher={escolherAmostra}
+        sugestao={codigoSugerido}
+        faltando={faltaAmostra}
+      />
+
       {msg && <Alert tipo={msg.tipo} mensagem={msg.texto} onClose={() => setMsg(null)} />}
+
+      {amostraSalva && (
+        <div className="cartao p-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>Resultados e gráficos gravados na amostra <strong>{amostraSalva.codigo}</strong>.</span>
+          <Link to={`/amostras/${amostraSalva.id}?aba=rda`} className="btn btn-secondary btn-sm">Ver na aba RDA</Link>
+        </div>
+      )}
 
       {/* Prévia da importação Excel (avisos e erros antes de gravar) */}
       {previaImportacao && (
@@ -1469,21 +1513,6 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                   Condições Experimentais do Ensaio
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <label className="label">Amostra (Rocha)</label>
-                    <select
-                      value={form.amostra_id}
-                      onChange={(e) => setForm((f) => ({ ...f, amostra_id: e.target.value }))}
-                      className="input !py-1.5 text-xs"
-                    >
-                      <option value="">— Sem vínculo —</option>
-                      {amostras.filter((a) => a.tipo_amostra !== 'mini_plug').map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.codigo} · {a.litologia} ({a.projeto})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                   <div>
                     <label className="label">Sistema Ácido</label>
                     <select

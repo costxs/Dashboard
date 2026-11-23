@@ -93,8 +93,40 @@ export function nomesDeFluido(a: LinhaBanco): string[] {
   return (fluidoDe(a)?.texto ?? '').split(' · ').map((s) => s.trim()).filter(Boolean)
 }
 
-export interface FiltrosBanco { tipo: string; prefixo: string; litologia: string; status: string; fluido: string }
-export const FILTROS_VAZIOS: FiltrosBanco = { tipo: '', prefixo: '', litologia: '', status: '', fluido: '' }
+export interface FiltrosBanco {
+  tipo: string; prefixo: string; litologia: string; status: string; fluido: string
+  // tamanho da amostra em cm, como digitado (aceita vírgula); vazio = sem limite
+  diametroMin?: string; diametroMax?: string; comprimentoMin?: string; comprimentoMax?: string
+}
+export const FILTROS_VAZIOS: FiltrosBanco = {
+  tipo: '', prefixo: '', litologia: '', status: '', fluido: '',
+  diametroMin: '', diametroMax: '', comprimentoMin: '', comprimentoMax: '',
+}
+
+const limite = (s: string | undefined): number | null => {
+  const t = (s ?? '').trim().replace(',', '.')
+  if (!t) return null
+  const v = Number(t)
+  return Number.isFinite(v) ? v : null
+}
+
+/** Com algum limite preenchido, amostra sem a medida não passa. */
+function dentroDaFaixa(valor: number | string | null | undefined, min?: string, max?: string): boolean {
+  const [de, ate] = [limite(min), limite(max)]
+  if (de == null && ate == null) return true
+  if (valor == null || valor === '' || !Number.isFinite(Number(valor))) return false
+  const v = Number(valor)
+  return (de == null || v >= de) && (ate == null || v <= ate)
+}
+
+/** Menor e maior medida da lista, para orientar o filtro de tamanho. */
+export function faixaDeTamanhos(lista: LinhaBanco[]) {
+  const faixa = (vs: (number | string | null | undefined)[]) => {
+    const n = vs.filter((v) => v != null && v !== '' && Number.isFinite(Number(v))).map(Number)
+    return n.length ? { min: Math.min(...n), max: Math.max(...n) } : null
+  }
+  return { diametro: faixa(lista.map((a) => a.diametro_cm)), comprimento: faixa(lista.map((a) => a.comprimento_cm)) }
+}
 
 /** Filtros do topo ('' = todos). */
 export function filtrarAmostras<T extends LinhaBanco & { litologia?: string | null; status?: string | null }>(lista: T[], f: FiltrosBanco): T[] {
@@ -103,7 +135,9 @@ export function filtrarAmostras<T extends LinhaBanco & { litologia?: string | nu
     (!f.prefixo || prefixoDe(a) === f.prefixo) &&
     (!f.litologia || a.litologia === f.litologia) &&
     (!f.status || a.status === f.status) &&
-    (!f.fluido || nomesDeFluido(a).includes(f.fluido)))
+    (!f.fluido || nomesDeFluido(a).includes(f.fluido)) &&
+    dentroDaFaixa(a.diametro_cm, f.diametroMin, f.diametroMax) &&
+    dentroDaFaixa(a.comprimento_cm, f.comprimentoMin, f.comprimentoMax))
 }
 
 /** Valores distintos da lista para as opções dos filtros. */

@@ -253,41 +253,6 @@ export async function cadastrarMiniPlugs(
   return mapa
 }
 
-export interface EnsaioDaAmostra {
-  ensaio: ReatividadeEnsaio
-  /** 'rocha' = amostra escolhida no ensaio; 'mini_plug' = usada numa réplica/teste piloto */
-  papeis: Array<'rocha' | 'mini_plug'>
-}
-
-/** Ensaios de dissolução estática em que a amostra aparece (como rocha ou como mini-plug). */
-export async function listarEnsaiosDaAmostra(amostraId: string): Promise<EnsaioDaAmostra[]> {
-  const vinc = await supabase
-    .from('v_reatividade_ensaios_amostra')
-    .select('ensaio_id, papel')
-    .eq('amostra_id', amostraId)
-  let ligacoes: Array<{ ensaio_id: string; papel: 'rocha' | 'mini_plug' }>
-  if (vinc.error) {
-    // banco ainda sem a 027: só os ensaios em que ela é a rocha
-    const r = await supabase.from('reatividade_ensaios').select('id').eq('amostra_id', amostraId)
-    if (r.error) throw new Error(`Erro ao listar ensaios de reatividade: ${tratarErro(r.error)}`)
-    ligacoes = (r.data ?? []).map((e: { id: string }) => ({ ensaio_id: e.id, papel: 'rocha' as const }))
-  } else {
-    ligacoes = (vinc.data ?? []) as typeof ligacoes
-  }
-  const ids = [...new Set(ligacoes.map((l) => l.ensaio_id))]
-  if (ids.length === 0) return []
-  const { data, error } = await supabase
-    .from('reatividade_ensaios')
-    .select('*')
-    .in('id', ids)
-    .order('created_at', { ascending: false })
-  if (error) throw new Error(`Erro ao listar ensaios de reatividade: ${tratarErro(error)}`)
-  return ((data ?? []) as ReatividadeEnsaio[]).map((ensaio) => ({
-    ensaio,
-    papeis: [...new Set(ligacoes.filter((l) => l.ensaio_id === ensaio.id).map((l) => l.papel))],
-  }))
-}
-
 export async function atualizarConfigGraficoReatividade(
   ensaioId: string,
   config: ConfigGraficoReatividade,

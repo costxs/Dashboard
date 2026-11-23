@@ -60,7 +60,9 @@ export function SampleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get("tab") ?? "geral";
+  const abaNaUrl = searchParams.get("tab") ?? "geral";
+  // links antigos da aba separada abrem a aba RDA, onde a dissolução estática fica agora
+  const activeTab = abaNaUrl === "reatividade-t50" ? "rda" : abaNaUrl;
   const empresaSigla = useContexto((s) => s.empresaSigla);
 
   const amostra = useConsulta(() => obterAmostra(id!), [id]);
@@ -203,20 +205,20 @@ export function SampleDetailPage() {
     );
   }
 
+  const ensaiosReatT50 = reatividadeT50.dados ?? [];
+  // n_reatividade soma os ensaios de dissolução; eles aparecem na aba RDA
+  const contagem = (chave: string, n: number) =>
+    chave === "reatividade" ? Math.max(0, n - ensaiosReatT50.length) : chave === "rda" ? n + ensaiosReatT50.length : n;
   const todas = ANALISES.map((cfg) => ({
     key: cfg.chave,
     label: `${cfg.numero}. ${cfg.titulo}`,
     icon: ICONES[cfg.chave],
-    n: Number(a[cfg.contador as keyof AmostraResumo] ?? 0),
+    n: contagem(cfg.chave, Number(a[cfg.contador as keyof AmostraResumo] ?? 0)),
   }));
   const marcados = ensaiosDaFinalidade(a.finalidade);
-  const ensaiosReatT50 = reatividadeT50.dados ?? [];
   const abas: { key: string; label: string; icon: LucideIcon; n?: number }[] = [
     { key: "geral", label: "Visão Geral", icon: ClipboardList },
     ...todas.filter((t) => t.n > 0 || marcados.includes(t.key)),
-    ...(ensaiosReatT50.length > 0
-      ? [{ key: "reatividade-t50", label: "Reatividade / RDA", icon: FlaskConical, n: ensaiosReatT50.length }]
-      : []),
   ];
   const cfgAtiva = abas.some((t) => t.key === activeTab) ? ANALISES.find((c) => c.chave === activeTab) : undefined;
   const semEnsaio = marcados.length === 0 && todas.every((t) => t.n === 0) && ensaiosReatT50.length === 0;
@@ -272,8 +274,8 @@ export function SampleDetailPage() {
           <div className="mb-5"><Aviso tipo="info">Esta amostra está como utilizada, mas não tem nenhum ensaio registrado.</Aviso></div>
         )}
         {activeTab === "geral" && <OverviewTab a={a} podeEditar={false} observacoes={controle.dados?.observacoes ?? null} />}
-        {activeTab === "reatividade-t50" && ensaiosReatT50.length > 0 && (
-          <ReatividadeT50DaAmostra ensaios={ensaiosReatT50} />
+        {activeTab === "rda" && ensaiosReatT50.length > 0 && (
+          <div className="mb-7"><ReatividadeT50DaAmostra ensaios={ensaiosReatT50} /></div>
         )}
         {cfgAtiva && <AbaAnalise key={cfgAtiva.chave} cfg={cfgAtiva} amostraId={a.id} podeEditar={false} aoMudar={amostra.recarregar}
           amostra={{ finalidade: a.finalidade, status: a.status, codigo: a.codigo, comprimento_cm: a.comprimento_cm, diametro_cm: a.diametro_cm }} controle={controle.dados ?? null}

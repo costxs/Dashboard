@@ -7,7 +7,9 @@ import {
 import { AbaAnalise } from '../components/analises/AbaAnalise'
 import { ImagensMicroct } from '../components/analises/ImagensMicroct'
 import { SeriesRdaLaboratorio } from '../components/analises/SeriesRdaLaboratorio'
-import { EnsaiosDissolucaoDaAmostra } from '../components/reatividade/EnsaiosDissolucaoDaAmostra'
+import { ReatividadeT50DaAmostra } from '../visualizacao/components/analises/ReatividadeT50DaAmostra'
+import { listarReatividadeDaAmostra } from '../visualizacao/servicos/reatividade'
+import type { ReatividadeEnsaioComDetalhes } from '../visualizacao/tipos/banco'
 import { AbaAnalise as AbaAnaliseVisual } from '../visualizacao/components/analises/AbaAnalise'
 import { PermeabilidadeCoreflood } from '../visualizacao/components/analises/PermeabilidadeCoreflood'
 import { RdaDaAmostra } from '../visualizacao/components/analises/RdaDaAmostra'
@@ -63,6 +65,7 @@ export const AmostraPage: React.FC = () => {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [versaoRda, setVersaoRda] = useState(0)
+  const [ensaiosDissolucao, setEnsaiosDissolucao] = useState<ReatividadeEnsaioComDetalhes[]>([])
 
   async function carregar() {
     try {
@@ -92,6 +95,14 @@ export const AmostraPage: React.FC = () => {
 
   const podeEditar = usePodeEditar(amostra?.projeto_id)
   const limitada = ehVisaoLimitadaLcpetro(amostra, empresaSigla)
+
+  // ensaios de dissolução estática gravados nesta amostra (como rocha ou mini-plug)
+  useEffect(() => {
+    if (!id || !amostra || limitada) { setEnsaiosDissolucao([]); return }
+    let vivo = true
+    listarReatividadeDaAmostra(id).then((l) => { if (vivo) setEnsaiosDissolucao(l) })
+    return () => { vivo = false }
+  }, [id, amostra?.id, limitada])
 
   if (carregando && !amostra) {
     return (
@@ -245,7 +256,12 @@ export const AmostraPage: React.FC = () => {
     chave: cfg.chave,
     rotulo: `${cfg.numero}. ${cfg.titulo}`,
     icone: ICONES[cfg.chave],
-    n: Number(a[CONTADOR[cfg.chave]] ?? 0),
+    // n_reatividade soma os ensaios de dissolução; eles aparecem na aba RDA
+    n: cfg.chave === 'reatividade'
+      ? Math.max(0, Number(a[CONTADOR[cfg.chave]] ?? 0) - ensaiosDissolucao.length)
+      : cfg.chave === 'rda'
+        ? Number(a[CONTADOR[cfg.chave]] ?? 0) + ensaiosDissolucao.length
+        : Number(a[CONTADOR[cfg.chave]] ?? 0),
   }))
   const marcados = ensaiosDaFinalidade(a.finalidade)
   const abas: { chave: string; rotulo: string; icone: LucideIcon; n?: number }[] = [
@@ -338,7 +354,9 @@ export const AmostraPage: React.FC = () => {
           <ImagensMicroct amostraId={a.id} codigo={a.codigo} podeEditar={podeEditar} />
         )}
 
-        {cfgAtiva?.chave === 'reatividade' && <EnsaiosDissolucaoDaAmostra amostraId={a.id} />}
+        {cfgAtiva?.chave === 'rda' && ensaiosDissolucao.length > 0 && (
+          <ReatividadeT50DaAmostra ensaios={ensaiosDissolucao} />
+        )}
 
         {cfgAtiva?.chave === 'rda' && (
           <SeriesRdaLaboratorio amostraId={a.id} codigo={a.codigo} projetoId={a.projeto_id} litologia={a.litologia} podeEditar={podeEditar}

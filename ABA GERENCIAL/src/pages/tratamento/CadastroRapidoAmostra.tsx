@@ -18,6 +18,10 @@ export const CadastroRapidoAmostra: React.FC<{
   codigo?: string | null
   comprimento_cm?: number | null
   diametro_cm?: number | null
+  /** ensaio que motivou o cadastro (padrão: coreflooding) */
+  finalidade?: string
+  /** código que já existe: usa a amostra como está, sem mover de projeto nem alterar */
+  usarExistente?: boolean
   aoCadastrar: (id: string) => void
   aoFechar: () => void
 }> = (p) => {
@@ -65,9 +69,13 @@ export const CadastroRapidoAmostra: React.FC<{
       const cod = codigo.trim().replace(/\s+/g, '').toUpperCase()
       // código que já existe (mesmo em outro projeto/empresa): sobrescreve a amostra existente, trazendo-a para este projeto
       const existente = await buscarAmostraPorCodigo(cod)
+      if (existente && p.usarExistente) {
+        p.aoCadastrar(existente.id)
+        return
+      }
       const a = await salvarAmostra({
         id: existente?.id, codigo: cod, projeto_id: projetoId, litologia, tipo_origem: origem,
-        poco: origem === 'testemunho' ? poco.trim() : null, comprimento_cm: L, diametro_cm: D, finalidade: 'coreflooding',
+        poco: origem === 'testemunho' ? poco.trim() : null, comprimento_cm: L, diametro_cm: D, finalidade: p.finalidade ?? 'coreflooding',
       })
       p.aoCadastrar(a.id)
     } catch (e) {
