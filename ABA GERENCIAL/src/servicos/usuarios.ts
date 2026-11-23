@@ -15,6 +15,27 @@ export interface ConviteUsuario {
   escopos?: { empresa_id?: string | null; projeto_id?: string | null }[]
 }
 
+/** Recusa um pedido apagando a conta (só pendente/recusada): o e-mail fica livre para novo cadastro. */
+export async function recusarUsuario(usuarioId: string): Promise<void> {
+  if (!URL_GRAFICOS) throw new Error('Falta o endereço do backend (VITE_URL_GRAFICOS).')
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Sua sessão expirou: entre de novo no gerencial.')
+  let r: Response
+  try {
+    r = await fetch(`${URL_GRAFICOS}/usuarios/recusar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ usuario_id: usuarioId }),
+    })
+  } catch {
+    throw new Error(`O backend não respondeu (${URL_GRAFICOS}).`)
+  }
+  if (r.ok) return
+  const corpo = await r.json().catch(() => null) as { detail?: unknown } | null
+  throw new Error(typeof corpo?.detail === 'string' ? corpo.detail : `Não foi possível recusar o usuário (${r.status}).`)
+}
+
 export async function convidarUsuario(c: ConviteUsuario): Promise<{ id: string; email: string }> {
   if (!URL_GRAFICOS) throw new Error('Falta o endereço do backend: coloque VITE_URL_GRAFICOS no .env.local e reinicie o npm run dev.')
   const { data } = await supabase.auth.getSession()

@@ -65,6 +65,10 @@ class Convite(BaseModel):
         return self
 
 
+class Recusa(BaseModel):
+    usuario_id: UUID
+
+
 def _config() -> tuple[str, str, str]:
     url, secreta = os.getenv("SUPABASE_URL", "").rstrip("/"), os.getenv("SUPABASE_SECRET_KEY", "")
     if not url or not secreta:
@@ -154,5 +158,30 @@ def criar_rotas(origens: list[str], origem_local: str) -> APIRouter:
             if r.status_code >= 300:
                 raise HTTPException(502, f"convite enviado, mas não consegui criar o vínculo: {r.text[:200]}")
         return {"id": novo, "email": c.email, "nivel": c.nivel}
+
+    @router.post("/recusar")
+    def recusar(p: Recusa, authorization: Optional[str] = Header(default=None)):
+        """Recusa um pedido apagando a conta: o e-mail fica livre para um novo cadastro."""
+        admin = exigir_admin(authorization)
+        alvo = str(p.usuario_id)
+        if alvo == admin:
+            raise HTTPException(422, "você não pode recusar a sua própria conta")
+
+        r = _supabase("GET", f"/rest/v1/perfis?id=eq.{alvo}&select=email,situacao,administrador")
+        if r.status_code != 200:
+            raise HTTPException(502, f"não consegui ler o perfil: {r.text[:200]}")
+        if not r.json():
+            raise HTTPException(404, "usuário não encontrado")
+        perfil = r.json()[0]
+        # só pedidos: conta aprovada ou de administrador nunca é apagada por aqui
+        if perfil.get("administrador") or perfil.get("situacao") not in ("pendente", "recusado"):
+            raise HTTPException(409, "só é possível apagar contas pendentes ou recusadas")
+
+        r = _supabase("DELETE", f"/auth/v1/admin/users/{alvo}")
+        if r.status_code >= 300:
+            # dados lançados por essa conta seguram a exclusão no banco
+            raise HTTPException(409 if r.status_code in (409, 500) else 502,
+                                f"não consegui apagar a conta de {perfil.get('email')}: ela pode ter dados ligados a ela")
+        return {"id": alvo, "email": perfil.get("email")}
 
     return router

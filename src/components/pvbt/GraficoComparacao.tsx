@@ -19,7 +19,30 @@ export const CORES_SERIE = ["#000000", "#FF00FF", "#FF0000", "#0000FF", "#008000
 export const MARCADORES_SERIE: Marcador[] = ["circle", "square", "triangle", "diamond", "triangleDown"];
 
 const TEXTO = "#000000";
-const dec2 = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** número do eixo: 2 casas; valores muito pequenos mantêm os dígitos e os grandes dispensam casas */
+const dec2 = (v: number) =>
+  v < 0.01
+    ? v.toLocaleString("pt-BR", { maximumSignificantDigits: 2 })
+    : v.toLocaleString("pt-BR", { minimumFractionDigits: v >= 100 ? 0 : 2, maximumFractionDigits: v >= 100 ? 0 : 2 });
+
+// do mais espaçado ao mais fino: usa o primeiro que der ao menos 4 números no eixo
+const DIVISOES_LOG = [[1], [1, 2, 5], [1, 1.5, 2, 3, 4, 5, 7], [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8]];
+
+/** Marcas de um eixo log entre lo e hi, sempre com valores redondos. */
+export function marcasLog(lo: number, hi: number): number[] {
+  let marcas: number[] = [];
+  for (const divisoes of DIVISOES_LOG) {
+    marcas = [];
+    for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+      for (const d of divisoes) {
+        const v = Number((d * 10 ** e).toPrecision(6));
+        if (v >= lo * (1 - 1e-9) && v <= hi * (1 + 1e-9)) marcas.push(v);
+      }
+    }
+    if (marcas.length >= 4) break;
+  }
+  return marcas;
+}
 
 /** desenha o marcador (cada forma centrada no ponto) */
 function Forma(p: { forma: Marcador; cx: number; cy: number; cor: string; r?: number }) {
@@ -54,14 +77,12 @@ function LegendaOrigin({ series }: { series: SerieGrafico[] }) {
 export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieGrafico[]; altura?: number }>(function GraficoComparacao(p, ref) {
   const caixa = useRef<HTMLDivElement>(null);
   const todos = useMemo(() => p.series.flatMap((s) => s.pontos).filter((d) => d.x > 0 && d.y > 0), [p.series]);
-  // folga em volta dos pontos (nenhum fica em cima da moldura) e, em cima, o espaço da legenda; marcas só nas potências de 10
+  // folga em volta dos pontos (nenhum fica em cima da moldura) e, em cima, o espaço da legenda
   const folga = (vals: number[], extraTopo = 0): { dominio: [number, number]; marcas: number[] } => {
     const lo = Math.min(...vals) / 1.6;
     const d0 = Math.log10((Math.max(...vals) * 1.6) / lo);
     const hi = Math.max(...vals) * 1.6 * 10 ** (extraTopo > 0 ? (extraTopo * d0) / (1 - extraTopo) : 0);
-    const marcas: number[] = [];
-    for (let e = Math.ceil(Math.log10(lo) - 1e-9); 10 ** e <= hi * (1 + 1e-9); e++) marcas.push(10 ** e);
-    return { dominio: [lo, hi], marcas };
+    return { dominio: [lo, hi], marcas: marcasLog(lo, hi) };
   };
   const ex = folga(todos.map((d) => d.x));
   const ey = folga(todos.map((d) => d.y), Math.min(0.5, (p.series.length * 24 + 24) / ((p.altura ?? 640) - 112)));

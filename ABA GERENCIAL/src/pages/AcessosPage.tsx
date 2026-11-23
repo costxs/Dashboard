@@ -7,7 +7,7 @@ import {
   adicionarMembro, alterarNivelPerfil, alterarPapelMembro, decidirAcesso, listarEmpresas, listarMembros,
   listarPerfis, listarProjetos, removerMembro,
 } from '../servicos/api'
-import { convidarUsuario } from '../servicos/usuarios'
+import { convidarUsuario, recusarUsuario } from '../servicos/usuarios'
 import type { Empresa, Membro, Papel, Perfil, Projeto } from '../tipos/banco'
 import { fmtData, mensagemErro } from '../utils/formatacao'
 
@@ -64,10 +64,10 @@ export const AcessosPage: React.FC = () => {
   }
 
   async function recusar(p: Perfil) {
-    if (!(await confirmar(`Recusar o acesso de ${p.nome || p.email}? A conta continua existindo, mas não vê nada.`))) return
+    if (!(await confirmar(`Recusar ${p.nome || p.email}? A conta será apagada do banco e não dá para desfazer; a pessoa poderá se cadastrar de novo com o mesmo e-mail.`))) return
     try {
-      await decidirAcesso({ usuarioId: p.id, aprovar: false })
-      setAviso(`Acesso de ${p.email} recusado.`)
+      await recusarUsuario(p.id)
+      setAviso(`Pedido de ${p.email} recusado e conta apagada: o e-mail pode ser cadastrado de novo.`)
       await carregar()
     } catch (e) {
       setErro(mensagemErro(e))
@@ -119,9 +119,17 @@ export const AcessosPage: React.FC = () => {
           </div>
         )}
         {recusados.length > 0 && (
-          <p className="m-0 mt-4 text-[12px] text-[var(--color-neutral-500)]">
-            {recusados.length} pedido(s) recusado(s): {recusados.map((p) => p.email).join(', ')}.
-          </p>
+          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-neutral-200)] pt-3">
+            <p className="m-0 text-[12px] text-[var(--color-neutral-500)]">
+              Recusados antes desta mudança: a conta ainda ocupa o e-mail. Apague para a pessoa poder se cadastrar de novo.
+            </p>
+            {recusados.map((p) => (
+              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                <span className="min-w-0 break-all">{p.nome ? `${p.nome} · ` : ''}{p.email}</span>
+                <Button size="sm" variant="outline" icon={<Trash2 size={13} />} onClick={() => recusar(p)}>Apagar conta</Button>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 
