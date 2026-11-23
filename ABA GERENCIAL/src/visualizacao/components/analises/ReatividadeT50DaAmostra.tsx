@@ -3,6 +3,7 @@ import { Download, FlaskConical, Loader2 } from "lucide-react";
 import { Cartao, Valor } from "../ui/base";
 import {
   buscarGraficoReatividadeOrigin,
+  calcularLogLog,
   resumirEstagiosEnsaio,
   type TipoGraficoReatividade,
 } from "../../servicos/reatividade";
@@ -85,6 +86,7 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
   };
 
   const t50Min = ensaio.t50_min != null ? Number(ensaio.t50_min) : null;
+  const logLog = calcularLogLog(ensaio.pontos);
   const incluirMg = ensaio.litologia === "dolomita";
   const equacao =
     ensaio.taxa_dissolucao_m != null && ensaio.taxa_dissolucao_n != null
@@ -190,6 +192,19 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
                     Perda de Massa (%)
                   </button>
                 )}
+                {temPerda && (
+                  <button
+                    type="button"
+                    onClick={() => setTipoGrafico("log_log")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold border cursor-pointer ${
+                      tipoGrafico === "log_log"
+                        ? "bg-[var(--color-blue-900)] border-[var(--color-blue-900)] text-white"
+                        : "bg-white border-[var(--color-neutral-300)] text-[var(--color-neutral-700)]"
+                    }`}
+                  >
+                    Log-log
+                  </button>
+                )}
                 {temAA && (
                   <button
                     type="button"
@@ -234,6 +249,37 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
                 <img src={urlImg} alt={`Gráfico ${ensaio.codigo}`} className="max-w-3xl w-full h-auto" />
               )}
             </div>
+
+            {tipoGrafico === "log_log" && logLog.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="table text-[13px]">
+                  <thead>
+                    <tr>
+                      <th>Fração</th>
+                      <th className="text-right">Tempo (s)</th>
+                      <th className="text-right">m₀ média (g)</th>
+                      <th className="text-right">m_f média (g)</th>
+                      <th className="text-right">log t</th>
+                      <th className="text-right">log m₀</th>
+                      <th className="text-right">log m_f</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logLog.map((p) => (
+                      <tr key={p.estagio_ordem}>
+                        <td className="font-semibold">{fmt(p.fracao_t50, 2)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.tempo_medio_s, 0)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.m0_media_g, 4)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.mf_media_g, 4)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.log_tempo, 4)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.log_m0, 4)}</td>
+                        <td className="text-right tabular-nums">{fmt(p.log_mf, 4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

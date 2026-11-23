@@ -44,6 +44,8 @@ class EstiloGraficoOrigin(BaseModel):
     legend_frame: bool = True
     legend_fontsize: float = Field(default=9.0, ge=6.0, le=20.0)
     legend_ncol: int = Field(default=1, ge=1, le=4)
+    # perda de massa: eixos começando em 0
+    eixos_do_zero: bool = False
 
 
 class PedidoGraficoT50(BaseModel):
@@ -210,7 +212,7 @@ def gerar_grafico_t50(pedido: PedidoGraficoT50):
 
     t_max = max(t, t50) * 1.15
     t_line = np.linspace(0, t_max, 100)
-    ax.plot(t_line, m0 + slope * t_line, "r--", lw=1.5, label=f"Ajuste: m = {slope:.4f}·t + {m0:.4f}")
+    ax.plot(t_line, m0 + slope * t_line, "r--", lw=1.5, label=f"Ajuste: m = {slope:.4g}·t + {m0:.4f}")
     ax.plot([0.0, t], [m0, mf], "ko", ms=7, label="Pontos do teste piloto ($m_0$ e $m_f$)")
     ax.axhline(m50, color="#004c99", ls=":", lw=1.2)
     ax.axvline(t50, color="#004c99", ls=":", lw=1.2)
@@ -257,13 +259,18 @@ def gerar_grafico_perda_massa(pedido: PedidoGraficoPerdaMassa):
             rotulo = f"{s.nome} (y = {m:.3f}x + {n:.2f}, $R^2$ = {r2:.4f})"
 
         if pedido.estilo.mostrar_barras_erro:
-            ax.errorbar(x, y, yerr=err, fmt=s.marcador, color=s.cor, capsize=3, ms=6, label=rotulo)
+            ax.errorbar(x, y, yerr=err, fmt=s.marcador, color=s.cor, capsize=3, ms=6, label=rotulo,
+                        clip_on=not pedido.estilo.eixos_do_zero, zorder=3)
         else:
-            ax.plot(x, y, s.marcador, color=s.cor, ms=6, label=rotulo)
+            ax.plot(x, y, s.marcador, color=s.cor, ms=6, label=rotulo,
+                    clip_on=not pedido.estilo.eixos_do_zero, zorder=3)
 
     ax.set_xlabel(pedido.estilo.eixo_x or "Tempo de contato (s)")
     ax.set_ylabel(pedido.estilo.eixo_y or "Perda de massa (%)")
     ax.set_title(pedido.estilo.titulo or "Cinética de Dissolução Estática", fontweight="bold", pad=10)
+    if pedido.estilo.eixos_do_zero:
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
     _aplicar_legenda(ax, pedido.estilo)
     return _exportar_figura(fig, pedido.estilo, "reatividade_perda_massa")
 

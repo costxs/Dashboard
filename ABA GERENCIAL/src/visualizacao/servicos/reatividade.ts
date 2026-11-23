@@ -22,6 +22,37 @@ export interface ResumoEstagioDashboard {
   h_dp_mol_l: number;
 }
 
+export interface PontoLogLog {
+  estagio_ordem: number;
+  fracao_t50: number;
+  tempo_medio_s: number;
+  m0_media_g: number;
+  mf_media_g: number;
+  log_tempo: number;
+  log_m0: number;
+  log_mf: number;
+}
+
+/** Por estágio: médias de tempo, massa inicial e final das réplicas e o log10 de cada média. */
+export function calcularLogLog(pontos: ReatividadePonto[]): PontoLogLog[] {
+  const saida: PontoLogLog[] = [];
+  for (const ordem of [1, 2, 3, 4]) {
+    const g = pontos.filter(
+      (p) => p.estagio_ordem === ordem && Number(p.tempo_contato_s) > 0 && Number(p.massa_inicial_g) > 0 && Number(p.massa_final_g) > 0,
+    );
+    if (g.length === 0) continue;
+    const tempo = media(g.map((p) => Number(p.tempo_contato_s)));
+    const m0 = media(g.map((p) => Number(p.massa_inicial_g)));
+    const mf = media(g.map((p) => Number(p.massa_final_g)));
+    saida.push({
+      estagio_ordem: ordem, fracao_t50: Number(g[0].fracao_t50),
+      tempo_medio_s: tempo, m0_media_g: m0, mf_media_g: mf,
+      log_tempo: Math.log10(tempo), log_m0: Math.log10(m0), log_mf: Math.log10(mf),
+    });
+  }
+  return saida;
+}
+
 const media = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0);
 const dpAmostral = (v: number[]) => {
   if (v.length < 2) return 0;
@@ -178,7 +209,7 @@ export async function listarTodosEnsaiosReatividade(): Promise<ReatividadeEnsaio
   }
 }
 
-export type TipoGraficoReatividade = "t50" | "perda_massa" | "aa";
+export type TipoGraficoReatividade = "t50" | "perda_massa" | "log_log" | "aa";
 
 export async function buscarGraficoReatividadeOrigin(
   ensaio: ReatividadeEnsaioComDetalhes,
@@ -226,6 +257,7 @@ export async function buscarGraficoReatividadeOrigin(
     if (tipo === "perda_massa") {
       const validos = estagios.filter((s) => s.n_replicas > 0);
       if (validos.length === 0) return null;
+      const zero = cfg.partir_do_zero ? [0] : [];
       rota = "/reatividade/grafico-perda-massa";
       corpo = {
         series: [
@@ -234,13 +266,37 @@ export async function buscarGraficoReatividadeOrigin(
             cor: "#1f4e78",
             marcador: "s",
             estilo_linha: "-",
-            x_valores: validos.map((s) => s.tempo_contato_s),
-            y_medias_pct: validos.map((s) => s.perda_media_pct),
-            y_desvios_pct: validos.map((s) => s.perda_dp_pct),
-            incluir_zero_na_reta: false,
+            x_valores: [...zero, ...validos.map((s) => s.tempo_contato_s)],
+            y_medias_pct: [...zero, ...validos.map((s) => s.perda_media_pct)],
+            y_desvios_pct: [...zero, ...validos.map((s) => s.perda_dp_pct)],
+            incluir_zero_na_reta: Boolean(cfg.partir_do_zero),
           },
         ],
-        estilo,
+        estilo: { ...estilo, eixos_do_zero: Boolean(cfg.partir_do_zero) },
+      };
+    } else if (tipo === "log_log") {
+      const log = calcularLogLog(ensaio.pontos);
+      if (log.length === 0) return null;
+      const serie = (nome: string, cor: string, marcador: string, y: number[]) => ({
+        nome, cor, marcador, estilo_linha: "-",
+        x_valores: log.map((p) => p.log_tempo),
+        y_medias_pct: y,
+        y_desvios_pct: y.map(() => 0),
+        incluir_zero_na_reta: true,
+      });
+      rota = "/reatividade/grafico-perda-massa";
+      corpo = {
+        series: [
+          serie("Massa inicial (média)", "#1f4e78", "s", log.map((p) => p.log_m0)),
+          serie("Massa final (média)", "#b81d24", "o", log.map((p) => p.log_mf)),
+        ],
+        estilo: {
+          ...estilo,
+          titulo: "Gráfico log-log",
+          eixo_x: "$\\log_{10}$ [tempo médio (s)]",
+          eixo_y: "$\\log_{10}$ [massa média (g)]",
+          mostrar_barras_erro: false,
+        },
       };
     } else {
       const comAA = estagios.filter((s) => s.ca_media_mol_l != null && s.h_media_mol_l != null);

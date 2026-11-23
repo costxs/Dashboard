@@ -20,7 +20,8 @@ export function Arquivos(p: {
   const [ampliada, setAmpliada] = useState<Arquivo | null>(null);
 
   const imagens = (lista.dados ?? []).filter((a) => a.tipo === "imagem");
-  const outros = (lista.dados ?? []).filter((a) => a.tipo !== "imagem");
+  // as imagens com espaço na ficha (posicao) aparecem na galeria da aba Micro-CT
+  const outros = (lista.dados ?? []).filter((a) => a.tipo !== "imagem" && a.posicao == null);
 
   // links temporários para as miniaturas
   useEffect(() => {

@@ -350,6 +350,8 @@ export interface ConfigGraficoReatividade {
   font_family?: 'Arial' | 'Times New Roman' | 'Calibri' | 'DejaVu Sans'
   show_error_bars?: boolean
   show_trendline?: boolean
+  /** perda de massa: inclui o ponto (0, 0) e os eixos começam em 0 */
+  partir_do_zero?: boolean
 }
 
 export type GeometriaReatividade = 'mini_plug' | 'disco'

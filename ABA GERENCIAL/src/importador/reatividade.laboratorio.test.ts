@@ -5,6 +5,7 @@
 // o valor correto (e não o da planilha).
 import { describe, expect, it } from 'vitest'
 import {
+  calcularLogLog,
   calcularResumoEstagios,
   calcularT50,
   type PontoImportado,
@@ -52,10 +53,18 @@ describe('t50 — extrapolação linear do teste piloto (igual às planilhas)', 
     expect(calcularT50(1.0429, 2, 0.6164).t50Min).toBeCloseTo(2.4447, 2)
   })
 
-  it('casos em que a planilha tem inclinação digitada errada', () => {
-    // Manipueira pura: planilha usa -0,0002 (arredondado); o certo é -0,000178 → t50 ≈ 3049 min
+  it('usa a inclinação exata, sem o arredondamento do rótulo do Excel', () => {
+    // T50 MANIPUEIRA 3 FERM: a planilha usa -0,00009 e dá 5713,33; exato = 5687,00
+    const c = calcularT50(1.0284, 960, 0.9416)
+    expect(c.taxaGMin).toBeCloseTo(-0.0000904167, 9)
+    expect(c.t50Min).toBeCloseTo(5687.005, 3)
+    expect(c.estagios[0].tempo_contato_s).toBe(85305)
+    // Manipueira 1 FERM: a planilha usa -0,0002 e dá 2718,75
     expect(calcularT50(1.0875, 300, 1.034).t50Min).toBeCloseTo(3049.07, 1)
-    // HCl S/I: planilha usa (B5-2)/(-1,8); o certo é 1,133 min (e não 0,821)
+  })
+
+  it('HCl S/I: a fórmula da planilha tem números errados, o sistema não a reproduz', () => {
+    // planilha: (B5-2)/(-1,8) = 0,821; com os dados dela o valor é 1,133 min
     expect(calcularT50(1.043, 2, 0.1226).t50Min).toBeCloseTo(1.1332, 3)
   })
 })
@@ -132,5 +141,21 @@ describe('Perda de massa — Manipueira + HCl (média das réplicas, como na pla
   it('DP do T1 é 0,83 % (a planilha dá 10,2 % por causa da vírgula extra em STDEV.S(K5,K14,K23,))', () => {
     expect(res[0].perda_dp_pct).toBeCloseTo(0.828, 3)
     expect(res[1].perda_dp_pct).toBeCloseTo(1.0185, 3)
+  })
+})
+
+describe('Gráfico log-log', () => {
+  it('faz a média por estágio e o log10 de cada média', () => {
+    const base = { estagio_ordem: 1 as const, fracao_t50: 0.25 }
+    const [p] = calcularLogLog([
+      { ...base, tempo_contato_s: 100, massa_inicial_g: 1, massa_final_g: 0.8 },
+      { ...base, tempo_contato_s: 100, massa_inicial_g: 1.2, massa_final_g: 0.9 },
+    ])
+    expect(p.n).toBe(2)
+    expect(p.m0_media_g).toBeCloseTo(1.1, 8)
+    expect(p.mf_media_g).toBeCloseTo(0.85, 8)
+    expect(p.log_tempo).toBeCloseTo(2, 8)
+    expect(p.log_m0).toBeCloseTo(Math.log10(1.1), 8)
+    expect(p.log_mf).toBeCloseTo(Math.log10(0.85), 8)
   })
 })

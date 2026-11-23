@@ -37,6 +37,7 @@ export interface EstiloOriginPayload {
   legend_frame?: boolean
   legend_fontsize?: number
   legend_ncol?: number
+  eixos_do_zero?: boolean
 }
 
 export async function listarEnsaiosReatividade(amostraId?: string): Promise<ReatividadeEnsaio[]> {

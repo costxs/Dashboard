@@ -17,6 +17,7 @@ import {
   ScanEye,
 } from "lucide-react";
 import { AbaAnalise } from "../components/analises/AbaAnalise";
+import { ImagensDaAmostra } from "../components/analises/ImagensDaAmostra";
 import { PermeabilidadeCoreflood } from "../components/analises/PermeabilidadeCoreflood";
 import { RdaDaAmostra } from "../components/analises/RdaDaAmostra";
 import { ReatividadeT50DaAmostra } from "../components/analises/ReatividadeT50DaAmostra";
@@ -25,6 +26,7 @@ import { Aviso, Carregando, Cartao, Valor } from "../components/ui/base";
 import { ANALISES } from "../config/analises";
 import { useConsulta } from "../hooks/useConsulta";
 import { listarConferencias, obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
+import { listarImagensFicha } from "../servicos/analises";
 import { listarReatividadeDaAmostra } from "../servicos/reatividade";
 import { useContexto } from "../store/useContexto";
 import {
@@ -71,6 +73,11 @@ export function SampleDetailPage() {
   const conferencias = useConsulta(() => listarConferencias(id!) as Promise<ConferenciaRow[]>, [id]);
   const reatividadeT50 = useConsulta(
     () => (limitada ? Promise.resolve([]) : listarReatividadeDaAmostra(id!)),
+    [id, limitada],
+  );
+
+  const imagensFicha = useConsulta(
+    () => (limitada ? Promise.resolve([]) : listarImagensFicha(id!)),
     [id, limitada],
   );
 
@@ -206,9 +213,14 @@ export function SampleDetailPage() {
   }
 
   const ensaiosReatT50 = reatividadeT50.dados ?? [];
+  const imagens = imagensFicha.dados ?? [];
   // n_reatividade soma os ensaios de dissolução; eles aparecem na aba RDA
   const contagem = (chave: string, n: number) =>
-    chave === "reatividade" ? Math.max(0, n - ensaiosReatT50.length) : chave === "rda" ? n + ensaiosReatT50.length : n;
+    chave === "reatividade" ? Math.max(0, n - ensaiosReatT50.length)
+      : chave === "rda" ? n + ensaiosReatT50.length
+      // amostra só com imagens, sem ensaio de micro-CT lançado, também abre a aba
+      : chave === "microct" ? n || imagens.length
+      : n;
   const todas = ANALISES.map((cfg) => ({
     key: cfg.chave,
     label: `${cfg.numero}. ${cfg.titulo}`,
@@ -274,6 +286,9 @@ export function SampleDetailPage() {
           <div className="mb-5"><Aviso tipo="info">Esta amostra está como utilizada, mas não tem nenhum ensaio registrado.</Aviso></div>
         )}
         {activeTab === "geral" && <OverviewTab a={a} podeEditar={false} observacoes={controle.dados?.observacoes ?? null} />}
+        {activeTab === "microct" && imagens.length > 0 && (
+          <div className="mb-7"><ImagensDaAmostra imagens={imagens} codigo={a.codigo} /></div>
+        )}
         {activeTab === "rda" && ensaiosReatT50.length > 0 && (
           <div className="mb-7"><ReatividadeT50DaAmostra ensaios={ensaiosReatT50} /></div>
         )}

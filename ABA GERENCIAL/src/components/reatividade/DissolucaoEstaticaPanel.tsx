@@ -43,6 +43,7 @@ import {
   CAL_CA_INTERCEPT_PADRAO,
   CAL_CA_SLOPE_PADRAO,
   calcularGuiaRda,
+  calcularLogLog,
   calcularRegressaoLinear,
   calcularResumoEstagios,
   calcularT50,
@@ -74,7 +75,7 @@ import { GradeDissolucao, StatusMiniPlug } from './GradeDissolucao'
 import { codigoMiniPlug, sugestaoMiniPlug } from './miniPlugs'
 
 type SubAba = 'sondagem' | 'dissolucao' | 'aa'
-type TipoGrafico = 't50' | 'perda_massa' | 'aa'
+type TipoGrafico = 't50' | 'perda_massa' | 'log_log' | 'aa'
 
 interface LinhaSondagemForm {
   key: string
@@ -138,6 +139,7 @@ const CONFIG_GRAFICO_PADRAO: Required<ConfigGraficoReatividade> = {
   font_family: 'Arial',
   show_error_bars: true,
   show_trendline: true,
+  partir_do_zero: false,
 }
 
 function formInicial(): FormEnsaio {
@@ -457,8 +459,13 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
     const ys = estagiosComDados.map((e) =>
       form.modo_calculo_pct === 'razao_medias' ? e.perda_razao_medias_pct : e.perda_media_replicas_pct,
     )
-    return calcularRegressaoLinear(xs, ys)
-  }, [estagiosComDados, form.modo_calculo_pct])
+    // "Partir do 0": o ponto (0, 0) entra na reta, como aparece no gráfico
+    return configGrafico.partir_do_zero && xs.length > 0
+      ? calcularRegressaoLinear([0, ...xs], [0, ...ys])
+      : calcularRegressaoLinear(xs, ys)
+  }, [estagiosComDados, form.modo_calculo_pct, configGrafico.partir_do_zero])
+
+  const logLog = useMemo(() => calcularLogLog(pontosValidos), [pontosValidos])
 
   const guiaRda = useMemo(
     () => calcularGuiaRda(calcT50?.t50Min ?? null, regressaoPerda.m > 0 ? regressaoPerda.m : null),
@@ -523,8 +530,16 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
         incluir_zero_na_reta: false,
       })
     })
-    return lista
-  }, [estagiosComDados, form, sistemas, compararIds, ensaios, pontosComparacao])
+    return configGrafico.partir_do_zero
+      ? lista.map((s) => ({
+          ...s,
+          x_valores: [0, ...s.x_valores],
+          y_medias_pct: [0, ...s.y_medias_pct],
+          y_desvios_pct: [0, ...s.y_desvios_pct],
+          incluir_zero_na_reta: true,
+        }))
+      : lista
+  }, [estagiosComDados, form, sistemas, compararIds, ensaios, pontosComparacao, configGrafico.partir_do_zero])
 
   const estagiosComAA = useMemo(
     () => resumoEstagios.filter((e) => e.ca_media_mol_l != null && e.h_media_mol_l != null),
@@ -541,6 +556,12 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
     }
     if (tipoGrafico === 'perda_massa') {
       return seriesPerdaMassa.map((s) => ({ cor: s.cor, rotulo: s.nome }))
+    }
+    if (tipoGrafico === 'log_log') {
+      return [
+        { cor: '#1f4e78', rotulo: 'Massa inicial (média)' },
+        { cor: '#b81d24', rotulo: 'Massa final (média)' },
+      ]
     }
     const items: ItemLegendaPreview[] = [{ cor: '#005a32', rotulo: '[Ca²⁺] (mol/L)' }]
     if (incluirMg && estagiosComAA.some((e) => e.mg_media_mol_l != null)) {
@@ -584,7 +605,36 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
       }
       if (tipoGrafico === 'perda_massa') {
         if (seriesPerdaMassa.length === 0) return null
-        return gerarGraficoPerdaMassaBlob({ series: seriesPerdaMassa, estilo }, sinal)
+        return gerarGraficoPerdaMassaBlob(
+          { series: seriesPerdaMassa, estilo: { ...estilo, eixos_do_zero: configGrafico.partir_do_zero } },
+          sinal,
+        )
+      }
+      if (tipoGrafico === 'log_log') {
+        if (logLog.length === 0) return null
+        const serie = (nome: string, cor: string, marcador: string, y: number[]): SeriePerdaMassaPayload => ({
+          nome, cor, marcador, estilo_linha: '-',
+          x_valores: logLog.map((p) => p.log_tempo),
+          y_medias_pct: y,
+          y_desvios_pct: y.map(() => 0),
+          incluir_zero_na_reta: true,
+        })
+        return gerarGraficoPerdaMassaBlob(
+          {
+            series: [
+              serie('Massa inicial (média)', '#1f4e78', 's', logLog.map((p) => p.log_m0)),
+              serie('Massa final (média)', '#b81d24', 'o', logLog.map((p) => p.log_mf)),
+            ],
+            estilo: {
+              ...estilo,
+              titulo: 'Gráfico log-log',
+              eixo_x: '$\\log_{10}$ [tempo médio (s)]',
+              eixo_y: '$\\log_{10}$ [massa média (g)]',
+              mostrar_barras_erro: false,
+            },
+          },
+          sinal,
+        )
       }
       if (estagiosComAA.length === 0) return null
       const temMg = incluirMg && estagiosComAA.every((e) => e.mg_media_mol_l != null)
@@ -602,7 +652,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
         sinal,
       )
     },
-    [tipoGrafico, sondagemEscolhida, calcT50, seriesPerdaMassa, estagiosComAA, incluirMg, estiloPayload],
+    [tipoGrafico, sondagemEscolhida, calcT50, seriesPerdaMassa, logLog, configGrafico.partir_do_zero, estagiosComAA, incluirMg, estiloPayload],
   )
 
   // Atualiza a prévia PNG automaticamente (com debounce)
@@ -1445,7 +1495,9 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                             />
                           </td>
                           <td className="text-right tabular-nums font-medium">{c ? fmtNum(c.m50, 4) : '—'}</td>
-                          <td className="text-right tabular-nums">{c ? fmtNum(c.taxaGMin, 4) : '—'}</td>
+                          <td className="text-right tabular-nums">
+                            {c ? (Math.abs(c.taxaGMin) < 1e-3 ? c.taxaGMin.toExponential(3).replace('.', ',') : fmtNum(c.taxaGMin, 4)) : '—'}
+                          </td>
                           <td className="text-right tabular-nums font-bold text-[var(--color-blue-800)]">
                             {c ? `${fmtNum(c.t50Min, 2)} min (${c.t50Seg} s)` : '—'}
                           </td>
@@ -1684,6 +1736,40 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                   existentes={existentes}
                   aoPreencherCodigos={preencherCodigosMiniPlug}
                 />
+
+                {logLog.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <p className="m-0 mb-1 text-xs font-bold text-[var(--color-blue-800)]">
+                      Médias por estágio e log₁₀ (gráfico Log-log)
+                    </p>
+                    <table className="table text-xs">
+                      <thead>
+                        <tr>
+                          <th>Fração</th>
+                          <th className="text-right">Tempo (s)</th>
+                          <th className="text-right">m₀ média (g)</th>
+                          <th className="text-right">m_f média (g)</th>
+                          <th className="text-right">log t</th>
+                          <th className="text-right">log m₀</th>
+                          <th className="text-right">log m_f</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logLog.map((p) => (
+                          <tr key={p.estagio_ordem}>
+                            <td className="font-semibold">{fmtNum(p.fracao_t50, 2)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.tempo_medio_s, 0)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.m0_media_g, 4)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.mf_media_g, 4)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.log_tempo, 4)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.log_m0, 4)}</td>
+                            <td className="text-right tabular-nums">{fmtNum(p.log_mf, 4)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Equação da taxa + Sobreposição comparativa */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -2135,6 +2221,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
               [
                 ['t50', 'Determinação t50'],
                 ['perda_massa', 'Perda de Massa (%)'],
+                ['log_log', 'Log-log'],
                 ['aa', 'Absorção Atômica'],
               ] as const
             ).map(([k, rotulo]) => (
@@ -2171,6 +2258,20 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
               />
               Reta de ajuste
             </label>
+            {tipoGrafico === 'perda_massa' && (
+              <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-[var(--color-blue-800)]">
+                <input
+                  type="checkbox"
+                  checked={configGrafico.partir_do_zero}
+                  onChange={(e) => {
+                    const novo = { ...configGrafico, partir_do_zero: e.target.checked }
+                    setConfigGrafico(novo)
+                    if (ensaioAtualId) void atualizarConfigGraficoReatividade(ensaioAtualId, novo).catch(() => undefined)
+                  }}
+                />
+                Partir do 0
+              </label>
+            )}
             <select
               value={configGrafico.font_family}
               onChange={(e) =>

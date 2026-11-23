@@ -183,3 +183,11 @@ function tipoPorExtensao(nome: string) {
   if (['raw', 'tiff', 'nii', 'vol'].includes(ext)) return 'volume_ct'
   return ext || 'outro'
 }
+
+/** Fotos da amostra e imagens de micro-CT cadastradas no painel gerencial (migração 022). */
+export async function listarImagensFicha(amostraId: string): Promise<Arquivo[]> {
+  const { data, error } = await supabase.from('arquivos').select('*').eq('amostra_id', amostraId)
+    .in('tipo', ['foto_amostra', 'imagem_microct']).not('posicao', 'is', null).order('posicao')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Arquivo[]
+}

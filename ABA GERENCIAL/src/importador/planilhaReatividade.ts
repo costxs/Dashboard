@@ -88,6 +88,7 @@ export function calcularT50(m0: number, tMin: number, mf: number): CalculoT50 {
   }
   const m50 = m0 / 2
   const taxaGMin = (mf - m0) / tMin
+  // valor exato: a inclinação não é arredondada como no rótulo da tendência do Excel
   const t50Min = (m0 * tMin) / (2 * (m0 - mf))
   const t50Seg = Math.round(t50Min * 60)
   const estagios: EstagioT50[] = ([0.25, 0.5, 0.75, 1.0] as const).map((frac, idx) => {
@@ -231,6 +232,38 @@ export function calcularResumoEstagios(
       h_dp_mol_l: desvioPadraoAmostral(hs),
     }
   })
+}
+
+export interface PontoLogLog {
+  estagio_ordem: number
+  fracao_t50: number
+  n: number
+  tempo_medio_s: number
+  m0_media_g: number
+  mf_media_g: number
+  log_tempo: number
+  log_m0: number
+  log_mf: number
+}
+
+/** Por estágio (0,25; 0,50...): médias de tempo, massa inicial e final das réplicas e o log10 de cada média. */
+export function calcularLogLog(
+  pontos: Pick<PontoImportado, 'estagio_ordem' | 'fracao_t50' | 'tempo_contato_s' | 'massa_inicial_g' | 'massa_final_g'>[],
+): PontoLogLog[] {
+  const saida: PontoLogLog[] = []
+  for (const ordem of [1, 2, 3, 4]) {
+    const g = pontos.filter((p) => p.estagio_ordem === ordem && p.tempo_contato_s > 0 && p.massa_inicial_g > 0 && p.massa_final_g > 0)
+    if (g.length === 0) continue
+    const tempo = media(g.map((p) => p.tempo_contato_s))
+    const m0 = media(g.map((p) => p.massa_inicial_g))
+    const mf = media(g.map((p) => p.massa_final_g))
+    saida.push({
+      estagio_ordem: ordem, fracao_t50: g[0].fracao_t50, n: g.length,
+      tempo_medio_s: tempo, m0_media_g: m0, mf_media_g: mf,
+      log_tempo: Math.log10(tempo), log_m0: Math.log10(m0), log_mf: Math.log10(mf),
+    })
+  }
+  return saida
 }
 
 export interface GuiaRdaRotacao {

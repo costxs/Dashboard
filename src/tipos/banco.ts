@@ -261,6 +261,9 @@ export interface Arquivo {
   caminho: string
   tamanho_bytes: number | null
   enviado_em: string
+  // migração 022: espaço (1 a 3) e legenda das fotos e imagens de micro-CT da ficha
+  posicao?: number | null
+  legenda?: string | null
 }
 
 export interface Publicacao {
@@ -407,6 +410,8 @@ export interface ConfigGraficoReatividade {
   font_family?: 'Arial' | 'Times New Roman' | 'Calibri' | 'DejaVu Sans'
   show_error_bars?: boolean
   show_trendline?: boolean
+  /** perda de massa: inclui o ponto (0, 0) e os eixos começam em 0 */
+  partir_do_zero?: boolean
 }
 
 export interface ReatividadeEnsaio {
