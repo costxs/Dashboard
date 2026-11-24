@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
 import {
-  CORES_SERIE, GraficoComparacao, MARCADORES_SERIE, type ExportarComparacao, type SerieGrafico,
+  CORES_SERIE, EIXO_VAZAO, GraficoComparacao, MARCADORES_SERIE, type EixoXComparacao, type ExportarComparacao, type SerieGrafico,
 } from "../components/pvbt/GraficoComparacao";
 import { useConsulta } from "../hooks/useConsulta";
 import { supabase } from "../lib/supabase";
@@ -133,6 +133,8 @@ export function ComparacaoPage() {
   const [series, setSeries] = useState<Serie[]>(lerSeries);
   const [editando, setEditando] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // eixo x do gráfico: vazão (Q) ou velocidade intersticial (vᵢ = Q / (A·φ), calculada em cada ensaio)
+  const [eixo, setEixo] = useState<"vazao" | "velocidade">("vazao");
   const grafico = useRef<ExportarComparacao>(null);
   const painelDetalheRef = useRef<HTMLDivElement>(null);
 
@@ -407,7 +409,7 @@ export function ComparacaoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amostras, busca, filtros, qtdFiltrosCoreAtivos, porSistema]);
 
-  // séries prontas para o gráfico: PVbt × vazão de cada ensaio das amostras da série
+  // séries prontas para o gráfico: PVbt × vazão (ou × velocidade intersticial) de cada ensaio das amostras da série
   const { prontas, semVazao } = useMemo(() => {
     let sem = 0;
     const prontas: SerieGrafico[] = series.map((s, i) => {
@@ -417,7 +419,8 @@ export function ComparacaoPage() {
           return (am?.ensaios ?? []).map((e) => ({ am: am!, e }));
         })
         .flatMap(({ am, e }) => {
-          if ((e.vazao_ml_min ?? 0) <= 0 || (e.pvbt ?? 0) <= 0) {
+          const x = eixo === "vazao" ? e.vazao_ml_min : e.vel_intersticial_cm_min;
+          if ((x ?? 0) <= 0 || (e.pvbt ?? 0) <= 0) {
             sem++;
             return [];
           }
@@ -425,7 +428,7 @@ export function ComparacaoPage() {
           const ctx = am.projetoCodigo && am.projetoCodigo !== "—" ? `${am.empresaSigla} · ${am.projetoCodigo}` : am.empresaSigla;
           return [
             {
-              x: Number(e.vazao_ml_min),
+              x: Number(x),
               y: Number(e.pvbt),
               detalhe: `[${ctx}] ${e.id_amostra} · ${e.id_experimento}${ac ? ` · ${ac}` : ""}${e.temperatura_nominal_c != null ? ` · ${fmt(e.temperatura_nominal_c, 0)} °C` : ""
                 }`,
@@ -441,7 +444,10 @@ export function ComparacaoPage() {
       };
     });
     return { prontas, semVazao: sem };
-  }, [series, porUuid, porSistema]);
+  }, [series, porUuid, porSistema, eixo]);
+  const eixoX: EixoXComparacao = eixo === "vazao"
+    ? EIXO_VAZAO
+    : { titulo: "vᵢ (cm/min)", simbolo: "vᵢ", unidade: "cm/min" };
 
   const abrirDetalhesAmostra = (uuid: string) => {
     setAmostraDetalheUuid(uuid);
@@ -489,7 +495,7 @@ export function ComparacaoPage() {
     setSeries((l) => l.filter((x) => x.id !== s.id));
     if (editando === s.id) limparRascunho();
   }
-  const baixar = (f: "png" | "svg") => grafico.current?.baixar(f, "comparacao_pvbt_q").catch((e) => setErro(mensagemErro(e)));
+  const baixar = (f: "png" | "svg") => grafico.current?.baixar(f, eixo === "vazao" ? "comparacao_pvbt_q" : "comparacao_pvbt_vi").catch((e) => setErro(mensagemErro(e)));
 
   const amostraDetalhe = amostraDetalheUuid ? porUuid.get(amostraDetalheUuid) ?? null : null;
   const listaMarcadas = useMemo(
@@ -1095,12 +1101,27 @@ export function ComparacaoPage() {
                 </p>
               ) : (
                 <>
+                  <div className="mb-4 flex flex-wrap gap-1 border-b border-[var(--color-neutral-300)]" role="tablist">
+                    {([["vazao", "PVbt × vazão"], ["velocidade", "PVbt × velocidade intersticial"]] as const).map(([k, rotulo]) => (
+                      <button key={k} type="button" role="tab" aria-selected={eixo === k}
+                        className={`aba ${eixo === k ? "ativa" : ""}`} onClick={() => setEixo(k)}>
+                        {rotulo}
+                      </button>
+                    ))}
+                  </div>
+                  {eixo === "velocidade" && (
+                    <p className="m-0 mb-3 text-[12px] text-[var(--color-neutral-600)]">
+                      vᵢ = Q / (A · φ), com A = π·D²/4: a vazão dividida pela área de poros da face. Calculada em cada ensaio com o diâmetro e a porosidade da amostra.
+                    </p>
+                  )}
                   {semVazao > 0 && (
                     <div className="mb-4">
-                      <Aviso tipo="info">{semVazao} ensaio(s) ficaram de fora por não terem vazão ou PVbt.</Aviso>
+                      <Aviso tipo="info">
+                        {semVazao} ensaio(s) ficaram de fora por não terem {eixo === "vazao" ? "vazão" : "velocidade intersticial (falta diâmetro ou porosidade)"} ou PVbt.
+                      </Aviso>
                     </div>
                   )}
-                  <GraficoComparacao ref={grafico} series={prontas} />
+                  <GraficoComparacao ref={grafico} series={prontas} eixoX={eixoX} />
                 </>
               )}
             </div>

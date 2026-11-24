@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import httpx
+
+from tls import VERIFICAR
 from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, Field
 
@@ -25,7 +27,7 @@ from graficos import acidificacao as acid
 router = APIRouter(prefix="/acidificacao", tags=["acidificação"])
 
 CURVA_TEMPO = "ΔP × tempo (acidificação)"
-_http_salva = httpx.Client(verify=False, timeout=20)
+_http_salva = httpx.Client(verify=VERIFICAR, timeout=20)
 _cache_montar: dict[int, tuple[float, "DadosSalvos", list[acid.FaseAcid], acid.PedidoAcid]] = {}
 # config_graficos de cada ensaio lido (fonte, cores, legendas e posição da legenda escolhidas no tratamento)
 _config_graficos: dict[int, Optional[dict]] = {}

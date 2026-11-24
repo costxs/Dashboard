@@ -74,7 +74,12 @@ function LegendaOrigin({ series }: { series: SerieGrafico[] }) {
 }
 
 /** PVbt × Q (log-log), uma série por grupo de amostras, desenhado no navegador no estilo do Origin. */
-export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieGrafico[]; altura?: number }>(function GraficoComparacao(p, ref) {
+/** grandeza do eixo x: vazão (padrão) ou velocidade intersticial */
+export interface EixoXComparacao { titulo: string; simbolo: string; unidade: string }
+export const EIXO_VAZAO: EixoXComparacao = { titulo: "Q (mL/min)", simbolo: "Q", unidade: "mL/min" };
+
+export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieGrafico[]; altura?: number; eixoX?: EixoXComparacao }>(function GraficoComparacao(p, ref) {
+  const eixoX = p.eixoX ?? EIXO_VAZAO;
   const caixa = useRef<HTMLDivElement>(null);
   const todos = useMemo(() => p.series.flatMap((s) => s.pontos).filter((d) => d.x > 0 && d.y > 0), [p.series]);
   // folga em volta dos pontos (nenhum fica em cima da moldura) e, em cima, o espaço da legenda
@@ -135,7 +140,7 @@ export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieG
           {/* eixos de baixo e da esquerda com números; cima e direita só a moldura, como no Origin */}
           <XAxis xAxisId="x" dataKey="x" domain={ex.dominio} ticks={marcasX} tickFormatter={dec2} {...eixo} height={30}
             tick={{ fontSize: 14, fill: TEXTO }} tickLine={{ stroke: "#000" }} tickSize={6}
-            label={{ value: "Q (mL/min)", position: "insideBottom", offset: -30, fontSize: 18, fill: TEXTO }} />
+            label={{ value: eixoX.titulo, position: "insideBottom", offset: -30, fontSize: 18, fill: TEXTO }} />
           <XAxis xAxisId="xt" dataKey="x" orientation="top" domain={ex.dominio} ticks={marcasX} {...eixo} tick={false} tickLine={{ stroke: "#000" }} tickSize={6} height={8} />
           <YAxis yAxisId="y" dataKey="y" domain={topoY} ticks={marcasYTopo} tickFormatter={dec2} {...eixo} width={64}
             tick={{ fontSize: 14, fill: TEXTO }} tickLine={{ stroke: "#000" }} tickSize={6}
@@ -147,7 +152,7 @@ export const GraficoComparacao = forwardRef<ExportarComparacao, { series: SerieG
               <div className="rounded-md border border-[var(--color-neutral-300)] bg-white px-3 py-2 text-[12px] shadow-md">
                 <p className="m-0 font-bold" style={{ color: d.cor }}>{d.serie}</p>
                 <p className="m-0 text-[var(--color-neutral-600)]">{d.detalhe}</p>
-                <p className="m-0 tabular-nums">Q = {fmtExato(d.x)} mL/min</p>
+                <p className="m-0 tabular-nums">{eixoX.simbolo} = {fmtExato(d.x)} {eixoX.unidade}</p>
                 <p className="m-0 tabular-nums">PVbt = <strong>{fmtExato(d.y)}</strong></p>
               </div>
             ) : null;

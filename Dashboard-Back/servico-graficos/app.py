@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import httpx
+
+from tls import VERIFICAR
 import traceback
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
@@ -73,7 +75,7 @@ async def tratar_excecao_geral(request: Request, exc: Exception):
 # uma falha passageira (timeout, rede) não pode travar o token até o serviço reiniciar.
 _aceitos: dict[str, float] = {}
 _VALIDADE_S = 300
-_http = httpx.Client(verify=False, timeout=8)
+_http = httpx.Client(verify=VERIFICAR, timeout=8)
 
 
 def _token_valido(token: str) -> bool:
@@ -126,7 +128,7 @@ def saude_tls():
         return {"ok": False, "erro": "SUPABASE_URL não definida"}
     try:
         # qualquer status serve: chegar a responder significa que o certificado foi aceito
-        httpx.get(f"{url}/auth/v1/health", timeout=8)
+        httpx.get(f"{url}/auth/v1/health", timeout=8, verify=VERIFICAR)
     except httpx.HTTPError as e:
         return {"ok": False, "erro": str(e)[:160]}
     return {"ok": True}
