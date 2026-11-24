@@ -447,7 +447,7 @@ export function ComparacaoPage() {
   }, [series, porUuid, porSistema, eixo]);
   const eixoX: EixoXComparacao = eixo === "vazao"
     ? EIXO_VAZAO
-    : { titulo: "vᵢ (cm/min)", simbolo: "vᵢ", unidade: "cm/min" };
+    : { titulo: "Velocidade intersticial (cm/min)", simbolo: "Velocidade intersticial", unidade: "cm/min" };
 
   const abrirDetalhesAmostra = (uuid: string) => {
     setAmostraDetalheUuid(uuid);
@@ -1075,8 +1075,8 @@ export function ComparacaoPage() {
           )}
 
           <Cartao
-            titulo="PVbt × Q"
-            subtitulo="Volume de poros injetados até o breakthrough em função da vazão"
+            titulo={eixo === "vazao" ? "PVbt × Q" : "PVbt × velocidade intersticial"}
+            subtitulo={`Volume de poros injetados até o breakthrough em função da ${eixo === "vazao" ? "vazão" : "velocidade intersticial"}`}
             acoes={
               prontas.length > 0 && (
                 <div className="flex gap-2">
@@ -1101,19 +1101,16 @@ export function ComparacaoPage() {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex flex-wrap gap-1 border-b border-[var(--color-neutral-300)]" role="tablist">
-                    {([["vazao", "PVbt × vazão"], ["velocidade", "PVbt × velocidade intersticial"]] as const).map(([k, rotulo]) => (
-                      <button key={k} type="button" role="tab" aria-selected={eixo === k}
-                        className={`aba ${eixo === k ? "ativa" : ""}`} onClick={() => setEixo(k)}>
+                  <fieldset className="m-0 mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-0 p-0 text-[13px]">
+                    <legend className="float-left mr-1 p-0 font-semibold text-[var(--color-neutral-700)]">Eixo X:</legend>
+                    {([["vazao", "Vazão"], ["velocidade", "Velocidade intersticial"]] as const).map(([k, rotulo]) => (
+                      <label key={k} className="inline-flex cursor-pointer items-center gap-1.5">
+                        <input type="radio" name="eixo-x-comparacao" value={k} checked={eixo === k} onChange={() => setEixo(k)}
+                          className="accent-[var(--color-red)]" />
                         {rotulo}
-                      </button>
+                      </label>
                     ))}
-                  </div>
-                  {eixo === "velocidade" && (
-                    <p className="m-0 mb-3 text-[12px] text-[var(--color-neutral-600)]">
-                      vᵢ = Q / (A · φ), com A = π·D²/4: a vazão dividida pela área de poros da face. Calculada em cada ensaio com o diâmetro e a porosidade da amostra.
-                    </p>
-                  )}
+                  </fieldset>
                   {semVazao > 0 && (
                     <div className="mb-4">
                       <Aviso tipo="info">
