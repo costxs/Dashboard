@@ -614,7 +614,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
         if (logLog.length === 0) return null
         const serie = (nome: string, cor: string, marcador: string, y: number[]): SeriePerdaMassaPayload => ({
           nome, cor, marcador, estilo_linha: '-',
-          x_valores: logLog.map((p) => p.log_tempo),
+          x_valores: logLog.map((p) => p.tempo_medio_s),
           y_medias_pct: y,
           y_desvios_pct: y.map(() => 0),
           incluir_zero_na_reta: true,
@@ -627,8 +627,8 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
             ],
             estilo: {
               ...estilo,
-              titulo: 'Gráfico log-log',
-              eixo_x: '$\\log_{10}$ [tempo médio (s)]',
+              titulo: 'Log da massa × tempo',
+              eixo_x: 'Tempo médio (s)',
               eixo_y: '$\\log_{10}$ [massa média (g)]',
               mostrar_barras_erro: false,
             },
@@ -1740,7 +1740,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                 {logLog.length > 0 && (
                   <div className="overflow-x-auto">
                     <p className="m-0 mb-1 text-xs font-bold text-[var(--color-blue-800)]">
-                      Médias por estágio e log₁₀ (gráfico Log-log)
+                      Médias por estágio e log₁₀ (gráfico Log da massa)
                     </p>
                     <table className="table text-xs">
                       <thead>
@@ -1749,7 +1749,6 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                           <th className="text-right">Tempo (s)</th>
                           <th className="text-right">m₀ média (g)</th>
                           <th className="text-right">m_f média (g)</th>
-                          <th className="text-right">log t</th>
                           <th className="text-right">log m₀</th>
                           <th className="text-right">log m_f</th>
                         </tr>
@@ -1761,7 +1760,6 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
                             <td className="text-right tabular-nums">{fmtNum(p.tempo_medio_s, 0)}</td>
                             <td className="text-right tabular-nums">{fmtNum(p.m0_media_g, 4)}</td>
                             <td className="text-right tabular-nums">{fmtNum(p.mf_media_g, 4)}</td>
-                            <td className="text-right tabular-nums">{fmtNum(p.log_tempo, 4)}</td>
                             <td className="text-right tabular-nums">{fmtNum(p.log_m0, 4)}</td>
                             <td className="text-right tabular-nums">{fmtNum(p.log_mf, 4)}</td>
                           </tr>
@@ -2221,7 +2219,7 @@ export const DissolucaoEstaticaPanel: React.FC = () => {
               [
                 ['t50', 'Determinação t50'],
                 ['perda_massa', 'Perda de Massa (%)'],
-                ['log_log', 'Log-log'],
+                ['log_log', 'Log da massa'],
                 ['aa', 'Absorção Atômica'],
               ] as const
             ).map(([k, rotulo]) => (

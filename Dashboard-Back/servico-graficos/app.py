@@ -118,6 +118,20 @@ def saude():
     return {"ok": True}
 
 
+@app.get("/saude/tls")
+def saude_tls():
+    """Confere o certificado HTTPS do Supabase a partir deste servidor, sem enviar nenhuma chave."""
+    url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    if not url:
+        return {"ok": False, "erro": "SUPABASE_URL não definida"}
+    try:
+        # qualquer status serve: chegar a responder significa que o certificado foi aceito
+        httpx.get(f"{url}/auth/v1/health", timeout=8)
+    except httpx.HTTPError as e:
+        return {"ok": False, "erro": str(e)[:160]}
+    return {"ok": True}
+
+
 @app.post("/permeabilidade/grafico", dependencies=[Depends(exigir_login)])
 def grafico_permeabilidade(pedido: PedidoGrafico):
     if len(pedido.leituras) > 200_000:

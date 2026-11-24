@@ -279,7 +279,7 @@ export async function buscarGraficoReatividadeOrigin(
       if (log.length === 0) return null;
       const serie = (nome: string, cor: string, marcador: string, y: number[]) => ({
         nome, cor, marcador, estilo_linha: "-",
-        x_valores: log.map((p) => p.log_tempo),
+        x_valores: log.map((p) => p.tempo_medio_s),
         y_medias_pct: y,
         y_desvios_pct: y.map(() => 0),
         incluir_zero_na_reta: true,
@@ -292,8 +292,8 @@ export async function buscarGraficoReatividadeOrigin(
         ],
         estilo: {
           ...estilo,
-          titulo: "Gráfico log-log",
-          eixo_x: "$\\log_{10}$ [tempo médio (s)]",
+          titulo: "Log da massa × tempo",
+          eixo_x: "Tempo médio (s)",
           eixo_y: "$\\log_{10}$ [massa média (g)]",
           mostrar_barras_erro: false,
         },

@@ -202,7 +202,7 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
                         : "bg-white border-[var(--color-neutral-300)] text-[var(--color-neutral-700)]"
                     }`}
                   >
-                    Log-log
+                    Log da massa
                   </button>
                 )}
                 {temAA && (
@@ -259,7 +259,6 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
                       <th className="text-right">Tempo (s)</th>
                       <th className="text-right">m₀ média (g)</th>
                       <th className="text-right">m_f média (g)</th>
-                      <th className="text-right">log t</th>
                       <th className="text-right">log m₀</th>
                       <th className="text-right">log m_f</th>
                     </tr>
@@ -271,7 +270,6 @@ function CartaoEnsaioReatividade({ ensaio }: { ensaio: ReatividadeEnsaioComDetal
                         <td className="text-right tabular-nums">{fmt(p.tempo_medio_s, 0)}</td>
                         <td className="text-right tabular-nums">{fmt(p.m0_media_g, 4)}</td>
                         <td className="text-right tabular-nums">{fmt(p.mf_media_g, 4)}</td>
-                        <td className="text-right tabular-nums">{fmt(p.log_tempo, 4)}</td>
                         <td className="text-right tabular-nums">{fmt(p.log_m0, 4)}</td>
                         <td className="text-right tabular-nums">{fmt(p.log_mf, 4)}</td>
                       </tr>

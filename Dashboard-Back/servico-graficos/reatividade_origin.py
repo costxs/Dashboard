@@ -256,7 +256,7 @@ def gerar_grafico_perda_massa(pedido: PedidoGraficoPerdaMassa):
             m, n = np.polyfit(x_fit, y_fit, 1)
             r2 = _r2_seguro(x_fit, y_fit)
             ax.plot(x_fit, m * x_fit + n, s.estilo_linha, color=s.cor, lw=1.5)
-            rotulo = f"{s.nome} (y = {m:.3f}x + {n:.2f}, $R^2$ = {r2:.4f})"
+            rotulo = f"{s.nome} (y = {m:.4g}x {'+' if n >= 0 else '−'} {abs(n):.4g}, $R^2$ = {r2:.4f})"
 
         if pedido.estilo.mostrar_barras_erro:
             ax.errorbar(x, y, yerr=err, fmt=s.marcador, color=s.cor, capsize=3, ms=6, label=rotulo,
