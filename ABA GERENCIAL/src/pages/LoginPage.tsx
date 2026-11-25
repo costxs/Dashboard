@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { enviarRecuperacaoSenha } from '../servicos/api'
+import { CampoSenha } from '../components/CampoSenha'
 
 // Visual: docs/referencia/painel-cadastro/src/pages/LoginPage.tsx (telas/dashboard_01_login.png)
 export const LoginPage: React.FC = () => {
@@ -83,11 +84,7 @@ export const LoginPage: React.FC = () => {
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="senha" className="text-sm text-[var(--color-neutral-600)]">Senha</label>
-              <input
-                id="senha" name="senha" type="password" required autoComplete="current-password"
-                value={senha} onChange={(e) => setSenha(e.target.value)}
-                className="input h-11"
-              />
+              <CampoSenha id="senha" required autoComplete="current-password" value={senha} onChange={setSenha} />
             </div>
 
             <button

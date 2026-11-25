@@ -5,8 +5,10 @@ import {
 } from "lucide-react";
 import { Aviso, CabecalhoPagina, Carregando, Cartao } from "../components/ui/base";
 import {
-  CORES_SERIE, EIXO_VAZAO, GraficoComparacao, MARCADORES_SERIE, type EixoXComparacao, type ExportarComparacao, type SerieGrafico,
+  CORES_SERIE, EIXO_VAZAO, EIXO_VELOCIDADE, ESTILO_PADRAO, GraficoComparacao, MARCADORES_SERIE,
+  type EstiloComparacao, type ExportarComparacao, type Marcador, type SerieGrafico, type TipoLinha,
 } from "../components/pvbt/GraficoComparacao";
+import { EditorGraficoComparacao, type SerieEditavel } from "../components/pvbt/EditorGraficoComparacao";
 import { useConsulta } from "../hooks/useConsulta";
 import { supabase } from "../lib/supabase";
 import { listarLitologias, listarSistemasAcidos, obterAmostra, obterControleDaAmostra } from "../servicos/amostras";
@@ -39,6 +41,11 @@ interface Serie {
   id: string;
   nome: string;
   amostras: string[];
+  // aparência escolhida no "Personalizar gráfico" (sem valor = padrão do Origin pela ordem)
+  cor?: string;
+  marcador?: Marcador;
+  vazado?: boolean;
+  linha?: TipoLinha;
 }
 
 interface FiltrosComparacao {
@@ -89,6 +96,30 @@ const guardar = (s: Serie[]) => {
     /* sem armazenamento: as séries valem só nesta tela */
   }
 };
+const CHAVE_ESTILO = "lcpetro.comparacao.estilo.v1";
+function lerEstilo(): EstiloComparacao {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHAVE_ESTILO) ?? "null");
+    return v && typeof v === "object" ? { ...ESTILO_PADRAO, ...v } : ESTILO_PADRAO;
+  } catch {
+    return ESTILO_PADRAO;
+  }
+}
+const guardarEstilo = (e: EstiloComparacao) => {
+  try {
+    localStorage.setItem(CHAVE_ESTILO, JSON.stringify(e));
+  } catch {
+    /* sem armazenamento: o estilo vale só nesta tela */
+  }
+};
+/** aparência da série i: a escolhida ou o padrão do Origin pela ordem */
+const aparencia = (s: Serie, i: number): Omit<SerieEditavel, "id" | "nome"> => ({
+  cor: s.cor ?? CORES_SERIE[i % CORES_SERIE.length],
+  marcador: s.marcador ?? MARCADORES_SERIE[i % MARCADORES_SERIE.length],
+  vazado: s.vazado ?? false,
+  linha: s.linha ?? "solid",
+});
+
 const novoId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 
 function lerNum(v: string): number | null {
@@ -135,6 +166,8 @@ export function ComparacaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   // eixo x do gráfico: vazão (Q) ou velocidade intersticial (vᵢ = Q / (A·φ), calculada em cada ensaio)
   const [eixo, setEixo] = useState<"vazao" | "velocidade">("vazao");
+  const [estilo, setEstilo] = useState<EstiloComparacao>(lerEstilo);
+  const mudarEstilo = (e: EstiloComparacao) => { setEstilo(e); guardarEstilo(e); };
   const grafico = useRef<ExportarComparacao>(null);
   const painelDetalheRef = useRef<HTMLDivElement>(null);
 
@@ -435,19 +468,11 @@ export function ComparacaoPage() {
             },
           ];
         });
-      return {
-        id: s.id,
-        nome: s.nome,
-        cor: CORES_SERIE[i % CORES_SERIE.length],
-        marcador: MARCADORES_SERIE[i % MARCADORES_SERIE.length],
-        pontos,
-      };
+      return { id: s.id, nome: s.nome, ...aparencia(s, i), pontos };
     });
     return { prontas, semVazao: sem };
   }, [series, porUuid, porSistema, eixo]);
-  const eixoX: EixoXComparacao = eixo === "vazao"
-    ? EIXO_VAZAO
-    : { titulo: "Velocidade intersticial (cm/min)", simbolo: "Velocidade intersticial", unidade: "cm/min" };
+  const eixoX = eixo === "vazao" ? EIXO_VAZAO : EIXO_VELOCIDADE;
 
   const abrirDetalhesAmostra = (uuid: string) => {
     setAmostraDetalheUuid(uuid);
@@ -1118,7 +1143,15 @@ export function ComparacaoPage() {
                       </Aviso>
                     </div>
                   )}
-                  <GraficoComparacao ref={grafico} series={prontas} eixoX={eixoX} />
+                  <GraficoComparacao ref={grafico} series={prontas} eixoX={eixoX} estilo={estilo} />
+                  <EditorGraficoComparacao
+                    estilo={estilo}
+                    aoMudarEstilo={mudarEstilo}
+                    tituloXPadrao={eixoX.titulo}
+                    series={series.map((s, i) => ({ id: s.id, nome: s.nome, ...aparencia(s, i) }))}
+                    aoMudarSerie={(id, parcial) => setSeries((l) => l.map((x) => (x.id === id ? { ...x, ...parcial } : x)))}
+                    aoRestaurarSeries={() => setSeries((l) => l.map(({ cor: _c, marcador: _m, vazado: _v, linha: _l, ...resto }) => resto))}
+                  />
                 </>
               )}
             </div>

@@ -385,7 +385,7 @@ export function SamplesListPage() {
                     ))}
                   </div>
                 )}
-                <div className="grid grid-cols-3 gap-3 border-t border-[var(--color-neutral-200)] pt-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 border-t border-[var(--color-neutral-200)] pt-3">
                   <Metrica rotulo="Poros. (%)" valor={fmt(s.porosidade_pct, 1)} />
                   <Metrica rotulo="k (mD)" valor={melhorK(s)?.texto ?? "—"} />
                   <Metrica rotulo="PVbt" valor={limitada ? "🔒" : fmt(s.pvbt, 2)} destaque={!limitada} />

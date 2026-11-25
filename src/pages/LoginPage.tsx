@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { entrar, pedirNovaSenha, registrar } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
+import { CampoSenha } from "../components/CampoSenha";
 
 export function LoginPage() {
   const sessao = useContexto((s) => s.sessao);
@@ -111,15 +112,15 @@ export function LoginPage() {
             </div>
             <div className="flex flex-col gap-1.5 animate-stagger-2">
               <label htmlFor="password" className="text-sm text-[var(--color-neutral-600)]">Senha</label>
-              <input
-                id="password" name="password" type="password" required
+              <CampoSenha id="password" required
                 autoComplete={modo === "registrar" ? "new-password" : "current-password"}
-                value={password} onChange={(e) => setPassword(e.target.value)}
-                className="input h-11"
-              />
+                value={password} onChange={setPassword} />
             </div>
             {modo === "registrar" && (
-              <Campo id="confirmar" rotulo="Confirme a senha" tipo="password" valor={confirmar} aoMudar={setConfirmar} obrigatorio autoComplete="new-password" />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="confirmar" className="text-sm text-[var(--color-neutral-600)]">Confirme a senha</label>
+                <CampoSenha id="confirmar" required autoComplete="new-password" value={confirmar} onChange={setConfirmar} />
+              </div>
             )}
 
             {erro && <div className="aviso aviso-erro">{erro}</div>}

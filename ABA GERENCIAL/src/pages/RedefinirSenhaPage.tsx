@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { definirNovaSenha, logout } from '../servicos/api'
+import { CampoSenha } from '../components/CampoSenha'
 
 /** Aberta pelo link do e-mail de recuperação (o Supabase cria uma sessão temporária) ou pelo código de 6 dígitos. */
 export const RedefinirSenhaPage: React.FC = () => {
@@ -76,13 +77,11 @@ export const RedefinirSenhaPage: React.FC = () => {
               )}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="nova" className="text-sm text-[var(--color-neutral-600)]">Nova senha</label>
-                <input id="nova" type="password" required autoComplete="new-password" value={senha}
-                  onChange={(e) => setSenha(e.target.value)} className="input h-11" />
+                <CampoSenha id="nova" required autoComplete="new-password" value={senha} onChange={setSenha} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="confirma" className="text-sm text-[var(--color-neutral-600)]">Confirmar nova senha</label>
-                <input id="confirma" type="password" required autoComplete="new-password" value={confirma}
-                  onChange={(e) => setConfirma(e.target.value)} className="input h-11" />
+                <CampoSenha id="confirma" required autoComplete="new-password" value={confirma} onChange={setConfirma} />
               </div>
               {erro && <div className="aviso aviso-erro" role="alert">{erro}</div>}
               <button type="submit" disabled={loading}

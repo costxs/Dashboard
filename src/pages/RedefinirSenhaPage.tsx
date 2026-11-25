@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { definirSenha, sair } from "../servicos/contexto";
 import { useContexto } from "../store/useContexto";
+import { CampoSenha } from "../components/CampoSenha";
 
 // Aberta pelo link do e-mail do Supabase: convite feito pelo administrador no gerencial ou
 // "esqueci minha senha". O link traz uma sessão temporária; aqui a pessoa escolhe a senha.
@@ -85,13 +86,11 @@ export function RedefinirSenhaPage() {
               )}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="nova" className="text-sm text-[var(--color-neutral-600)]">Nova senha</label>
-                <input id="nova" type="password" required autoComplete="new-password" value={senha}
-                  onChange={(e) => setSenha(e.target.value)} className="input h-11" />
+                <CampoSenha id="nova" required autoComplete="new-password" value={senha} onChange={setSenha} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="confirma" className="text-sm text-[var(--color-neutral-600)]">Confirmar a senha</label>
-                <input id="confirma" type="password" required autoComplete="new-password" value={confirma}
-                  onChange={(e) => setConfirma(e.target.value)} className="input h-11" />
+                <CampoSenha id="confirma" required autoComplete="new-password" value={confirma} onChange={setConfirma} />
               </div>
               {erro && <div className="aviso aviso-erro" role="alert">{erro}</div>}
               <button type="submit" disabled={salvando}

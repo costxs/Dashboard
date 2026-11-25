@@ -364,3 +364,21 @@ select.input {
   border: 1px solid var(--color-orange-200);
   color: var(--color-orange-800);
 }
+
+/* ===================== celular / telas estreitas ===================== */
+@media (max-width: 767px) {
+  /* margens laterais das páginas (px-7) e do topo mais estreitas */
+  main .px-7 { padding-left: 16px; padding-right: 16px; }
+  main .pt-9, main .pt-8 { padding-top: 20px; }
+
+  /* tabelas largas rolam para o lado dentro do cartão, em vez de estourar a página */
+  .table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table th, .table td { padding: 10px 14px 10px 0; }
+
+  /* 16px evita o zoom automático do iPhone ao tocar no campo */
+  .input, select.input, textarea.input { font-size: 16px; padding: 9px 12px; }
+  select.input { padding-right: 30px; }
+
+  .cartao-topo { flex-wrap: wrap; align-items: flex-start; padding: 14px 16px; }
+  .btn { padding: 8px 14px; }
+}

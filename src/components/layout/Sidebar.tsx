@@ -8,17 +8,22 @@ import {
   LayoutDashboard,
   Microscope,
   Repeat,
+  X,
 } from "lucide-react";
 import { LogoEmpresa } from "../LogoEmpresa";
 import { useContexto } from "../../store/useContexto";
 import logoLcPetro from "../../assets/lcpetro-logo.png";
 import iconeLcPetro from "../../assets/lcpetro-icone.png";
 
-export function Sidebar() {
+/** `mobile`: versão da gaveta do celular (sempre aberta, com botão de fechar). */
+export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const recolhido = useContexto((s) => s.menuRecolhido);
-  const alternarMenu = useContexto((s) => s.alternarMenu);
+  const recolhidoSalvo = useContexto((s) => s.menuRecolhido);
+  const recolhido = mobile ? false : recolhidoSalvo;
+  const alternarRecolhido = useContexto((s) => s.alternarMenu);
+  const abrirMenuMobile = useContexto((s) => s.abrirMenuMobile);
+  const alternarMenu = mobile ? () => abrirMenuMobile(false) : alternarRecolhido;
   const empresaSigla = useContexto((s) => s.empresaSigla);
   const empresaNome = useContexto((s) => s.empresaNome);
   const empresaLogoUrl = useContexto((s) => s.empresaLogoUrl);
@@ -35,10 +40,10 @@ export function Sidebar() {
   const classeItem = (ativo: boolean) => `lcp-nav ${ativo ? "active" : ""} ${recolhido ? "justify-center px-0" : ""}`;
 
   return (
-    <aside className={`flex h-full shrink-0 flex-col bg-[var(--color-blue-900)] transition-all duration-300 ${recolhido ? "w-[72px]" : "w-[248px]"}`}>
+    <aside className={`flex h-full shrink-0 flex-col bg-[var(--color-blue-900)] transition-all duration-300 ${recolhido ? "w-[72px]" : mobile ? "w-[min(280px,85vw)]" : "w-[248px]"}`}>
       {/* logos sobre fundo branco */}
       <div className="bg-white p-5 border-b-4 border-[var(--color-orange)] flex items-center justify-center relative cursor-pointer group"
-        onClick={alternarMenu} title={recolhido ? "Expandir menu" : "Recolher menu"}>
+        onClick={alternarMenu} title={mobile ? "Fechar menu" : recolhido ? "Expandir menu" : "Recolher menu"}>
         {recolhido ? (
           <img src={iconeLcPetro} alt="LC PETRO" className="w-[32px] h-[32px] object-contain" />
         ) : (
@@ -49,9 +54,14 @@ export function Sidebar() {
             </p>
           </div>
         )}
-        <div className={`absolute right-[-12px] top-1/2 -translate-y-1/2 bg-white border border-[var(--color-neutral-300)] rounded-full p-0.5 text-[var(--color-neutral-500)] opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm ${recolhido ? "opacity-100 right-[-14px]" : ""}`}>
+        <div className={`${mobile ? "hidden" : ""} absolute right-[-12px] top-1/2 -translate-y-1/2 bg-white border border-[var(--color-neutral-300)] rounded-full p-0.5 text-[var(--color-neutral-500)] opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm ${recolhido ? "opacity-100 right-[-14px]" : ""}`}>
           {recolhido ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </div>
+        {mobile && (
+          <span className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-neutral-500)]" aria-label="Fechar menu">
+            <X size={18} />
+          </span>
+        )}
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col">

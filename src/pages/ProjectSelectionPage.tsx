@@ -59,7 +59,7 @@ export function ProjectSelectionPage() {
       <div className="w-full max-w-[720px] bg-white shadow-2xl shadow-[var(--color-blue-200)]/40 rounded-3xl overflow-hidden animate-card">
         <div className="faixa-lcp" />
         <div className="p-8 sm:p-12">
-          <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
             <div className="relative w-full max-w-[320px] group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-neutral-400)] group-focus-within:text-[var(--color-orange)] transition-colors" size={18} />
               <input

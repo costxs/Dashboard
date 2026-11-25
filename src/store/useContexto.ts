@@ -20,6 +20,8 @@ interface EstadoContexto {
 
   busca: string;
   menuRecolhido: boolean;
+  /** gaveta do menu no celular (não fica guardada no navegador) */
+  menuMobileAberto: boolean;
 
   definirSessao: (s: Session | null) => void;
   definirPerfil: (p: Perfil | null) => void;
@@ -27,6 +29,7 @@ interface EstadoContexto {
   escolherProjeto: (p: { id: string; nome: string } | null) => void;
   definirBusca: (b: string) => void;
   alternarMenu: () => void;
+  abrirMenuMobile: (aberto: boolean) => void;
   limpar: () => void;
 }
 
@@ -44,6 +47,7 @@ export const useContexto = create<EstadoContexto>()(
       projetoNome: null,
       busca: "",
       menuRecolhido: false,
+      menuMobileAberto: false,
 
       definirSessao: (sessao) => set({ sessao, sessaoCarregada: true }),
       definirPerfil: (perfil) => set({ perfil }),
@@ -59,6 +63,7 @@ export const useContexto = create<EstadoContexto>()(
       escolherProjeto: (p) => set({ projetoId: p?.id ?? null, projetoNome: p?.nome ?? null }),
       definirBusca: (busca) => set({ busca }),
       alternarMenu: () => set((s) => ({ menuRecolhido: !s.menuRecolhido })),
+      abrirMenuMobile: (aberto) => set({ menuMobileAberto: aberto }),
       limpar: () =>
         set({
           sessao: null, perfil: null, empresaId: null, empresaSigla: null, empresaNome: null, empresaLogoUrl: null,

@@ -75,7 +75,7 @@ export function DashboardPage() {
       )}
 
       <div className="px-7 pt-9 pb-10">
-        <div className="flex items-baseline justify-between gap-6 mb-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-6 mb-3">
           <h2 className="m-0 text-[19px] text-[var(--color-blue-800)]">Work packages</h2>
           <div className="flex items-center gap-4">
             <Legenda />
