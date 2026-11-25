@@ -307,6 +307,8 @@ export interface PedidoAcid {
   leituras?: [number, number, number | null][]
   /** true = houve breakthrough; false = não houve (os gráficos não marcam PVbt); null = incerto */
   houve_breakthrough?: boolean | null
+  /** PV do breakthrough pelo critério escolhido; antes do fim do ácido, o gráfico ΔP × PV marca onde ele fica */
+  pvbt?: number | null
   /** VP que a tela usou (no DCI, o do cabeçalho do equipamento): o serviço usa o mesmo */
   volume_poroso_cm3?: number | null
   /** só DCI: ΔP = DP1+DP2+DP3 ('total') ou só DP1+DP2, o mesmo da tela */

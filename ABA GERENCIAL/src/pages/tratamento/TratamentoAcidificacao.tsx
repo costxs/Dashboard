@@ -61,8 +61,8 @@ const textoDoPapel = (p: PapelFase) => PAPEIS.find((x) => x.valor === p)?.texto 
 
 type TipoCriterio = CriterioBt['tipo']
 const CRITERIOS: { valor: TipoCriterio; texto: string }[] = [
+  { valor: 'queda', texto: 'Queda do ΔP até o patamar (padrão)' },
   { valor: 'fim_acido', texto: 'Fim da injeção de ácido' },
-  { valor: 'queda', texto: 'Queda até o patamar' },
   { valor: 'limite', texto: 'Limite fixo (psi)' },
   { valor: 'manual', texto: 'Marcar no gráfico' },
 ]
@@ -115,7 +115,8 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
   const [idSistema, setIdSistema] = useState('')
   const [sistemas, setSistemas] = useState<SistemaAcido[]>([])
   // 4. breakthrough
-  const [tipoCriterio, setTipoCriterio] = useState<TipoCriterio>('fim_acido')
+  // padrão: queda do ΔP até o patamar (o fim do ácido continua como opção)
+  const [tipoCriterio, setTipoCriterio] = useState<TipoCriterio>('queda')
   const [quedaPct, setQuedaPct] = useState('5')
   const [limitePsi, setLimitePsi] = useState('')
   const [tManual, setTManual] = useState<number | null>(null)
@@ -408,6 +409,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
       leituras: ensaio.equipamento === 'DCI' ? undefined : ensaio.leituras.map((l) => [l.tempo_s, l.q, usarFiltrado ? (l.dp_filtrado ?? l.dp) : l.dp]),
       volume_poroso_cm3: resultado?.volume_poroso_cm3 ?? null,
       houve_breakthrough: resultado?.houve_breakthrough ?? null,
+      pvbt: resultado?.breakthrough?.pvbt ?? null,
       dp_dci: dpDCI,
       // gráficos da planilha sem a marcação do PVbt
       config: { mostrar_pvbt: false },
@@ -418,7 +420,7 @@ export const TratamentoAcidificacao: React.FC<{ equipamento: Equipamento; dpDCI?
     }, cfgGraficos)
     // fluidoDe lê "fluidos" e "fases"
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, resultado?.volume_poroso_cm3, dpDCI, usarFiltrado, cfgGraficos])
+  }, [ensaio, fases, fa, papelDe, fluidos, amostra?.codigo, codigoArquivo, sistemaEscolhido, L, D, phi, morto, temperaturaRotulo, resultado?.houve_breakthrough, resultado?.breakthrough?.pvbt, resultado?.volume_poroso_cm3, dpDCI, usarFiltrado, cfgGraficos])
 
   async function baixarPlanilhaOrigin() {
     if (!arquivoOriginal || !pedidoOrigin) return

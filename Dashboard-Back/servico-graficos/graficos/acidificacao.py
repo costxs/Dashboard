@@ -95,6 +95,8 @@ class PedidoAcid(BaseModel):
     volume_poroso_cm3: Optional[float] = Field(None, gt=0)   # VP já calculado (gráficos do que foi gravado); senão, das dimensões
     fonte_volume: Optional[str] = None          # 'vazao' (Q·Δt, padrão JBV) | 'garrafa' (queda do acumulador, padrão DCI)
     houve_breakthrough: Optional[bool] = None   # o gerencial manda o que a pessoa confirmou; vazio = o serviço confere
+    # PV do breakthrough pelo critério escolhido no tratamento; vazio = fim do ácido (padrão do laboratório)
+    pvbt: Optional[float] = None
     dp_dci: Literal["auto", "total", "dp1_dp2", "pp_diff"] = "auto"   # só DCI: auto (DPB Diff. se um transdutor saturar) | total | dp1_dp2 | pp_diff
     equipamento: Optional[Literal["JBV", "DCI"]] = None
     leituras: Optional[list[tuple[float, float, Optional[float]]]] = None   # (tempo_s, q, dp) já lidos no navegador
@@ -348,6 +350,21 @@ def serie_acido(d: Dados, f: FaseAcid, p: PedidoAcid) -> list[tuple[float, float
     return out
 
 
+def indice_pvbt(s: list, alvo: Optional[float]) -> int:
+    """Linha da série do ácido no breakthrough: a 1ª com PV >= alvo; sem alvo, a última (fim do ácido)."""
+    if alvo is None or not s:
+        return len(s) - 1
+    for i, x in enumerate(s):
+        if x[3] >= alvo - 1e-9:
+            return i
+    return len(s) - 1
+
+
+def pvbt_antes_do_fim(s: list, alvo: Optional[float]) -> bool:
+    """O critério escolhido deu um PVbt antes do fim do ácido (o gráfico precisa marcar onde ele fica)."""
+    return alvo is not None and bool(s) and alvo < s[-1][3] - 1e-6
+
+
 # --------------------------------------------------------------------------- gráficos
 def limites_dp(dps: list[float], vazao: bool, dp_min: float = 0.0, dp_max: Optional[float] = None) -> tuple[float, float]:
     """Eixo do ΔP do gráfico geral. Inclui o zero e os valores NEGATIVOS (depois do breakthrough o ΔP pode ficar
@@ -497,12 +514,22 @@ def _grafico(d: Dados, fases: list[FaseAcid], p: PedidoAcid, qual: str, formato:
                 ax.annotate("Dead Volume" if largo else "← Dead Volume", (x0 / 2 if largo else 0, ax.get_ylim()[1] * 0.38),
                             textcoords="offset points", xytext=(0, 0) if largo else (6, 0),
                             ha="center" if largo else "left", fontweight="bold", fontfamily="serif")
-            if cfg.mostrar_pvbt and s[-1][4] is not None:
-                pvbt = s[-1][3]
+            # PVbt antes do fim do ácido (critério de queda, limite ou manual): marca sempre, senão o número
+            # gravado não bate com o fim da curva. No fim do ácido (padrão do laboratório), só se pedido.
+            antes_do_fim = pvbt_antes_do_fim(s, p.pvbt)
+            ibt = indice_pvbt(s, p.pvbt)
+            if (cfg.mostrar_pvbt or antes_do_fim) and s[ibt][4] is not None:
+                pvbt, dp_bt = (p.pvbt if antes_do_fim else s[ibt][3]), s[ibt][4]
+                if antes_do_fim and ibt > 0 and s[ibt - 1][4] is not None and s[ibt][3] > s[ibt - 1][3]:
+                    # ΔP interpolado exatamente no PVbt (entre as duas leituras em volta)
+                    fr = (pvbt - s[ibt - 1][3]) / (s[ibt][3] - s[ibt - 1][3])
+                    dp_bt = s[ibt - 1][4] + fr * (s[ibt][4] - s[ibt - 1][4])
                 houve = p.houve_breakthrough if p.houve_breakthrough is not None else avaliar_breakthrough(d, fases)[0]
                 texto_pvbt = f"PVbt = {_fmt(pvbt, 3)}" if houve is not False else f"Sem breakthrough\nPV injetado = {_fmt(pvbt, 3)}"
-                ax.plot([pvbt], [s[-1][4]], marker="o", color="black", ms=6, ls="none")
-                ax.annotate(texto_pvbt, (pvbt, s[-1][4]), textcoords="axes fraction", xytext=(0.97, 0.62),
+                if antes_do_fim:
+                    ax.axvline(pvbt, color="black", ls=":", lw=1.1)
+                ax.plot([pvbt], [dp_bt], marker="o", color="black", ms=6, ls="none")
+                ax.annotate(texto_pvbt, (pvbt, dp_bt), textcoords="axes fraction", xytext=(0.97, 0.62),
                             ha="right", fontweight="bold", arrowprops={"arrowstyle": "->", "lw": 1, "color": "black"})
             ax.set_xlabel("Pore Volume (PV)", fontweight="bold"); ax.set_ylabel("DP (psi)", fontweight="bold")
             acabamento(ax); _eixos_virgula(ax)
@@ -587,8 +614,13 @@ def gerar_planilha(conteudo: bytes, p: PedidoAcid) -> bytes:
     linhas += [(f"UW Flow rate {i}", f.q) for i, f in enumerate(pos, start=1)]
     houve, razao = (p.houve_breakthrough, None) if p.houve_breakthrough is not None else avaliar_breakthrough(d, fases)
     ref_pv = f"='2 - Acidizing'!E{4 + len(d.janela(acido))}"
+    # PVbt pelo critério do tratamento: a linha da aba "2 - Acidizing" em que o PV chega ao breakthrough
+    s_acido = serie_acido(d, acido, p)
+    antes_do_fim = pvbt_antes_do_fim(s_acido, p.pvbt)
+    ref_bt = f"='2 - Acidizing'!E{5 + indice_pvbt(s_acido, p.pvbt)}" if antes_do_fim else ref_pv
     linhas += [("PV de ácido injetado", ref_pv),
-               ("PVbt (fim do ácido)", ref_pv if houve is not False else "sem breakthrough"),
+               ("PVbt (critério do tratamento)" if antes_do_fim else "PVbt (fim do ácido)",
+                ref_bt if houve is not False else "sem breakthrough"),
                ("Equipamento", d.equipamento)]
     if razao is not None:
         linhas.append(("ΔP depois ÷ ΔP antes (mesma vazão)", round(razao, 3)))

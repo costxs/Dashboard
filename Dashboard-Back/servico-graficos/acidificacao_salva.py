@@ -89,7 +89,7 @@ def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid
     em_cache = _cache_montar.get(analise_id)
     if em_cache and em_cache[0] > agora:
         return em_cache[1], em_cache[2], em_cache[3].model_copy(deep=True)
-    campos = "id,amostra_id,volume_poroso_usado_cm3,volume_morto_cm3,temperatura_c"
+    campos = "id,amostra_id,volume_poroso_usado_cm3,volume_morto_cm3,temperatura_c,pvbt,breakthrough"
     try:
         # config_graficos (migração 026): fonte, cores, legendas e posição da legenda escolhidas no tratamento
         cf = _ler(token, "analise_coreflooding", {"id": f"eq.{analise_id}", "select": campos + ",config_graficos"})
@@ -121,6 +121,9 @@ def montar(token: str, analise_id: int) -> tuple[DadosSalvos, list[acid.FaseAcid
         comprimento_cm=1, diametro_cm=1, porosidade_pct=1,
         volume_poroso_cm3=float(vp) if vp else None,
         volume_morto_cm3=float(cf.get("volume_morto_cm3") or 0),
+        # o gráfico marca o PVbt gravado quando ele fica antes do fim do ácido
+        pvbt=float(cf["pvbt"]) if cf.get("pvbt") is not None else None,
+        houve_breakthrough=cf.get("breakthrough"),
         temperatura_rotulo=f"T{round(float(temp))}" if temp is not None else None,
         fases=fases,
     )
