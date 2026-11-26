@@ -1,0 +1,19 @@
+{
+  "calcita": {
+    "taxa": 5.992210148362475e-08,
+    "codigo": "RDA901",
+    "mineral": "calcita",
+    "rpm": 200,
+    "c0": 1.6852061546659562,
+    "area_corrigida": 13.572521761540118
+  },
+  "dolomita": {
+    "taxa_so_ca": 1.9238489974451514e-07,
+    "taxa_ca_mg": 1.9619244984655104e-07,
+    "codigo": "RDA902",
+    "mineral": "dolomita",
+    "rpm": 500,
+    "c0": 1.6852061546659562,
+    "area_corrigida": 13.412845034933763
+  }
+}

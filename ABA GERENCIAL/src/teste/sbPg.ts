@@ -22,11 +22,12 @@ export function sbPg(pool: pg.Pool, usuario: string | null): SupabaseClient {
     } finally { c.release() }
   }
   const id = (s: string) => '"' + s.replace(/"/g, '""') + '"'
-  const val = (v: unknown) => (v !== null && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v) ? JSON.stringify(v) : v)
+  // objeto -> json; lista de objetos -> json (jsonb); lista de valores simples continua lista do Postgres (text[])
+  const val = (v: unknown) => (v !== null && typeof v === 'object' && !(v instanceof Date) && (!Array.isArray(v) || v.some((x) => x !== null && typeof x === 'object')) ? JSON.stringify(v) : v)
 
   function from(tabela: string) {
     const filtros: { sql: string; v: unknown[] }[] = []
-    let cols = '*', limite = '', faixa = '', ordem = '', modo: 'select' | 'insert' | 'upsert' | 'update' = 'select'
+    let cols = '*', limite = '', faixa = '', ordem = '', modo: 'select' | 'insert' | 'upsert' | 'update' | 'delete' = 'select'
     let linhas: Record<string, unknown>[] = [], conflito = '', retorno = false, unico = false, upd: Record<string, unknown> = {}
     const b: Record<string, unknown> = {}
     const where = (params: unknown[]) => filtros.length ? ' where ' + filtros.map((f) => {
@@ -36,6 +37,8 @@ export function sbPg(pool: pg.Pool, usuario: string | null): SupabaseClient {
       let sql: string
       if (modo === 'select') {
         sql = `select ${cols === '*' ? '*' : cols.split(',').map((c) => id(c.trim())).join(',')} from public.${id(tabela)}${where(params)}${ordem}${limite}${faixa}`
+      } else if (modo === 'delete') {
+        sql = `delete from public.${id(tabela)}${where(params)}${retorno ? ' returning *' : ''}`
       } else if (modo === 'update') {
         const ks = Object.keys(upd)
         sql = `update public.${id(tabela)} set ${ks.map((k) => { params.push(val(upd[k])); return `${id(k)} = $${params.length}` }).join(', ')}${where(params)}${retorno ? ' returning *' : ''}`
@@ -65,6 +68,7 @@ export function sbPg(pool: pg.Pool, usuario: string | null): SupabaseClient {
       insert(l: Record<string, unknown> | Record<string, unknown>[]) { modo = 'insert'; linhas = Array.isArray(l) ? l : [l]; return b },
       upsert(l: Record<string, unknown> | Record<string, unknown>[], o: { onConflict: string }) { modo = 'upsert'; linhas = Array.isArray(l) ? l : [l]; conflito = o.onConflict; return b },
       update(u: Record<string, unknown>) { modo = 'update'; upd = u; return b },
+      delete() { modo = 'delete'; return b },
       eq(c: string, v: unknown) { filtros.push({ sql: `${id(c)} = ?`, v: [v] }); return b },
       in(c: string, v: unknown[]) { filtros.push({ sql: `${id(c)} = any(?)`, v: [v] }); return b },
       is(c: string, v: null) { void v; filtros.push({ sql: `${id(c)} is null`, v: [] }); return b },

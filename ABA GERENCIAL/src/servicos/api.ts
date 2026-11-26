@@ -909,3 +909,80 @@ export async function obterMetricasGerais(contexto: { empresaId: string | null; 
     totalSistemasAcidos,
   }
 }
+
+
+// ==========================================
+// 10. ACESSO AOS APLICATIVOS (modulos_acesso - migração 022)
+// ==========================================
+export interface ModuloAcesso {
+  usuario_id: string
+  modulo: 'ternario'
+  papel: 'leitor' | 'editor'
+  concedido_em: string
+  email: string
+  nome: string | null
+}
+
+function tratarErroModulo(error: unknown): Error {
+  const code = (error as { code?: string } | null)?.code
+  if (code === '23503') {
+    return new Error('Essa pessoa ainda não entrou no sistema: peça para ela entrar uma vez e tente de novo')
+  }
+  if (code === '42501') {
+    return new Error('Só o administrador libera acesso')
+  }
+  return new Error(tratarErro(error))
+}
+
+export async function listarModulosAcesso(): Promise<ModuloAcesso[]> {
+  const { data, error } = await supabase
+    .from('modulos_acesso')
+    .select('usuario_id, modulo, papel, concedido_em, perfis!modulos_acesso_usuario_id_fkey(email, nome)')
+    .order('concedido_em', { ascending: false })
+  if (error) {
+    if (
+      (error as { code?: string }).code === '42P01' ||
+      /modulos_acesso/i.test(String((error as { message?: string }).message ?? ''))
+    ) {
+      return []
+    }
+    throw new Error(tratarErro(error))
+  }
+  return (
+    (data ?? []) as unknown as Array<{
+      usuario_id: string
+      modulo: 'ternario'
+      papel: 'leitor' | 'editor'
+      concedido_em: string
+      perfis: { email: string; nome: string | null } | Array<{ email: string; nome: string | null }> | null
+    }>
+  ).map((r) => {
+    const pf = Array.isArray(r.perfis) ? r.perfis[0] : r.perfis
+    return {
+      usuario_id: r.usuario_id,
+      modulo: r.modulo,
+      papel: r.papel,
+      concedido_em: r.concedido_em,
+      email: pf?.email ?? '',
+      nome: pf?.nome ?? null,
+    }
+  })
+}
+
+export async function concederModulo(email: string, modulo: string, papel: 'leitor' | 'editor'): Promise<string> {
+  const { data, error } = await supabase.rpc('conceder_modulo', {
+    p_email: email.trim(),
+    p_modulo: modulo,
+    p_papel: papel,
+  })
+  if (error) throw tratarErroModulo(error)
+  return String(data ?? '')
+}
+
+export async function revogarModulo(email: string, modulo: string): Promise<void> {
+  const { error } = await supabase.rpc('revogar_modulo', {
+    p_email: email.trim(),
+    p_modulo: modulo,
+  })
+  if (error) throw tratarErroModulo(error)
+}
