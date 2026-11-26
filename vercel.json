@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/ternario/index.html",
+      "destination": "/ternario/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

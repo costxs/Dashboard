@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Microscope,
   Repeat,
+  Triangle,
   X,
 } from "lucide-react";
 import { LogoEmpresa } from "../LogoEmpresa";
@@ -28,11 +29,13 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const empresaNome = useContexto((s) => s.empresaNome);
   const empresaLogoUrl = useContexto((s) => s.empresaLogoUrl);
   const projetoNome = useContexto((s) => s.projetoNome);
+  const podeVerTernario = useContexto((s) => s.podeVerTernario || Boolean(s.perfil?.administrador));
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard Gerencial", icon: LayoutDashboard },
     { to: "/amostras", label: "Banco de Amostras", icon: Database },
     { to: "/comparacao", label: "Comparação de resultados", icon: ChartScatter },
+    ...(podeVerTernario ? [{ to: "/ternario", label: "Diagrama ternário", icon: Triangle }] : []),
   ];
   const abaLiteratura = new URLSearchParams(location.search).get("aba") ?? "geral";
   const naLiteratura = location.pathname.startsWith("/literatura");

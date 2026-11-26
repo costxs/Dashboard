@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diagrama Ternário LCPETRO</title>
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>html.lcp-embutido{color-scheme:light}html.lcp-embutido:root,html.lcp-embutido{--bg:#f5f7fb;--panel:#fff;--fg:#0f172a;--fg2:#475569;--line:#cdd5e1;--line2:#e6ebf2;--accent:#c8102e;--tri-fill:#fbfcfe;--grid:#cdd5e1;--grid-strong:#94a3b8}html.lcp-embutido body{padding-block:8px 24px}</style>
+<script>try{if(window.parent!==window&&typeof window.parent.__lcpTernario==='function'){document.documentElement.classList.add('lcp-embutido');document.documentElement.dataset.theme='light'}}catch(e){}</script>
+<style>
+/* Layout: plot on the left (the deliverable), bench notebook on the right (series + points); stacks on phones. */
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --fg:#1d1f22; --fg2:#5a5f66; --line:#d9d6ce; --line2:#eeece6;
+  --accent:#9c3f1e; --tri-fill:#fbfaf6; --grid:#cfcbc1; --grid-strong:#a7a295;
+  --w1:#2F6BD6; --w2:#D9822B; --w3:#1F9E74; --w4:#8E55D9; --w5:#6B6F76;
+  --font-display:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#17181a; --panel:#1f2124; --fg:#ecebe6; --fg2:#a3a39c; --line:#3a3c40; --line2:#2b2d31;
+  --accent:#e5865f; --tri-fill:#232528; --grid:#44474d; --grid-strong:#6a6e76;
+  --w1:#5C8CF0; --w2:#E8953F; --w3:#35B084; --w4:#A47CF0; --w5:#A4A8B0; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#17181a; --panel:#1f2124; --fg:#ecebe6; --fg2:#a3a39c; --line:#3a3c40; --line2:#2b2d31;
+  --accent:#e5865f; --tri-fill:#232528; --grid:#44474d; --grid-strong:#6a6e76;
+  --w1:#5C8CF0; --w2:#E8953F; --w3:#35B084; --w4:#A47CF0; --w5:#A4A8B0; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(22px,3vw,30px);margin:0;text-wrap:balance;letter-spacing:-.01em}
+.sub{color:var(--fg2);margin:4px 0 0;max-width:70ch}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;font-weight:500;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer}
+button:hover{border-color:var(--grid-strong)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.small{padding:3px 8px;font-size:12px}
+button.ghost{border-color:transparent;background:transparent;color:var(--fg2)}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0}
+.plotcard{padding:12px}
+.plotwrap{width:100%;aspect-ratio:1.08;max-width:100%;position:relative}
+.plotwrap svg{width:100%;height:100%;display:block}
+.vertexes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+@media (max-width:520px){.vertexes{grid-template-columns:1fr}}
+.box{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)}
+.boxtitle{font-family:var(--font-display);font-weight:600;font-size:16px;margin-bottom:8px}
+button:disabled{opacity:.45;cursor:default}
+button.dangerline{border-color:#b3261e;color:#b3261e;font-weight:600;margin-left:auto}
+.vertexes label,.field label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);margin-bottom:3px}
+input[type=text],input[type=number],select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%;min-width:0}
+input[type=number]{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.opts{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;align-items:center;font-size:13px;color:var(--fg2)}
+.opts label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13px}
+.colors label{gap:4px}
+.colors .sw{width:22px;height:22px;border-radius:5px;border:1px solid var(--line);padding:0;vertical-align:middle;cursor:pointer}
+.colors .cwrap{position:relative;display:inline-flex;align-items:center;gap:5px}
+.pop{position:absolute;top:28px;left:0;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);display:grid;grid-template-columns:repeat(6,22px);gap:6px;width:max-content}
+.pop button.s{width:22px;height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.15);padding:0;cursor:pointer}
+.pop button.s[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px}
+.pop .more{grid-column:1/-1;font-size:12px;padding:3px 6px}
+.pop input[type=color]{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none}
+.colors input[type=color]{width:28px;height:22px;padding:0;border:1px solid var(--line);border-radius:4px;background:none;cursor:pointer}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend svg{width:16px;height:16px}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:0 8px}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:10px 12px;color:var(--fg2)}
+.tabs button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--accent)}
+.pane{padding:12px}
+.series{border:1px solid var(--line2);border-radius:8px;padding:10px;margin-bottom:10px;display:grid;gap:8px}
+.series .row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end}
+.series .row2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.4fr);gap:8px}
+@media (max-width:520px){.series .row,.series .row2{grid-template-columns:1fr 1fr}}
+.hint{font-size:12px;color:var(--fg2)}
+.tablewrap{overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line2);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:4px 6px;border-bottom:1px solid var(--line2);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--fg2);z-index:1}
+td:first-child,th:first-child{text-align:left}
+td select,td input{padding:2px 4px;font-size:12px;border-radius:4px}
+td input[type=number]{width:70px;text-align:right}
+td input[type=text]{width:110px}
+.tip{position:absolute;pointer-events:none;background:var(--fg);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-130%);font-family:var(--font-mono)}
+.status{font-size:12px;color:var(--fg2);min-height:16px;margin-top:8px}
+.io{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.stack{display:grid;gap:10px}
+details summary{cursor:pointer;color:var(--fg2);font-size:13px}
+.pointsbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+@media (prefers-reduced-motion:no-preference){.marker{transition:r .15s}}
+.projbox{display:grid;gap:3px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:8px 12px;min-width:240px}
+.projbox label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2)}
+#syncBadge{font-size:11px}
+#syncBadge.ok{color:#1F9E74}#syncBadge.err{color:#b3261e}#syncBadge.busy{color:var(--accent)}
+.projbox select{font-family:var(--font-display);font-weight:600;font-size:16px;padding:4px 6px}
+.dtabs .crumb{font-size:12px;color:var(--fg2);padding:8px 6px 8px 0;align-self:center}
+.dtabs{display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.dtabs button{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--bg);color:var(--fg2);padding:7px 14px;font-weight:500}
+.dtabs button[aria-selected=true]{background:var(--panel);color:var(--fg);font-weight:600;box-shadow:0 1px 0 var(--panel)}
+.dtabs button.new{border-style:dashed;color:var(--accent)}
+.row3{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.series .head{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;align-items:end}
+.series .head>button{justify-self:start}
+.series table td input[type=number]{width:92px}
+.series table td input[type=text]{width:130px}
+.series .foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.series .foot input[type=text]{flex:1 1 220px}
+.derived{color:var(--fg2);font-family:var(--font-mono)}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.confirm span{flex:1 1 240px;font-weight:500}
+.confirm[hidden],[hidden]{display:none!important}
+button.danger{background:#b3261e;border-color:#b3261e;color:#fff}
+</style>
+
+<header>
+  <div>
+    <h1>Diagrama Ternário LCPETRO</h1>
+    <p class="sub">Tensoativo/cotensoativo no vértice superior, água à esquerda, óleo à direita. Frações em massa; classificação por marcador.</p>
+  </div>
+  <div class="projbox">
+    <label for="projSel">Projeto</label>
+    <select id="projSel"></select>
+    <span class="hint" id="projInfo"></span>
+    <span class="hint" id="syncBadge" title="Onde os dados estão sendo salvos">● local (navegador)</span>
+  </div>
+  <div class="toolbar">
+    <button id="btnUndoAll" class="ghost" title="Desfazer (Ctrl+Z)">↶ Desfazer</button>
+    <button id="btnRedoAll" class="ghost" title="Refazer (Ctrl+Y)">↷ Refazer</button>
+    <button id="btnSvg">Salvar SVG</button>
+    <button id="btnPng">Salvar PNG</button>
+    <button id="btnCsv">Salvar CSV</button>
+    <button id="btnCopy" class="ghost">Copiar SVG</button>
+  </div>
+</header>
+
+<nav class="dtabs" id="dtabs" aria-label="Diagramas"></nav>
+
+<div class="layout">
+  <section class="card plotcard">
+    <div class="plotwrap" id="plotwrap"><svg id="plot" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagrama ternário"></svg></div>
+    <div class="opts">
+      <label>visualização <select id="optView"><option value="points">pontos</option><option value="regions">regiões (área)</option><option value="both">pontos + regiões</option></select></label>
+      <label><input type="checkbox" id="optBoundary" checked> fronteira (1ª transição de cada linha)</label>
+      <label><input type="checkbox" id="optAreaLabels" checked> nome das regiões</label>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="optGrid" checked> grade</label>
+      <label><input type="checkbox" id="optTicks" checked> escala (%)</label>
+      <label><input type="checkbox" id="optLines" checked> linhas de titulação</label>
+      <label><input type="checkbox" id="optLabels"> rótulos nos pontos</label>
+      <label><input type="checkbox" id="optSeriesLabels" checked> nome da série</label>
+      <label><input type="checkbox" id="optRegions"> envoltória por classe</label>
+      <label>passo <select id="optStep"><option value="10">10%</option><option value="20">20%</option><option value="5">5%</option></select></label>
+      <label><input type="checkbox" id="optHollow" checked> marcadores vazados</label>
+      <label>marcador <input type="range" id="optSize" min="4" max="12" value="7" style="width:80px"></label>
+    </div>
+    <div class="opts colors" id="colorRow"></div>
+    <div class="legend" id="legend"></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabT" aria-selected="true">Titulação</button>
+      <button role="tab" id="tabP" aria-selected="false">Pontos</button>
+      <button role="tab" id="tabD" aria-selected="false">Diagrama</button>
+    </div>
+    <div class="pane" id="paneT">
+      <p class="hint">Cada linha de titulação parte de uma massa fixa de tensoativo/cotensoativo (C/T) mais a fase fixa (óleo ou água) dentro de um tubo pesado com o peixe. A cada adição, anote a <strong>massa total lida</strong> na balança; o titulante é a diferença para a massa inicial. Marque "transição" na adição em que o sistema mudou e escolha a nova classe; a classe vale até a próxima transição.</p>
+      <div id="seriesList"></div>
+      <div class="io"><button id="addSeries" class="primary">+ Linha de titulação</button><button id="sortSeries" class="ghost">Ordenar por composição</button></div>
+    </div>
+    <div class="pane" id="paneP" hidden>
+      <p class="hint">Pontos avulsos (composições diretas, em %). Os três valores são normalizados para 100 %.</p>
+      <div id="freeList"></div>
+      <div class="io"><button id="addFree" class="primary">+ Ponto</button></div>
+    </div>
+    <div class="pane" id="paneD" hidden>
+      <div class="stack">
+        <div class="box">
+          <div class="boxtitle">Dados gerais do diagrama</div>
+          <div class="row3">
+            <div class="field"><label for="dName">Nome do diagrama</label><input type="text" id="dName"></div>
+            <div class="field"><label for="pName">Projeto</label><input type="text" id="pName" title="Renomeia o projeto atual"></div>
+          </div>
+          <div class="vertexes">
+            <div><label for="vTop">Vértice superior</label><input type="text" id="vTop"></div>
+            <div><label for="vLeft">Vértice esquerdo</label><input type="text" id="vLeft"></div>
+            <div><label for="vRight">Vértice direito</label><input type="text" id="vRight"></div>
+          </div>
+          <div class="io">
+            <button id="btnDup">Duplicar diagrama</button>
+            <label class="hint">mover para <select id="moveTo"></select></label>
+            <button id="btnDelDiag" class="dangerline">🗑 Excluir este diagrama</button>
+          </div>
+        </div>
+        <div class="confirm" id="confirmBox" hidden><span id="confirmMsg"></span><button id="confirmYes" class="danger">Sim, excluir</button><button id="confirmNo" class="ghost">Cancelar</button></div>
+        <div class="io">
+          <button id="btnDelProj" class="ghost">Excluir este projeto</button><button id="btnUndo" class="ghost" hidden>Desfazer exclusão</button><button id="btnRestoreLuciane" class="ghost">Recriar projeto "Mestrado Luciane" com DL1</button>
+        </div>
+        <div class="field"><label for="jsonBox">Diagrama (JSON)</label><textarea id="jsonBox" rows="8" spellcheck="false" style="font-family:var(--font-mono);font-size:12px"></textarea></div>
+        <div class="io">
+          <button id="btnJsonLoad">Carregar JSON do campo (substitui este diagrama)</button>
+          <button id="btnJsonFill" class="ghost">Preencher com o diagrama atual</button>
+          <button id="btnJsonSave">Salvar JSON</button>
+          <button id="btnJsonSaveAll" class="ghost">Salvar todos os projetos</button>
+          <label class="hint">Importar arquivo (JSON ou CSV de pontos): <input type="file" id="fileIn" accept=".json,.csv,.txt"></label>
+        </div>
+        <p class="hint">Um JSON de diagrama vira uma nova aba neste projeto; um JSON com vários projetos substitui o conjunto. CSV de pontos: colunas <code>serie,sc,agua,oleo,winsor,rotulo</code> (percentuais), adicionado como pontos avulsos deste diagrama. Tudo fica guardado também neste navegador.</p>
+        <div class="io"><button id="btnReset" class="ghost">Restaurar exemplo (dados do laboratório) neste diagrama</button><button id="btnClear" class="ghost">Limpar este diagrama</button></div>
+      </div>
+    </div>
+    <div class="pane" id="panePoints">
+      <div class="pointsbar"><strong>Pontos plotados</strong><span class="hint" id="npts"></span></div>
+      <div class="tablewrap"><table id="ptable"><thead><tr><th>Série</th><th>Adição</th><th>Titulante (g)</th><th>Água %</th><th>C/T %</th><th>Óleo %</th><th>Classe</th><th>Rótulo</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+</div>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const WIN={I:{label:"Winsor I",shape:"circle",v:"--w1"},II:{label:"Winsor II",shape:"triangle",v:"--w2"},III:{label:"Winsor III",shape:"star",v:"--w3"},IV:{label:"Winsor IV",shape:"diamond",v:"--w4"},E:{label:"Emulsão",shape:"square",v:"--w5"}};
+const WKEYS=["I","II","III","IV","E"];
+const KEY="lcpetro-ternario-v5-dashboard", OLDKEYS=["lcpetro-ternario-v4","lcpetro-ternario-v3","lcpetro-ternario-v2"];
+const DEFOPTS={grid:true,ticks:true,lines:true,labels:false,seriesLabels:true,regions:false,step:10,size:7,view:"both",areaLabels:true,boundary:true,hollow:true};
+const DEFVERT={left:"Água (HCl 15%)",top:"Tween 80 / n-butanol (1:1)",right:"Óleo de açaí"};
+
+// Series model: {name, tube, sc, fixed:"oil"|"water", fixedMass, init, rows:[{total, trans, to, note}], labels, label0}
+// Older model (adds per addition + class per addition) is converted by fromOld().
+function fromOld(s){
+  const sc=+s.sc||0,oil=+s.oil||0,base=sc+oil;const adds=String(s.adds||"").split(/[,;\s]+/).map(Number).filter(n=>n>0);
+  const win=s.win||[];let cum=0,prev=s.win0||win[0]||"I";const rows=adds.map((a,i)=>{cum+=a;const k=win[i]||prev;const r={total:+(base+cum).toFixed(4),trans:k!==prev,to:k,note:""};prev=k;return r});
+  return {name:s.name,tube:0,sc,fixed:"oil",fixedMass:oil,init:s.win0||win[0]||"I",rows,labels:s.labels||[],label0:s.label0||""};
+}
+function example(){
+  const add=[0.1842,0.2157,0.2819,0.3884,0.5485,0.8077,1.3619,2.6401,7.9226];
+  const mk=(name,sc,oil,adds,win)=>fromOld({name,sc,oil,adds:adds.join(","),win});
+  const I=n=>Array(n).fill("I"), E=n=>Array(n).fill("E");
+  return {
+    name:"Fluido ácido – óleo de açaí",
+    vertices:{...DEFVERT},
+    // Names use the convention C/T:óleo. Whiteboard lines "(2:8)…(7:3)" were written as óleo:C/T (see the masses), so they are renamed here.
+    // Suggested classes read from the titration photos: dark oil layer over a clear phase = Winsor I; milky, turbid tube = Emulsão (E); 1:9 follows the whiteboard.
+    series:[
+      mk("1:9",0.1686,1.4383,add,["I","III","III","III","II","II","II","I","I"]),
+      // Spreadsheet row "2:8" lists 1.2882 g of C/T and 0.3369 g of oil (same as row 8:2); the 20 % C/T line is otherwise missing, so the two masses are read as swapped here.
+      mk("2:8",0.3369,1.2882,[0.1808,0.2233,0.2828,0.3802,0.5407,0.824,1.3375,2.6004,7.9582],[...I(5),...E(4)]),
+      mk("7:3",1.1734,0.4784,[0.1934,0.2299,0.2981,0.3833,0.5455,0.8096,1.3278,2.6228,7.9955],[...I(5),...E(4)]),
+      mk("6:4",0.9938,0.6572,[0.188,0.2459,0.283,0.4038,0.5476,0.8337,1.3272,2.6266,7.9643],[...I(5),...E(4)]),
+      mk("5:5",0.8192,0.7998,[0.1817,0.2217,0.2967,0.3758,0.5341,0.8034,1.3413,2.6583,7.9682],[...I(4),...E(5)]),
+      mk("4:6",0.6647,0.9744,[0.1901,0.2173,0.2804,0.384,0.545,0.7881,1.328,2.6526,8.0273],[...I(4),...E(5)]),
+      mk("3:7",0.5471,1.156,[0.1915,0.2239,0.2966,0.3754,0.5374,0.797,1.3305,2.634,7.975],[...I(4),...E(5)]),
+      mk("8:2",1.3121,0.3286,[0.1841,0.2362,0.3044,0.381,0.566,0.7975,1.2918,2.6509,8.0001],I(9)),
+      mk("9:1",1.4754,0.1607,[0.1858,0.232,0.2786,0.3938,0.53,0.8048,1.2922,2.6696,8.0034],I(9))
+    ],
+    free:[],
+    opts:{...DEFOPTS}
+  };
+}
+function blank(name){return {name:name||"Novo diagrama",vertices:{...DEFVERT},series:[],free:[],opts:{...DEFOPTS}}}
+function normalize(d){d=Object.assign(blank(),d);d.opts=Object.assign({...DEFOPTS},d.opts||{});d.vertices=Object.assign({...DEFVERT},d.vertices||{});
+  d.series=(d.series||[]).map(s=>s.rows?s:fromOld(s));d.free=d.free||[];return d}
+
+// ---------- workspace: projects > diagrams ----------
+let WS=load();
+function normProj(pr){pr=Object.assign({name:"Projeto",diagrams:[]},pr);pr.diagrams=(pr.diagrams||[]).map(normalize);if(!pr.diagrams.length)pr.diagrams=[blank("Diagrama 1")];return pr}
+function freshWS(){const ex=example();ex.name="DL1";return {projects:[{name:"Mestrado Álvaro",diagrams:[blank("Diagrama 1")]},{name:"Mestrado Luciane",diagrams:[ex]}],curP:1,curD:0}}
+function load(){
+  try{const s=localStorage.getItem(KEY);if(s){const w=JSON.parse(s);if(w&&Array.isArray(w.projects)&&w.projects.length){w.projects=w.projects.map(normProj);w.curP=Math.min(w.curP||0,w.projects.length-1);w.curD=Math.min(w.curD||0,w.projects[w.curP].diagrams.length-1);return w}}
+    for(const k of OLDKEYS){const o=localStorage.getItem(k);if(o){const v=JSON.parse(o);const w=freshWS();
+      const ds=Array.isArray(v.diagrams)?v.diagrams.map(normalize):(v&&Array.isArray(v.series)?[normalize(v)]:[]);
+      if(ds.length){ds[0].name="DL1";w.projects[1].diagrams=ds}return w}}
+  }catch(e){}
+  return freshWS();
+}
+let online=false,syncCache={p:{},d:{}},syncTimer=null,syncing=false,dirty=false,serverStamp=null; // estado do espelho online (ver abaixo)
+// ---------- history (undo / redo) ----------
+let hist=[],future=[],lastSnap=JSON.stringify(WS),lastPushT=0;
+function save(){const snap=JSON.stringify(WS);
+  if(snap!==lastSnap){const now=Date.now();if(now-lastPushT>400){hist.push(lastSnap);if(hist.length>80)hist.shift();future=[]}lastPushT=now;lastSnap=snap}
+  try{localStorage.setItem(KEY,snap)}catch(e){}updateHistBtns();scheduleSync()}
+function restoreSnap(snap){WS=JSON.parse(snap);WS.projects=WS.projects.map(normProj);WS.curP=Math.min(WS.curP||0,WS.projects.length-1);WS.curD=Math.min(WS.curD||0,proj().diagrams.length-1);P=proj().diagrams[WS.curD];lastSnap=snap;lastPushT=0;initUI()}
+function undoAll(){if(!hist.length)return;future.push(lastSnap);restoreSnap(hist.pop());status("Desfeito")}
+function redoAll(){if(!future.length)return;hist.push(lastSnap);restoreSnap(future.pop());status("Refeito")}
+function updateHistBtns(){$("btnUndoAll").disabled=!hist.length;$("btnRedoAll").disabled=!future.length}
+$("btnUndoAll").addEventListener("click",undoAll);$("btnRedoAll").addEventListener("click",redoAll);
+document.addEventListener("keydown",e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();const inText=e.target&&e.target.tagName==="TEXTAREA";
+  if(k==="z"&&!e.shiftKey&&!inText){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();undoAll()}
+  else if((k==="y"||(k==="z"&&e.shiftKey))&&!inText){e.preventDefault();redoAll()}});
+function proj(){return WS.projects[WS.curP]}
+let P=proj().diagrams[WS.curD];
+
+function renderPTabs(){
+  const sel=$("projSel");sel.innerHTML=WS.projects.map((pr,i)=>`<option value="${i}" ${i===WS.curP?"selected":""}>${esc(pr.name||("Projeto "+(i+1)))}</option>`).join("")+'<option value="__new">＋ Novo projeto…</option>';
+  const n=proj().diagrams.length;$("projInfo").textContent=n+(n===1?" diagrama":" diagramas");
+}
+$("projSel").addEventListener("change",()=>{const v=$("projSel").value;
+  if(v==="__new"){WS.projects.push({name:"Projeto "+(WS.projects.length+1),diagrams:[blank("Diagrama 1")]});WS.curP=WS.projects.length-1;WS.curD=0;P=proj().diagrams[0];initUI();$("tabD").click();$("pName").focus();$("pName").select();return}
+  WS.curP=+v;WS.curD=0;P=proj().diagrams[0];initUI()});
+function renderDTabs(){
+  const nav=$("dtabs");nav.innerHTML=`<span class="crumb">${esc(proj().name)} ›</span>`;const ds=proj().diagrams;
+  ds.forEach((d,i)=>{const b=document.createElement("button");b.setAttribute("role","tab");b.setAttribute("aria-selected",i===WS.curD);b.textContent=d.name||("Diagrama "+(i+1));
+    b.addEventListener("click",()=>{WS.curD=i;P=ds[i];initUI()});nav.appendChild(b)});
+  const n=document.createElement("button");n.className="new";n.textContent="+ Novo diagrama";
+  n.addEventListener("click",()=>{ds.push(blank("Diagrama "+(ds.length+1)));WS.curD=ds.length-1;P=ds[WS.curD];initUI();$("tabD").click();$("dName").focus()});
+  nav.appendChild(n);
+  const mv=$("moveTo");mv.innerHTML='<option value="">outro projeto…</option>'+WS.projects.map((pr,i)=>i===WS.curP?"":`<option value="${i}">${esc(pr.name)}</option>`).join("");
+}
+
+// ---------- derived points ----------
+function points(){
+  const out=[];
+  P.series.forEach((s,si)=>{
+    const sc=+s.sc||0, fm=+s.fixedMass||0, base=sc+fm, tube=+s.tube||0; if(base<=0)return;
+    const oilFixed=s.fixed!=="water";
+    const comp=(t)=>{const tot=base+t;return oilFixed?{w:t/tot,s:sc/tot,o:fm/tot}:{w:fm/tot,s:sc/tot,o:t/tot}};
+    let cls=WIN[s.init]?s.init:"I";
+    out.push({series:s.name,si,idx:0,aq:0,...comp(0),win:cls,label:s.label0||"",kind:"t"});
+    (s.rows||[]).forEach((r,i)=>{const t=(+r.total||0)-tube-base; if(!(t>0))return;
+      if(r.trans&&WIN[r.to])cls=r.to;
+      out.push({series:s.name,si,idx:i+1,aq:t,...comp(t),win:cls,label:s.labels&&s.labels[i]||"",kind:"t",note:r.note||""});
+    });
+  });
+  (P.free||[]).forEach((f,fi)=>{
+    const a=+f.w||0,b=+f.s||0,c=+f.o||0,t=a+b+c; if(t<=0)return;
+    out.push({series:f.series||"Pontos",si:-1,fi,idx:fi+1,aq:NaN,w:a/t,s:b/t,o:c/t,win:f.win||"I",label:f.label||"",kind:"f"});
+  });
+  return out;
+}
+
+// ---------- geometry ----------
+const W=760,H=700,PAD={l:70,r:70,t:70,b:60};
+const L={x:PAD.l,y:H-PAD.b}, R={x:W-PAD.r,y:H-PAD.b};
+const side=R.x-L.x, T={x:(L.x+R.x)/2,y:L.y-side*Math.sqrt(3)/2};
+function xy(w,s,o){return {x:L.x+o*(R.x-L.x)+s*(T.x-L.x), y:L.y+s*(T.y-L.y)}}
+
+function markerPath(shape,cx,cy,r){
+  if(shape==="circle")return `M${cx-r},${cy}a${r},${r} 0 1,0 ${2*r},0a${r},${r} 0 1,0 ${-2*r},0`;
+  if(shape==="triangle"){const h=r*1.25;return `M${cx},${cy-h}L${cx+h*0.95},${cy+h*0.6}L${cx-h*0.95},${cy+h*0.6}Z`}
+  if(shape==="square"){const h=r*1.05;return `M${cx-h},${cy-h}h${2*h}v${2*h}h${-2*h}Z`}
+  if(shape==="diamond")return `M${cx},${cy-r*1.3}L${cx+r*1.3},${cy}L${cx},${cy+r*1.3}L${cx-r*1.3},${cy}Z`;
+  if(shape==="star"){let p="";for(let i=0;i<10;i++){const rr=i%2?r*0.55:r*1.35,a=-Math.PI/2+i*Math.PI/5;p+=(i?"L":"M")+(cx+rr*Math.cos(a)).toFixed(2)+","+(cy+rr*Math.sin(a)).toFixed(2)}return p+"Z"}
+}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+function hull(pts){ // convex hull (monotone chain)
+  const p=pts.slice().sort((a,b)=>a.x-b.x||a.y-b.y); if(p.length<3)return p;
+  const cross=(o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+  const lo=[];for(const q of p){while(lo.length>1&&cross(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q)}
+  const up=[];for(let i=p.length-1;i>=0;i--){const q=p[i];while(up.length>1&&cross(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q)}
+  up.pop();lo.pop();return lo.concat(up);
+}
+
+function buildSVG(forExport){
+  const o=P.opts, pts=points(), fg=css("--fg"), fg2=css("--fg2"), grid=css("--grid"), gs=css("--grid-strong"), fill=css("--tri-fill"), bg=css("--panel");
+  const col=k=>(o.colors&&o.colors[k])||css(WIN[k].v);
+  const custom=k=>!!(o.colors&&o.colors[k]);
+  const mark=k=>custom(k)&&isLight(col(k))?darken(col(k),0.55):col(k);  // marker/label colour: darker when a light region colour is chosen
+  const fillOp=k=>toHex(col(k)).toLowerCase()==="#ffffff"?1:(custom(k)&&isLight(col(k))?0.65:0.22);
+  let g=`<defs><pattern id="hatchE" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${col("E")}" stroke-width="1.2" stroke-opacity="0.55"/></pattern></defs><rect width="${W}" height="${H}" fill="${forExport?bg:"none"}"/>`;
+  g+=`<polygon points="${L.x},${L.y} ${R.x},${R.y} ${T.x},${T.y}" fill="${fill}" stroke="${gs}" stroke-width="1.5"/>`;
+  const step=+o.step||10;let gridG="";
+  if(o.grid||o.ticks){
+    for(let v=step;v<100;v+=step){const f=v/100;
+      // lines of constant s (parallel to base), constant w, constant o
+      const a1=xy(1-f,f,0),a2=xy(0,f,1-f);      // s = f
+      const b1=xy(f,0,1-f),b2=xy(f,1-f,0);      // w = f
+      const c1=xy(1-f,0,f),c2=xy(0,1-f,f);      // o = f
+      if(o.grid){const sw=(v%50===0)?1:0.6;
+        gridG+=`<path d="M${a1.x},${a1.y}L${a2.x},${a2.y}M${b1.x},${b1.y}L${b2.x},${b2.y}M${c1.x},${c1.y}L${c2.x},${c2.y}" stroke="${grid}" stroke-width="${sw}" fill="none"/>`}
+      if(o.ticks){
+        // left edge (water→top): s = f, label at a1 (on W–T edge)
+        g+=`<text x="${a1.x-9}" y="${a1.y+4}" font-size="11" text-anchor="end" fill="${fg2}" font-family="IBM Plex Mono,monospace">${v}</text>`;
+        // base edge: o = f at b1? base points: xy(1-f,0,f) is o=f on base
+        // base edge: water % decreases left→right (point xy(1-f,0,f) has water = 1-f)
+        const bb=xy(1-f,0,f); g+=`<text x="${bb.x}" y="${bb.y+16}" font-size="11" text-anchor="middle" fill="${fg2}" font-family="IBM Plex Mono,monospace">${100-v}</text>`;
+        // right edge (top→oil): oil % (point xy(0,f,1-f) has oil = 1-f)
+        const rr=xy(0,f,1-f); g+=`<text x="${rr.x+15}" y="${rr.y+4}" font-size="11" text-anchor="start" fill="${fg2}" font-family="IBM Plex Mono,monospace">${100-v}</text>`;
+      }
+    }
+  }
+  // axis titles
+  const vx=P.vertices;
+  g+=`<text x="${T.x}" y="${T.y-22}" font-size="15" font-weight="600" text-anchor="middle" fill="${fg}" font-family="IBM Plex Sans,sans-serif">${esc(vx.top)}</text>`;
+  g+=`<text x="${L.x}" y="${L.y+40}" font-size="15" font-weight="600" text-anchor="middle" fill="${fg}" font-family="IBM Plex Sans,sans-serif">${esc(vx.left)}</text>`;
+  g+=`<text x="${R.x}" y="${R.y+40}" font-size="15" font-weight="600" text-anchor="middle" fill="${fg}" font-family="IBM Plex Sans,sans-serif">${esc(vx.right)}</text>`;
+  if(o.ticks){
+    const ml=xy(.5,.5,0), mr=xy(0,.5,.5), mb=xy(.5,0,.5);
+    g+=`<text transform="translate(${ml.x-34},${ml.y}) rotate(-60)" font-size="11" text-anchor="middle" fill="${fg2}" font-family="IBM Plex Sans,sans-serif">% ${esc(vx.top)} →</text>`;
+    g+=`<text transform="translate(${mr.x+(o.seriesLabels&&o.lines?72:40)},${mr.y}) rotate(60)" font-size="11" text-anchor="middle" fill="${fg2}" font-family="IBM Plex Sans,sans-serif">% ${esc(vx.right)} →</text>`;
+    g+=`<text x="${mb.x}" y="${mb.y+30}" font-size="11" text-anchor="middle" fill="${fg2}" font-family="IBM Plex Sans,sans-serif">← % ${esc(vx.left)}</text>`;
+  }
+  // ---- area view: phase map by nearest classified point + microemulsion boundary ----
+  const view=o.view||"both";
+  if(view!=="points"&&pts.length){
+    const P2=pts.map(p=>({...xy(p.w,p.s,p.o),k:WIN[p.win]?p.win:"I"}));
+    const near=(x,y)=>{let b=null,bd=Infinity;for(const q of P2){const d=(q.x-x)**2+(q.y-y)**2;if(d<bd){bd=d;b=q.k}}return b};
+    const n=50,paths={},cent={};WKEYS.forEach(k=>{paths[k]="";cent[k]={x:0,y:0,n:0,cells:[]}});
+    const cell=(s,oo)=>xy(1-s-oo,s,oo);
+    for(let i=0;i<n;i++)for(let j=0;j<n-i;j++){
+      const s0=i/n,o0=j/n,h=1/n;
+      const A=cell(s0,o0),B=cell(s0,o0+h),C=cell(s0+h,o0);
+      const tris=[[A,B,C]]; if(j<n-i-1){const D=cell(s0+h,o0+h);tris.push([B,D,C])}
+      for(const t of tris){const cx=(t[0].x+t[1].x+t[2].x)/3,cy=(t[0].y+t[1].y+t[2].y)/3,k=near(cx,cy);
+        paths[k]+=`M${t[0].x.toFixed(1)},${t[0].y.toFixed(1)}L${t[1].x.toFixed(1)},${t[1].y.toFixed(1)}L${t[2].x.toFixed(1)},${t[2].y.toFixed(1)}Z`;
+        cent[k].x+=cx;cent[k].y+=cy;cent[k].n++;cent[k].cells.push({x:cx,y:cy})}
+    }
+    WKEYS.forEach(k=>{if(paths[k])g+=`<path d="${paths[k]}" fill="${col(k)}" fill-opacity="${fillOp(k)}" stroke="${col(k)}" stroke-opacity="${fillOp(k)}" stroke-width="0.6"/>`+(k==="E"?`<path d="${paths[k]}" fill="url(#hatchE)" stroke="none"/>`:"")});
+    // boundary: first transition along each titration line, ordered by oil fraction of the base mixture
+    let trPts=[];
+    if(o.boundary!==false){
+      const tr=[];P.series.forEach((s,si)=>{const ps=pts.filter(p=>p.si===si);for(let i=1;i<ps.length;i++){if(ps[i].win!==ps[i-1].win){const a=xy(ps[i-1].w,ps[i-1].s,ps[i-1].o),b=xy(ps[i].w,ps[i].s,ps[i].o);
+        tr.push({x:(a.x+b.x)/2,y:(a.y+b.y)/2,key:ps[0].o-ps[0].w});break}}});
+      tr.sort((a,b)=>a.key-b.key);trPts=tr;
+      if(tr.length>=2){let d=`M${tr[0].x.toFixed(1)},${tr[0].y.toFixed(1)}`;
+        for(let i=0;i<tr.length-1;i++){const p0=tr[Math.max(i-1,0)],p1=tr[i],p2=tr[i+1],p3=tr[Math.min(i+2,tr.length-1)];
+          const c1x=p1.x+(p2.x-p0.x)/6,c1y=p1.y+(p2.y-p0.y)/6,c2x=p2.x-(p3.x-p1.x)/6,c2y=p2.y-(p3.y-p1.y)/6;
+          d+=`C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`}
+        g+=`<path d="${d}" fill="none" stroke="${fg}" stroke-width="2.2" stroke-linecap="round"/>`;
+        tr.forEach(t=>{g+=`<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="3" fill="${bg}" stroke="${fg}" stroke-width="1.5"/>`})}
+    }
+    if(o.areaLabels!==false){
+      // place each label inside its region, as far as possible from markers and other labels
+      const placed=[];const labs=[];
+      WKEYS.forEach(k=>{const cells=cent[k].cells;if(!cells||cells.length<12)return;const cx=cent[k].x/cent[k].n,cy=cent[k].y/cent[k].n;let best=null,bs=-Infinity;
+        for(let i=0;i<cells.length;i+=3){const c=cells[i];let md=Infinity;for(const q of P2){const d=Math.hypot(q.x-c.x,q.y-c.y);if(d<md)md=d}for(const q of trPts){const d=Math.hypot(q.x-c.x,q.y-c.y);if(d<md)md=d}
+          for(const l of placed){const d=Math.hypot(l.x-c.x,l.y-c.y)/2;if(d<md)md=d}
+          const sc=Math.min(md,38)-0.12*Math.hypot(c.x-cx,c.y-cy);if(sc>bs){bs=sc;best=c}}
+        if(best){placed.push(best);labs.push({k,x:best.x,y:best.y})}});
+      labs.sort((a,b)=>a.y-b.y);for(let i=1;i<labs.length;i++){const a=labs[i-1],b=labs[i];if(Math.abs(b.x-a.x)<95&&b.y-a.y<20)b.y=a.y+20}
+      labs.forEach(l=>{g+=`<text x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" font-size="14" font-weight="600" text-anchor="middle" fill="${fg}" stroke="${bg}" stroke-width="4" paint-order="stroke" font-family="IBM Plex Sans,sans-serif">${WIN[l.k].label}</text>`})}
+  }
+  g+=gridG+`<polygon points="${L.x},${L.y} ${R.x},${R.y} ${T.x},${T.y}" fill="none" stroke="${gs}" stroke-width="1.5"/>`;
+  // regions: convex hull per Winsor class
+  if(o.regions){WKEYS.forEach(k=>{const ps=pts.filter(p=>p.win===k).map(p=>xy(p.w,p.s,p.o));
+    if(ps.length>=3){const h=hull(ps);g+=`<polygon points="${h.map(q=>q.x.toFixed(1)+","+q.y.toFixed(1)).join(" ")}" fill="${col(k)}" fill-opacity="0.12" stroke="${col(k)}" stroke-width="1" stroke-dasharray="3 3"/>`}})}
+  // titration lines
+  const usedStarts=[];
+  if(o.lines){P.series.forEach((s,si)=>{const ps=pts.filter(p=>p.si===si);if(!ps.length)return;
+    const start=xy(ps[0].w,ps[0].s,ps[0].o);
+    let dy=0;while(usedStarts.some(u=>Math.abs(u.x-start.x)<6&&Math.abs(u.y-(start.y+dy))<13))dy+=14;usedStarts.push({x:start.x,y:start.y+dy});
+    let d="";ps.forEach((p,i)=>{const q=xy(p.w,p.s,p.o);d+=(i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1)});
+    g+=`<path d="${d}" fill="none" stroke="${gs}" stroke-width="1" stroke-dasharray="4 3"/>`;
+    if(o.seriesLabels){const off=P.opts.ticks?38:14;g+=`<text x="${start.x+(start.x>T.x?off:-off)}" y="${start.y+4+dy}" font-size="11" font-weight="600" text-anchor="${start.x>T.x?"start":"end"}" fill="${fg}" font-family="IBM Plex Mono,monospace">${esc(s.name)}</text>`}
+  })}
+  // points
+  const r=+o.size||7;
+  if(view!=="regions")pts.forEach((p,i)=>{const q=xy(p.w,p.s,p.o),k=WIN[p.win]?p.win:"I";
+    g+=o.hollow!==false?`<path class="marker" data-i="${i}" d="${markerPath(WIN[k].shape,q.x,q.y,r)}" fill="${bg}" fill-opacity="0.85" stroke="${mark(k)}" stroke-width="2" stroke-linejoin="round"/>`
+      :`<path class="marker" data-i="${i}" d="${markerPath(WIN[k].shape,q.x,q.y,r)}" fill="${mark(k)}" stroke="${bg}" stroke-width="1.5"/>`;
+    if(o.labels||p.label){const t=p.label||(p.kind==="t"?Math.round(p.w*100)+"%":"");if(t)g+=`<text x="${q.x+r+3}" y="${q.y-r}" font-size="10" fill="${fg}" font-family="IBM Plex Mono,monospace">${esc(t)}</text>`}
+  });
+  // legend inside export
+  if(forExport){let y=H-14,x=PAD.l; const used=WKEYS.filter(k=>pts.some(p=>p.win===k));
+    used.forEach(k=>{g+=`<path d="${markerPath(WIN[k].shape,x+6,y-4,6)}" ${o.hollow!==false?`fill="${bg}" stroke="${mark(k)}" stroke-width="2"`:`fill="${mark(k)}"`}/><text x="${x+18}" y="${y}" font-size="12" fill="${fg}" font-family="IBM Plex Sans,sans-serif">${WIN[k].label}</text>`;x+=110})}
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${g}</svg>`;
+}
+
+function colorOf(k){return (P.opts.colors&&P.opts.colors[k])||css(WIN[k].v)}
+function markOf(k){const c=colorOf(k);return P.opts.colors&&P.opts.colors[k]&&isLight(c)?darken(c,0.55):c}
+const CLASSIC=[["#FFFFFF","branco (só contornos)"],["#AEC6F5","azul claro"],["#B5E2B8","verde claro"],["#FFF3A6","amarelo claro"],["#FFD3A3","laranja claro"],["#F7B6B6","vermelho claro"],["#F5B8E0","rosa claro"],["#D9C8F5","lilás"],["#B8EAF0","ciano claro"],["#CFE8A8","verde-lima claro"],["#FFE0C2","pêssego"],["#E6DCC8","bege"],["#D9D9D9","cinza claro"]];
+let openPop=null;
+function renderColors(){const row=$("colorRow");row.innerHTML='<span class="hint">cores das regiões:</span>'+WKEYS.map(k=>`<span class="cwrap" data-k="${k}"><button class="sw" data-open="${k}" title="Escolher cor" style="background:${toHex(colorOf(k))}"></button><span class="hint">${WIN[k].label}</span></span>`).join("")+'<button class="small ghost" id="btnColorsReset">padrão</button>';
+  row.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();const k=b.dataset.open;if(openPop&&openPop.dataset.k===k){closePop();return}closePop();
+    const pop=document.createElement("div");pop.className="pop";pop.dataset.k=k;const cur=toHex(colorOf(k)).toLowerCase();
+    pop.innerHTML=CLASSIC.map(([c,n])=>`<button class="s" data-c="${c}" title="${n}" style="background:${c}" aria-pressed="${c.toLowerCase()===cur}"></button>`).join("")+`<button class="more">Mais cores…</button><input type="color" value="${cur}">`;
+    pop.querySelectorAll("[data-c]").forEach(sb=>sb.addEventListener("click",()=>{setColor(k,sb.dataset.c);closePop()}));
+    const inp=pop.querySelector("input[type=color]");pop.querySelector(".more").addEventListener("click",()=>inp.click());inp.addEventListener("input",()=>setColor(k,inp.value));
+    pop.addEventListener("click",e2=>e2.stopPropagation());b.parentElement.appendChild(pop);openPop=pop}));
+  $("btnColorsReset").addEventListener("click",()=>{P.opts.colors={};renderColors();render()})}
+function closePop(){if(openPop){openPop.remove();openPop=null}}
+document.addEventListener("click",closePop);
+function setColor(k,c){P.opts.colors=P.opts.colors||{};P.opts.colors[k]=c;const sw=document.querySelector(`[data-open="${k}"]`);if(sw)sw.style.background=c;render()}
+function darken(hex,f){const h=toHex(hex);const n=parseInt(h.slice(1),16);const r=Math.round(((n>>16)&255)*f),g=Math.round(((n>>8)&255)*f),b=Math.round((n&255)*f);return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join("")}
+function isLight(hex){const h=toHex(hex);const n=parseInt(h.slice(1),16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return (0.2126*r+0.7152*g+0.0722*b)/255>0.6}
+function toHex(c){c=String(c).trim();if(/^#[0-9a-f]{6}$/i.test(c))return c;const m=c.match(/\d+/g);if(m&&m.length>=3)return "#"+m.slice(0,3).map(n=>(+n).toString(16).padStart(2,"0")).join("");return "#888888"}
+function render(){
+  const svg=$("plot"); svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.innerHTML=buildSVG(false).replace(/^<svg[^>]*>|<\/svg>$/g,"");
+  const pts=points();
+  $("legend").innerHTML=WKEYS.map(k=>`<span><svg viewBox="0 0 16 16"><path d="${markerPath(WIN[k].shape,8,8,5)}" ${P.opts.hollow!==false?`fill="none" stroke="${markOf(k)}" stroke-width="1.8"`:`fill="${markOf(k)}"`}/></svg>${WIN[k].label}</span>`).join("");
+  $("npts").textContent=pts.length+" pontos";
+  renderTable(pts); save();
+}
+
+// ---------- hover ----------
+let tip=null;
+$("plot").addEventListener("mousemove",e=>{const m=e.target.closest(".marker");const wrap=$("plotwrap");
+  if(!m){if(tip){tip.remove();tip=null}return}
+  const p=points()[+m.dataset.i]; if(!tip){tip=document.createElement("div");tip.className="tip";wrap.appendChild(tip)}
+  const rb=wrap.getBoundingClientRect();
+  tip.style.left=(e.clientX-rb.left)+"px";tip.style.top=(e.clientY-rb.top)+"px";
+  tip.textContent=`${p.series}${p.kind==="t"?(p.idx===0?" · origem":" · adição "+p.idx):""} · água ${(p.w*100).toFixed(1)}% · C/T ${(p.s*100).toFixed(1)}% · óleo ${(p.o*100).toFixed(1)}% · ${WIN[p.win]?WIN[p.win].label:p.win}${p.note?" · "+p.note:""}`;
+});
+$("plot").addEventListener("mouseleave",()=>{if(tip){tip.remove();tip=null}});
+
+// ---------- series editor (table) ----------
+function renderSeries(){
+  const box=$("seriesList"); box.innerHTML="";
+  if(!P.series.length){box.innerHTML='<p class="hint">Nenhuma linha de titulação. Clique em "+ Linha de titulação".</p>'}
+  P.series.forEach((s,i)=>{
+    s.rows=s.rows||[];const tube=+s.tube||0,base=(+s.sc||0)+(+s.fixedMass||0);
+    const d=document.createElement("div");d.className="series";
+    const sel=(v)=>WKEYS.map(k=>`<option value="${k}" ${v===k?"selected":""}>${WIN[k].label}</option>`).join("");
+    d.innerHTML=`<div class="head">
+      <div class="field"><label>Nome / razão</label><input type="text" data-k="name" value="${esc(s.name)}"></div>
+      <div class="field"><label>Tubo + peixe (g)</label><input type="number" step="0.0001" data-k="tube" value="${s.tube??0}"></div>
+      <div class="field"><label>Massa C/T (g)</label><input type="number" step="0.0001" data-k="sc" value="${s.sc??0}"></div>
+      <div class="field"><label>Fase fixa</label><select data-k="fixed"><option value="oil" ${s.fixed!=="water"?"selected":""}>Óleo (titula água)</option><option value="water" ${s.fixed==="water"?"selected":""}>Água (titula óleo)</option></select></div>
+      <div class="field"><label>Massa da fase fixa (g)</label><input type="number" step="0.0001" data-k="fixedMass" value="${s.fixedMass??0}"></div>
+      <div class="field"><label>Classe inicial</label><select data-k="init">${sel(s.init||"I")}</select></div>
+      <button class="small ghost" data-del title="Remover linha">✕</button></div>
+      <div class="hint">Massa inicial (tubo + C/T + fase fixa): <span class="derived">${(tube+base).toFixed(4)} g</span> · mistura: <span class="derived">${base?((+s.sc||0)/base*100).toFixed(1):"–"} % C/T</span></div>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Massa total lida (g)</th><th>Titulante (g)</th><th>% titulante</th><th>Transição?</th><th>Nova classe</th><th>Observação</th><th></th></tr></thead><tbody>
+      ${s.rows.map((r,j)=>{const t=(+r.total||0)-tube-base,pct=t>0?t/(base+t)*100:NaN;return `<tr data-j="${j}"><td>${j+1}</td>
+        <td><input type="number" step="0.0001" data-r="total" value="${r.total??""}"></td>
+        <td class="derived">${t>0?t.toFixed(4):"—"}</td><td class="derived">${t>0?pct.toFixed(1):"—"}</td>
+        <td style="text-align:center"><input type="checkbox" data-r="trans" ${r.trans?"checked":""}></td>
+        <td><select data-r="to" ${r.trans?"":"disabled"}>${sel(r.to||"I")}</select></td>
+        <td><input type="text" data-r="note" value="${esc(r.note||"")}" placeholder="ex.: ficou turvo"></td>
+        <td><button class="small ghost" data-rdel>✕</button></td></tr>`}).join("")}</tbody></table></div>
+      <div class="foot"><button class="small" data-addrow>+ Adição</button><input type="text" data-paste placeholder="colar massas totais lidas (g), separadas por vírgula — substitui as adições"><button class="small ghost" data-pastebtn>Aplicar</button></div>`;
+    d.querySelectorAll("[data-k]").forEach(inp=>inp.addEventListener("change",()=>{const k=inp.dataset.k;
+      s[k]=(k==="tube"||k==="sc"||k==="fixedMass")?+inp.value:inp.value;renderSeries();render()}));
+    d.querySelectorAll("tr[data-j]").forEach(tr=>{const r=s.rows[+tr.dataset.j];
+      tr.querySelectorAll("[data-r]").forEach(el=>el.addEventListener("change",()=>{const k=el.dataset.r;
+        if(k==="trans"){r.trans=el.checked;if(r.trans&&!r.to)r.to="I"}else if(k==="total")r.total=+el.value;else r[k]=el.value;renderSeries();render()}));
+      tr.querySelector("[data-rdel]").addEventListener("click",()=>{s.rows.splice(+tr.dataset.j,1);renderSeries();render()})});
+    d.querySelector("[data-addrow]").addEventListener("click",()=>{const last=s.rows.length?+s.rows[s.rows.length-1].total:tube+base;s.rows.push({total:+(last+0.2).toFixed(4),trans:false,to:"I",note:""});renderSeries();render();
+      const inputs=d.parentElement.querySelectorAll('input[data-r="total"]');});
+    d.querySelector("[data-pastebtn]").addEventListener("click",()=>{const v=d.querySelector("[data-paste]").value.split(/[,;\s]+/).map(x=>+x.replace(",", ".")).filter(n=>n>0);
+      if(!v.length)return;s.rows=v.map(t=>({total:t,trans:false,to:"I",note:""}));renderSeries();render()});
+    d.querySelector("[data-del]").addEventListener("click",()=>{P.series.splice(i,1);renderSeries();render()});
+    box.appendChild(d);
+  });
+}
+$("addSeries").addEventListener("click",()=>{P.series.push({name:"nova",tube:0,sc:0.8,fixed:"oil",fixedMass:0.8,init:"I",rows:[],labels:[]});renderSeries();render()});
+$("sortSeries").addEventListener("click",()=>{const key=s=>{const b=(+s.sc||0)+(+s.fixedMass||0);return s.fixed==="water"?-1-(+s.sc||0)/b:(+s.fixedMass||0)/b};P.series.sort((a,b)=>key(a)-key(b));renderSeries();render()});
+
+// ---------- free points ----------
+function renderFree(){
+  const box=$("freeList");box.innerHTML="";P.free=P.free||[];
+  if(!P.free.length){box.innerHTML='<p class="hint">Nenhum ponto avulso.</p>';return}
+  const t=document.createElement("div");t.className="tablewrap";
+  t.innerHTML=`<table><thead><tr><th>Série</th><th>C/T %</th><th>Água %</th><th>Óleo %</th><th>Classe</th><th>Rótulo</th><th></th></tr></thead><tbody>${P.free.map((f,i)=>`<tr data-i="${i}">
+    <td><input type="text" data-k="series" value="${esc(f.series||"")}"></td>
+    <td><input type="number" step="0.1" data-k="s" value="${f.s}"></td>
+    <td><input type="number" step="0.1" data-k="w" value="${f.w}"></td>
+    <td><input type="number" step="0.1" data-k="o" value="${f.o}"></td>
+    <td><select data-k="win">${WKEYS.map(k=>`<option value="${k}" ${f.win===k?"selected":""}>${WIN[k].label}</option>`).join("")}</select></td>
+    <td><input type="text" data-k="label" value="${esc(f.label||"")}"></td>
+    <td><button class="small ghost" data-del>✕</button></td></tr>`).join("")}</tbody></table>`;
+  t.querySelectorAll("tr").forEach(tr=>{const f=P.free[+tr.dataset.i];
+    tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{const k=el.dataset.k;f[k]=(k==="s"||k==="w"||k==="o")?+el.value:el.value;render()}));
+    tr.querySelector("[data-del]").addEventListener("click",()=>{P.free.splice(+tr.dataset.i,1);renderFree();render()})});
+  box.appendChild(t);
+}
+$("addFree").addEventListener("click",()=>{P.free.push({series:"Pontos",s:20,w:40,o:40,win:"I",label:""});renderFree();render()});
+
+// ---------- points table (derived; class comes from the transitions) ----------
+function renderTable(pts){
+  const tb=$("ptable").querySelector("tbody");
+  tb.innerHTML=pts.map((p,i)=>`<tr data-i="${i}"><td>${esc(p.series)}</td><td>${p.kind==="t"?(p.idx===0?"0 (origem)":p.idx):"—"}</td><td>${p.kind==="t"?p.aq.toFixed(4):"—"}</td>
+    <td>${(p.w*100).toFixed(1)}</td><td>${(p.s*100).toFixed(1)}</td><td>${(p.o*100).toFixed(1)}</td>
+    <td>${WIN[p.win]?WIN[p.win].label:p.win}</td>
+    <td><input type="text" data-label value="${esc(p.label)}" placeholder="—"></td></tr>`).join("");
+  tb.querySelectorAll("tr").forEach(tr=>{const p=pts[+tr.dataset.i];
+    tr.querySelector("[data-label]").addEventListener("change",e=>{const v=e.target.value;
+      if(p.kind==="t"){const s=P.series[p.si];if(p.idx===0)s.label0=v;else{s.labels=s.labels||[];s.labels[p.idx-1]=v}}else P.free[p.fi].label=v;render()});
+  });
+}
+
+// ---------- options & vertices ----------
+const optMap={optGrid:"grid",optTicks:"ticks",optLines:"lines",optLabels:"labels",optSeriesLabels:"seriesLabels",optRegions:"regions",optBoundary:"boundary",optAreaLabels:"areaLabels",optHollow:"hollow"};
+$("optView").addEventListener("change",()=>{P.opts.view=$("optView").value;render()});
+Object.entries(optMap).forEach(([id,k])=>$(id).addEventListener("change",()=>{P.opts[k]=$(id).checked;render()}));
+$("optStep").addEventListener("change",()=>{P.opts.step=+$("optStep").value;render()});
+$("optSize").addEventListener("input",()=>{P.opts.size=+$("optSize").value;render()});
+[["vLeft","left"],["vTop","top"],["vRight","right"]].forEach(([id,k])=>$(id).addEventListener("input",()=>{P.vertices[k]=$(id).value;render()}));
+$("dName").addEventListener("input",()=>{P.name=$("dName").value;renderDTabs();save()});
+$("pName").addEventListener("input",()=>{proj().name=$("pName").value;renderPTabs();renderDTabs();save()});
+let undo=null,pendingDel=null;
+function askDelete(msg,fn){pendingDel=fn;$("confirmMsg").textContent=msg;$("confirmBox").hidden=false;$("confirmYes").focus()}
+$("confirmYes").addEventListener("click",()=>{const f=pendingDel;pendingDel=null;$("confirmBox").hidden=true;if(f)f()});
+$("confirmNo").addEventListener("click",()=>{pendingDel=null;$("confirmBox").hidden=true});
+$("btnUndo").addEventListener("click",()=>{if(!undo)return;if(undo.kind==="proj"){WS.projects.splice(Math.min(undo.at,WS.projects.length),0,undo.item);WS.curP=Math.min(undo.at,WS.projects.length-1);WS.curD=0}else{proj().diagrams.splice(Math.min(undo.at,proj().diagrams.length),0,undo.item);WS.curD=Math.min(undo.at,proj().diagrams.length-1)}P=proj().diagrams[WS.curD];undo=null;$("btnUndo").hidden=true;initUI();status("Exclusão desfeita")});
+$("btnRestoreLuciane").addEventListener("click",()=>{const ex=example();ex.name="DL1";let pr=WS.projects.find(x=>x.name==="Mestrado Luciane");if(!pr){pr={name:"Mestrado Luciane",diagrams:[]};WS.projects.push(pr)}pr.diagrams.push(ex);WS.curP=WS.projects.indexOf(pr);WS.curD=pr.diagrams.length-1;P=ex;initUI();status("Projeto Mestrado Luciane recriado com DL1")});
+$("btnDelProj").addEventListener("click",()=>askDelete(`Realmente deseja excluir o projeto "${proj().name}" com ${proj().diagrams.length} diagrama(s)? A exclusão pode ser desfeita até a próxima exclusão.`,()=>{undo={kind:"proj",item:proj(),at:WS.curP};$("btnUndo").hidden=false;if(WS.projects.length<=1){WS.projects=[{name:"Projeto 1",diagrams:[blank("Diagrama 1")]}]}else WS.projects.splice(WS.curP,1);WS.curP=Math.max(0,Math.min(WS.curP,WS.projects.length-1));WS.curD=0;P=proj().diagrams[0];initUI();status("Projeto excluído")}));
+$("moveTo").addEventListener("change",()=>{const t=+$("moveTo").value;if($("moveTo").value===""||t===WS.curP)return;const ds=proj().diagrams;ds.splice(WS.curD,1);if(!ds.length)ds.push(blank("Diagrama 1"));WS.projects[t].diagrams.push(P);WS.curP=t;WS.curD=WS.projects[t].diagrams.length-1;initUI();status("Diagrama movido para "+WS.projects[t].name)});
+$("btnDup").addEventListener("click",()=>{const c=normalize(JSON.parse(JSON.stringify(P)));c.name=(P.name||"Diagrama")+" (cópia)";proj().diagrams.splice(WS.curD+1,0,c);WS.curD++;P=c;initUI();status("Diagrama duplicado")});
+$("btnDelDiag").addEventListener("click",()=>askDelete(`Realmente deseja excluir o diagrama "${P.name}" do projeto "${proj().name}"?`,()=>{const ds=proj().diagrams;undo={kind:"diag",item:P,at:WS.curD};$("btnUndo").hidden=false;if(ds.length<=1){P=blank("Diagrama 1");proj().diagrams=[P];WS.curD=0}else{ds.splice(WS.curD,1);WS.curD=Math.max(0,WS.curD-1);P=ds[WS.curD]}initUI();status("Diagrama excluído")}));
+
+// ---------- tabs ----------
+const tabs=[["tabT","paneT"],["tabP","paneP"],["tabD","paneD"]];
+tabs.forEach(([t,p])=>$(t).addEventListener("click",()=>{tabs.forEach(([t2,p2])=>{$(t2).setAttribute("aria-selected",t2===t);$(p2).hidden=p2!==p});if(p==="paneD")$("jsonBox").value=JSON.stringify(P,null,1)}));
+
+// ---------- export ----------
+let dl=null; (async()=>{try{dl=await (window.claude&&window.claude.use?window.claude.use("downloads"):null)}catch(e){dl=null}
+  if(!dl&&!window.claude){dl={save:async({filename,data})=>{const blob=data instanceof Blob?data:new Blob([data],{type:filename.endsWith(".svg")?"image/svg+xml":filename.endsWith(".json")?"application/json":"text/plain"});const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)}}}
+  if(!dl){$("btnSvg").hidden=$("btnPng").hidden=$("btnCsv").hidden=$("btnJsonSave").hidden=$("btnJsonSaveAll").hidden=true;$("status").textContent="Download indisponível nesta visualização; use “Copiar SVG”."}})();
+function status(t){$("status").textContent=t;setTimeout(()=>{if($("status").textContent===t)$("status").textContent=""},4000)}
+function slug(){return (P.name||"diagrama").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"")||"diagrama"}
+async function saveFile(name,data){if(!dl)return;try{await dl.save({filename:name,data});status("Arquivo salvo: "+name)}catch(e){if(e&&e.code!=="declined")status("Não foi possível salvar ("+(e.code||"erro")+")")}}
+$("btnSvg").addEventListener("click",()=>saveFile(slug()+".svg",buildSVG(true)));
+$("btnPng").addEventListener("click",()=>{const svg=buildSVG(true),scale=3;const img=new Image();
+  img.onload=()=>{const c=document.createElement("canvas");c.width=W*scale;c.height=H*scale;const cx=c.getContext("2d");cx.scale(scale,scale);cx.drawImage(img,0,0);c.toBlob(b=>saveFile(slug()+".png",b),"image/png")};
+  img.onerror=()=>status("Falha ao rasterizar o PNG");img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg)});
+function csv(){const pts=points();return "serie,adicao,titulante_g,agua_pct,ct_pct,oleo_pct,classe,rotulo,observacao\n"+pts.map(p=>[p.series,p.kind==="t"?p.idx:"",p.kind==="t"?p.aq.toFixed(4):"",(p.w*100).toFixed(2),(p.s*100).toFixed(2),(p.o*100).toFixed(2),p.win,p.label,p.note||""].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n")}
+$("btnCsv").addEventListener("click",()=>saveFile(slug()+"_pontos.csv",csv()));
+$("btnJsonSave").addEventListener("click",()=>saveFile(slug()+".json",JSON.stringify(P,null,1)));
+$("btnJsonSaveAll").addEventListener("click",()=>saveFile("projetos_ternarios.json",JSON.stringify(WS,null,1)));
+$("btnCopy").addEventListener("click",()=>{const s=buildSVG(true);navigator.clipboard.writeText(s).then(()=>status("SVG copiado para a área de transferência")).catch(()=>{$("jsonBox").value=s;$("tabD").click();status("Copie o SVG do campo de texto")})});
+
+// ---------- import ----------
+function importObj(obj,replaceCurrent){
+  if(obj&&Array.isArray(obj.projects)){WS={projects:obj.projects.map(normProj),curP:0,curD:0};P=proj().diagrams[0];initUI();status(WS.projects.length+" projetos carregados");return}
+  if(obj&&Array.isArray(obj.diagrams)){WS.projects.push(normProj({name:obj.name||"Projeto importado",diagrams:obj.diagrams}));WS.curP=WS.projects.length-1;WS.curD=0;P=proj().diagrams[0];initUI();status("Projeto importado");return}
+  if(!obj||!Array.isArray(obj.series))throw new Error("formato");
+  const d=normalize(obj);const ds=proj().diagrams;
+  if(replaceCurrent){ds[WS.curD]=d;P=d}else{ds.push(d);WS.curD=ds.length-1;P=d}
+  initUI();status("Diagrama carregado");
+}
+$("btnJsonLoad").addEventListener("click",()=>{try{importObj(JSON.parse($("jsonBox").value),true)}catch(e){status("JSON inválido")}});
+$("btnJsonFill").addEventListener("click",()=>{$("jsonBox").value=JSON.stringify(P,null,1)});
+$("btnReset").addEventListener("click",()=>{const e=example();e.name=P.name||e.name;proj().diagrams[WS.curD]=e;P=e;initUI();status("Exemplo restaurado")});
+$("btnClear").addEventListener("click",()=>{P.series=[];P.free=[];initUI()});
+$("fileIn").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const txt=String(rd.result);
+  try{importObj(JSON.parse(txt),false);return}catch(err){}
+  const rows=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);const head=rows.shift().toLowerCase().split(/[,;\t]/).map(h=>h.trim().replace(/"/g,""));
+  const ix=n=>head.findIndex(h=>h.startsWith(n));const iS=ix("serie"),iSC=head.findIndex(h=>/^(sc|c\/t|t\/c|ct|tc|tens)/.test(h)),iW=ix("agua"),iO=ix("oleo"),iWin=head.findIndex(h=>/^(winsor|classe)/.test(h)),iL=ix("rot");
+  if(iSC<0||iW<0||iO<0){status("CSV sem colunas sc/agua/oleo");return}
+  P.free=P.free||[];rows.forEach(r=>{const c=r.split(/[,;\t]/).map(x=>x.replace(/"/g,"").trim());P.free.push({series:iS>=0?c[iS]:"Importado",s:+c[iSC],w:+c[iW],o:+c[iO],win:(iWin>=0&&WKEYS.includes(c[iWin].toUpperCase()))?c[iWin].toUpperCase():"I",label:iL>=0?c[iL]:""})});
+  initUI();$("tabP").click();status(rows.length+" pontos importados")};rd.readAsText(f);e.target.value=""});
+
+function initUI(){pendingDel=null;$("confirmBox").hidden=true;renderPTabs();renderDTabs();renderSeries();renderFree();Object.entries(optMap).forEach(([id,k])=>$(id).checked=!!P.opts[k]);$("optView").value=P.opts.view||"both";$("optStep").value=String(P.opts.step||10);$("optSize").value=P.opts.size||7;
+  [["vLeft","left"],["vTop","top"],["vRight","right"]].forEach(([id,k])=>$(id).value=P.vertices[k]);$("dName").value=P.name||"";$("pName").value=proj().name||"";renderColors();$("jsonBox").value=JSON.stringify(P,null,1);render()}
+initUI();
+
+// ---------- espelho online (API em /api, quando a página é servida pelo servidor) ----------
+const BRIDGE=(()=>{try{return window.parent!==window&&typeof window.parent.__lcpTernario==="function"?window.parent.__lcpTernario:null}catch(e){return null}})();
+const API=BRIDGE?"ponte":/^https?:$/.test(location.protocol)?"/api":null;
+let somenteLeitura=false;
+function setBadge(state,txt){const b=$("syncBadge");if(!b)return;b.className=state;b.textContent=txt}
+async function api(method,path,body){if(BRIDGE){try{return await BRIDGE(method,path,body)}catch(e){throw Object.assign(new Error(e&&e.message||String(e)),{status:e&&e.status})}}
+  const r=await fetch(API+path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined,cache:"no-store"});
+  if(r.status===404)throw Object.assign(new Error("404 "+path),{status:404});if(!r.ok)throw new Error(method+" "+path+" → "+r.status);return r.status===204?null:r.json()}
+function diagData(d){const o=Object.assign({},d);delete o.id;return o}
+function projectsFromServer(w){return w.projects.map(p=>normProj({id:p.id,name:p.name,diagrams:p.diagrams.map(d=>Object.assign(normalize(d.data||{}),{id:d.id,name:d.name}))}))}
+function fillCache(){syncCache={p:{},d:{}};WS.projects.forEach((p,i)=>{if(p.id)syncCache.p[p.id]=JSON.stringify({name:p.name,position:i});p.diagrams.forEach((d,j)=>{if(d.id)syncCache.d[d.id]=JSON.stringify({name:d.name,project_id:p.id,position:j,data:diagData(d)})})})}
+function adoptServer(w){const curPid=proj().id,curDid=P.id;WS.projects=projectsFromServer(w);serverStamp=w.updated_at;
+  let pi=WS.projects.findIndex(p=>p.id===curPid);if(pi<0)pi=0;WS.curP=pi;let di=proj().diagrams.findIndex(d=>d.id===curDid);WS.curD=di<0?0:di;P=proj().diagrams[WS.curD];
+  fillCache();lastSnap=JSON.stringify(WS);try{localStorage.setItem(KEY,lastSnap)}catch(e){}hist=[];future=[];initUI()}
+async function connect(){if(!API)return;let h;try{h=await api("GET","/health")}catch(e){if(BRIDGE){setBadge("err","● "+(e.message||"sem acesso ao banco"))}return}
+  if(h&&h.podeEditar===false){somenteLeitura=true;online=true;try{const w=await api("GET","/workspace");if(w.projects.length)adoptServer(w)}catch(e){}
+    setBadge("busy","● somente leitura (alterações não são salvas no banco)");setInterval(pollServer,15000);return}
+  online=true;setBadge("busy","● conectando…");
+  try{const w=await api("GET","/workspace");
+    if(w.projects.length){adoptServer(w);setBadge("ok","● online · salvo no banco LC PETRO")}
+    else{WS.projects.forEach(p=>{delete p.id;p.diagrams.forEach(d=>delete d.id)});syncCache={p:{},d:{}};await syncNow();status("Dados locais enviados para o servidor")}
+  }catch(e){online=false;setBadge("err","● erro ao conectar ao servidor");console.warn(e);return}
+  setInterval(pollServer,15000)}
+function scheduleSync(){if(!online||somenteLeitura)return;dirty=true;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,700)}
+async function syncNow(){if(!online||syncing)return;syncing=true;dirty=false;setBadge("busy","● salvando…");
+  try{const seenP=new Set(),seenD=new Set();
+    for(let i=0;i<WS.projects.length;i++){const p=WS.projects[i];const rec={name:p.name,position:i};const key=JSON.stringify(rec);
+      if(!p.id){const r=await api("POST","/projects",rec);p.id=r.id}
+      else if(syncCache.p[p.id]!==key){try{await api("PATCH","/projects/"+p.id,rec)}catch(e){if(e.status===404){const r=await api("POST","/projects",rec);p.id=r.id}else throw e}}
+      syncCache.p[p.id]=key;seenP.add(p.id);
+      for(let j=0;j<p.diagrams.length;j++){const d=p.diagrams[j];const rec2={name:d.name,project_id:p.id,position:j,data:diagData(d)};const k2=JSON.stringify(rec2);
+        if(!d.id){const r=await api("POST","/projects/"+p.id+"/diagrams",rec2);d.id=r.id}
+        else if(syncCache.d[d.id]!==k2){try{await api("PUT","/diagrams/"+d.id,rec2)}catch(e){if(e.status===404){const r=await api("POST","/projects/"+p.id+"/diagrams",rec2);d.id=r.id}else throw e}}
+        syncCache.d[d.id]=k2;seenD.add(d.id)}}
+    for(const id of Object.keys(syncCache.d))if(!seenD.has(+id)){await api("DELETE","/diagrams/"+id);delete syncCache.d[id]}
+    for(const id of Object.keys(syncCache.p))if(!seenP.has(+id)){await api("DELETE","/projects/"+id);delete syncCache.p[id]}
+    const w=await api("GET","/workspace");serverStamp=w.updated_at;
+    if(!dirty){lastSnap=JSON.stringify(WS);try{localStorage.setItem(KEY,lastSnap)}catch(e){}}
+    setBadge("ok","● online · salvo no banco LC PETRO")}
+  catch(e){setBadge("err","● erro ao salvar no servidor (dados guardados no navegador)");console.warn(e)}
+  finally{syncing=false;if(dirty)scheduleSync()}}
+async function pollServer(){if(!online||syncing||(dirty&&!somenteLeitura))return;const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  try{const w=await api("GET","/workspace");if(w.updated_at&&w.updated_at!==serverStamp){adoptServer(w);status("Atualizado com alterações feitas em outro navegador")}}catch(e){}}
+connect();
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{renderColors();render()})}catch(e){}
+new MutationObserver(render).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
+
+</body>
+</html>

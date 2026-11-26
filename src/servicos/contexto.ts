@@ -149,3 +149,9 @@ export async function listarTodosProjetos(): Promise<Projeto[]> {
 export async function definirAdministrador(usuarioId: string, administrador: boolean) {
   verificar(await supabase.from('perfis').update({ administrador }).eq('id', usuarioId))
 }
+
+export async function podeVerModulo(modulo: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('pode_ver_modulo', { p_modulo: modulo })
+  if (error) return false
+  return Boolean(data)
+}

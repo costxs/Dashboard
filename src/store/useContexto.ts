@@ -10,6 +10,7 @@ interface EstadoContexto {
   sessao: Session | null;
   sessaoCarregada: boolean;
   perfil: Perfil | null;
+  podeVerTernario: boolean;
 
   empresaId: string | null;
   empresaSigla: string | null;
@@ -25,6 +26,7 @@ interface EstadoContexto {
 
   definirSessao: (s: Session | null) => void;
   definirPerfil: (p: Perfil | null) => void;
+  definirPodeVerTernario: (v: boolean) => void;
   escolherEmpresa: (e: { id: string; sigla: string; nome: string; logo_url?: string | null } | null) => void;
   escolherProjeto: (p: { id: string; nome: string } | null) => void;
   definirBusca: (b: string) => void;
@@ -39,6 +41,7 @@ export const useContexto = create<EstadoContexto>()(
       sessao: null,
       sessaoCarregada: false,
       perfil: null,
+      podeVerTernario: false,
       empresaId: null,
       empresaSigla: null,
       empresaNome: null,
@@ -51,6 +54,7 @@ export const useContexto = create<EstadoContexto>()(
 
       definirSessao: (sessao) => set({ sessao, sessaoCarregada: true }),
       definirPerfil: (perfil) => set({ perfil }),
+      definirPodeVerTernario: (podeVerTernario) => set({ podeVerTernario }),
       escolherEmpresa: (e) =>
         set({
           empresaId: e?.id ?? null,
@@ -66,7 +70,7 @@ export const useContexto = create<EstadoContexto>()(
       abrirMenuMobile: (aberto) => set({ menuMobileAberto: aberto }),
       limpar: () =>
         set({
-          sessao: null, perfil: null, empresaId: null, empresaSigla: null, empresaNome: null, empresaLogoUrl: null,
+          sessao: null, perfil: null, podeVerTernario: false, empresaId: null, empresaSigla: null, empresaNome: null, empresaLogoUrl: null,
           projetoId: null, projetoNome: null, busca: "",
         }),
     }),

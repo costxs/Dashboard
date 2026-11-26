@@ -32,7 +32,7 @@ RUN printf 'server {\n\
     # index.html sempre revalida: cada deploy aparece sem precisar limpar o cache\n\
     location / {\n\
         add_header Cache-Control "no-cache, must-revalidate" always;\n\
-        try_files $uri $uri/ /index.html;\n\
+        try_files $uri /index.html;\n\
     }\n\
     # arquivos do build têm hash no nome: podem ficar em cache por 1 ano\n\
     location /assets/ {\n\

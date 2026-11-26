@@ -11,17 +11,24 @@ import { ProjectSelectionPage } from "./pages/ProjectSelectionPage";
 import { RedefinirSenhaPage } from "./pages/RedefinirSenhaPage";
 import { SampleDetailPage } from "./pages/SampleDetailPage";
 import { SamplesListPage } from "./pages/SamplesListPage";
-import { meuPerfil, sair } from "./servicos/contexto";
+import { TernarioPage } from "./ternario/TernarioPage";
+import { meuPerfil, podeVerModulo, sair } from "./servicos/contexto";
 import { iniciarAutenticacao, useContexto } from "./store/useContexto";
 
 function App() {
   const sessao = useContexto((s) => s.sessao);
   const definirPerfil = useContexto((s) => s.definirPerfil);
+  const definirPodeVerTernario = useContexto((s) => s.definirPodeVerTernario);
 
   useEffect(() => (supabaseConfigurado ? iniciarAutenticacao() : undefined), []);
   useEffect(() => {
-    if (sessao) meuPerfil().then(definirPerfil).catch(() => definirPerfil(null));
-  }, [sessao, definirPerfil]);
+    if (sessao) {
+      meuPerfil().then(definirPerfil).catch(() => definirPerfil(null));
+      podeVerModulo("ternario").then(definirPodeVerTernario).catch(() => definirPodeVerTernario(false));
+    } else {
+      definirPodeVerTernario(false);
+    }
+  }, [sessao, definirPerfil, definirPodeVerTernario]);
 
   if (!supabaseConfigurado) return <FaltaConfiguracao />;
 
@@ -39,6 +46,7 @@ function App() {
           <Route path="/comparacao" element={<RequerContexto><ComparacaoPage /></RequerContexto>} />
           <Route path="/analises" element={<Navigate to="/amostras" replace />} />
           <Route path="/literatura" element={<RequerContexto><LiteraturePage /></RequerContexto>} />
+          <Route path="/ternario" element={<TernarioPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
