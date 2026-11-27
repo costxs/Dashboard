@@ -292,7 +292,18 @@ export const SeriesRdaPanel: React.FC = () => {
               <CartaoNumero rotulo="Regime" valor={<SeloRegime regime={resultado.regime} />} />
             </div>
             <ListaAvisos avisos={resultado.avisos} />
-            {grafico && <GraficoLevichSerie medias={grafico.medias} discos={grafico.discos} reta={grafico.reta} />}
+            {grafico && (
+              <GraficoLevichSerie
+                medias={grafico.medias}
+                discos={grafico.discos}
+                reta={grafico.reta}
+                r2={resultado.r2}
+                sc={resultado.sc}
+                dCm2S={resultado.d_cm2_s}
+                regime={resultado.regime}
+                nomeSerie={f.nome.trim() || null}
+              />
+            )}
             <div className="-mx-6 overflow-x-auto px-6">
               <table className="table text-[13px]">
                 <thead><tr><th className="text-right">Rotação (rpm)</th><th className="text-right">√ω</th><th className="text-right">n</th><th className="text-right">TR média</th><th className="text-right">Desvio</th><th>Discos</th></tr></thead>

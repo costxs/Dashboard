@@ -1,30 +1,44 @@
 // REATIVIDADE › Dissolução dinâmica (RDA) › Boletim de disco.
 //   - importa o boletim do laboratório (.xlsx: lerBoletimRda) ou lança à mão (mesmos campos + tabela de leituras);
 //   - acha o disco (amostra) pelo código e o sistema ácido igual ao do boletim; oferece criar os que faltam;
-//   - prévia ao vivo com calcularBoletim (pontos, [H⁺] × tempo com a reta, TR, R², área corrigida, perda de massa);
-//   - grava com gravarBoletimRda (atualiza o ensaio "aguardando resultado" que veio do controle, se houver).
+//   - prévia ao vivo com calcularBoletim + gráfico científico padrão Origin ([H⁺], Δ[H⁺], [Ca²⁺], exportação PNG 300 dpi/SVG/PDF/CSV);
+//   - salva TODOS os dados na amostra: analise_rda, rda_leituras, curvas ([H⁺], [Ca²⁺], [Mg²⁺]), cadastro físico do disco,
+//     petrofísica (φ, K, massas antes/depois) e anexo da planilha .xlsx original.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardPaste, FilePlus2, Plus, Save, Trash2, Upload } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle2, ClipboardPaste, ExternalLink, FilePlus2, Paperclip, Plus, Save, Trash2, Upload } from 'lucide-react'
+import { LISTA_ANALISES } from '../../../config/analises'
 import { supabase } from '../../../lib/supabase'
 import { lerArquivoBruto } from '../../../importador/lerArquivo'
 import { acharSistemaIgual } from '../../../importador/cadastroReatividade'
 import { calcularBoletim, concentracaoInicialMolL, reta, type EntradaBoletim, type Mineral } from '../../../reatividade/calculoRda'
 import { gravarBoletimRda, sistemaDoBoletim } from '../../../reatividade/gravarRda'
 import { lerBoletimRda, type BoletimLido } from '../../../reatividade/lerBoletimRda'
-import { buscarAmostraPorCodigo, listarLitologias, listarProjetos, listarSistemasAcidos, salvarAmostra, type AmostraResumo } from '../../../servicos/api'
+import {
+  buscarAmostraPorCodigo,
+  listarArquivosAnexos,
+  listarLitologias,
+  listarProjetos,
+  listarSistemasAcidos,
+  salvarAmostra,
+  uploadArquivoStorage,
+  type AmostraResumo,
+} from '../../../servicos/api'
 import { useContexto } from '../../../store/useContexto'
 import type { Litologia, Projeto, SistemaAcido } from '../../../tipos/banco'
 import { mensagemErro } from '../../../utils/formatacao'
 import { Alert, Badge, Button, Card, Input, Select } from '../../UI'
-import { CartaoNumero, GraficoHTempo, ListaAvisos } from './comum'
+import { CartaoNumero, GraficoHTempo, ListaAvisos, type PontoRdaGrafico } from './comum'
 import { cient, lerNumero, num, paraCampo, temErro } from './numeros'
 
 interface Linha { rotulo: string; tempo: string; ca: string; mg: string }
 
+const CFG_RDA = LISTA_ANALISES.find((c) => c.chave === 'rda')!
+
 const VAZIO = {
   codigo: '', estudo: '', operadores: '', data_inicio: '', data_fim: '',
-  temperatura_c: '', rotacao_rpm: '', volume_acido_ml: '', massa_antes_g: '', massa_depois_g: '',
-  diametro_cm: '3,81', comprimento_cm: '', porosidade_pct: '',
+  temperatura_c: '', rotacao_rpm: '', pressao_psi: '', volume_acido_ml: '', massa_antes_g: '', massa_depois_g: '',
+  diametro_cm: '3,81', comprimento_cm: '', porosidade_pct: '', permeabilidade_md: '',
   fluido: '', conc_wt_pct: '', densidade_g_ml: '', massa_molar_fluido: '', c0_manual: '',
   ca_k: '', ca_dil: '', ca_mm: '40,078', ca_data: '', mg_k: '', mg_dil: '', mg_mm: '24,305', mg_data: '',
   janela_s: '', serie: '', observacoes: '',
@@ -43,6 +57,7 @@ function colar(texto: string): Linha[] {
 }
 
 export const BoletimRdaPanel: React.FC = () => {
+  const navigate = useNavigate()
   const empresaId = useContexto((s) => s.empresaId)
   const projetoContexto = useContexto((s) => s.projetoId)
 
@@ -51,6 +66,9 @@ export const BoletimRdaPanel: React.FC = () => {
   const [mineral, setMineral] = useState<Mineral>('calcita')
   const [linhas, setLinhas] = useState<Linha[]>([{ rotulo: '', tempo: '0', ca: '', mg: '' }])
   const [boletim, setBoletim] = useState<BoletimLido | null>(null)
+  const [arquivoBoletim, setArquivoBoletim] = useState<File | null>(null)
+  const [salvarTudoNaAmostra, setSalvarTudoNaAmostra] = useState(true)
+  const [ultimoSalvo, setUltimoSalvo] = useState<{ amostraId: string; codigo: string; itens: string[] } | null>(null)
   const [textoColar, setTextoColar] = useState('')
   const [mostrarColar, setMostrarColar] = useState(false)
 
@@ -141,9 +159,21 @@ export const BoletimRdaPanel: React.FC = () => {
     if (!resultado) return null
     const campo = mineral === 'dolomita' ? 'h_so_ca_mol_l' : 'h_mol_l'
     const pts = resultado.pontos.filter((p) => p[campo] != null)
-    const usados = pts.filter((p) => p.usado).map((p) => ({ x: p.tempo_s, y: p[campo] as number }))
-    const fora = pts.filter((p) => !p.usado).map((p) => ({ x: p.tempo_s, y: p[campo] as number }))
-    return { usados, fora, reta: reta(usados.map((p) => p.x), usados.map((p) => p.y)) }
+    const paraPonto = (p: (typeof pts)[number]): PontoRdaGrafico => ({
+      x: p.tempo_s,
+      y: p[campo] as number,
+      rotulo: p.rotulo ?? null,
+      ca_mol_l: p.ca_mol_l,
+      mg_mol_l: p.mg_mol_l,
+      h_mol_l: p[campo] as number,
+      abs_ca: p.abs_ca,
+      abs_mg: p.abs_mg,
+      usado: p.usado,
+    })
+    const usados = pts.filter((p) => p.usado).map(paraPonto)
+    const fora = pts.filter((p) => !p.usado).map(paraPonto)
+    const pontosCompletos = pts.map(paraPonto)
+    return { usados, fora, pontosCompletos, reta: reta(usados.map((p) => p.x), usados.map((p) => p.y)) }
   }, [resultado, mineral])
 
   // conferência com o que a planilha calculou
@@ -161,10 +191,11 @@ export const BoletimRdaPanel: React.FC = () => {
   // ações
   // -------------------------------------------------------------------------
   async function importar(arquivo: File) {
-    setMsg(null)
+    setMsg(null); setUltimoSalvo(null)
     try {
       const b = lerBoletimRda(await lerArquivoBruto(arquivo))
       setBoletim(b)
+      setArquivoBoletim(arquivo)
       const e = b.entrada
       setMineral(b.mineral)
       setIdSistema('')
@@ -174,7 +205,8 @@ export const BoletimRdaPanel: React.FC = () => {
         data_inicio: b.data_inicio ?? '', data_fim: b.data_fim ?? '',
         temperatura_c: paraCampo(b.temperatura_c), rotacao_rpm: paraCampo(b.rotacao_rpm), volume_acido_ml: paraCampo(b.volume_acido_ml),
         massa_antes_g: paraCampo(e?.massa_antes_g), massa_depois_g: paraCampo(e?.massa_depois_g),
-        diametro_cm: paraCampo(e?.diametro_cm), comprimento_cm: paraCampo(b.comprimento_cm), porosidade_pct: paraCampo(e?.porosidade_pct),
+        diametro_cm: paraCampo(e?.diametro_cm), comprimento_cm: paraCampo(b.comprimento_cm),
+        porosidade_pct: paraCampo(e?.porosidade_pct), permeabilidade_md: paraCampo(b.permeabilidade_md),
         fluido: b.fluido ?? '', conc_wt_pct: paraCampo(b.conc_wt_pct), densidade_g_ml: paraCampo(b.densidade_g_ml), massa_molar_fluido: paraCampo(b.massa_molar_fluido),
         c0_manual: c0DoBoletimDiferente(b) ? paraCampo(e?.c0_mol_l) : '',
         ca_k: paraCampo(e?.calCa.inclinacao), ca_dil: paraCampo(e?.calCa.diluicao), ca_mm: paraCampo(e?.calCa.massaMolar ?? 40.078), ca_data: e?.calCa.data ?? '',
@@ -184,14 +216,14 @@ export const BoletimRdaPanel: React.FC = () => {
       setLinhas((e?.leituras ?? []).map((l) => ({ rotulo: l.rotulo ?? '', tempo: paraCampo(l.tempo_s), ca: paraCampo(l.abs_ca), mg: paraCampo(l.abs_mg) })))
       const lit = litologias.find((l) => b.litologia_texto && l.nome.toLowerCase().includes(b.litologia_texto.toLowerCase()))
       setNovoDisco((n) => ({ ...n, litologia: lit?.nome ?? n.litologia }))
-      setMsg({ tipo: 'info', texto: `Boletim lido (${arquivo.name}, aba "${b.aba}"). Confira os campos e a prévia antes de gravar.` })
+      setMsg({ tipo: 'info', texto: `Boletim lido (${arquivo.name}, aba "${b.aba}"). Confira os campos e o gráfico Origin antes de salvar na amostra.` })
     } catch (e) {
       setMsg({ tipo: 'erro', texto: `Não foi possível ler o boletim: ${mensagemErro(e)}` })
     }
   }
 
   function novoManual() {
-    setBoletim(null); setF(VAZIO); setIdSistema(''); setMineral('calcita'); setAmostra(null)
+    setBoletim(null); setArquivoBoletim(null); setUltimoSalvo(null); setF(VAZIO); setIdSistema(''); setMineral('calcita'); setAmostra(null)
     setLinhas([{ rotulo: '', tempo: '0', ca: '', mg: '' }]); setMsg(null)
   }
 
@@ -203,10 +235,13 @@ export const BoletimRdaPanel: React.FC = () => {
     try {
       await salvarAmostra({
         codigo: f.codigo.trim().toUpperCase(), projeto_id: projeto, litologia: novoDisco.litologia, tipo_origem: 'afloramento',
-        finalidade: 'RDA', tipo_amostra: 'disco', diametro_cm: lerNumero(f.diametro_cm), comprimento_cm: lerNumero(f.comprimento_cm),
+        finalidade: 'RDA', tipo_amostra: 'disco',
+        diametro_cm: lerNumero(f.diametro_cm), comprimento_cm: lerNumero(f.comprimento_cm),
+        massa_seca_g: lerNumero(f.massa_antes_g), permeabilidade_fabricante_md: lerNumero(f.permeabilidade_md),
+        responsavel: f.operadores.trim() || null,
       })
       setAmostra(await buscarAmostraPorCodigo(f.codigo.trim().toUpperCase()))
-      setMsg({ tipo: 'sucesso', texto: `Disco ${f.codigo.trim().toUpperCase()} cadastrado.` })
+      setMsg({ tipo: 'sucesso', texto: `Disco ${f.codigo.trim().toUpperCase()} cadastrado no banco de amostras.` })
     } catch (e) { setMsg({ tipo: 'erro', texto: mensagemErro(e) }) } finally { setOcupado(false) }
   }
 
@@ -226,7 +261,7 @@ export const BoletimRdaPanel: React.FC = () => {
     if (!entrada || !resultado || !amostra || !idSistema) return
     const rpm = lerNumero(f.rotacao_rpm)
     if (!rpm) { setMsg({ tipo: 'erro', texto: 'Informe a rotação (rpm).' }); return }
-    setOcupado(true); setMsg(null)
+    setOcupado(true); setMsg(null); setUltimoSalvo(null)
     try {
       const base: BoletimLido = boletim ?? {
         aba: '', codigo: null, litologia_texto: null, mineral, estudo: null, operadores: null, boletim_por: null, observacoes: null,
@@ -236,13 +271,52 @@ export const BoletimRdaPanel: React.FC = () => {
       }
       const b: BoletimLido = {
         ...base, estudo: f.estudo || null, operadores: f.operadores || null, data_inicio: f.data_inicio || null, data_fim: f.data_fim || null,
-        comprimento_cm: lerNumero(f.comprimento_cm), observacoes: f.observacoes || null, temperatura_c: lerNumero(f.temperatura_c),
+        comprimento_cm: lerNumero(f.comprimento_cm), permeabilidade_md: lerNumero(f.permeabilidade_md),
+        fluido: f.fluido || base.fluido || null, conc_wt_pct: lerNumero(f.conc_wt_pct),
+        densidade_g_ml: lerNumero(f.densidade_g_ml), massa_molar_fluido: lerNumero(f.massa_molar_fluido),
+        observacoes: f.observacoes || null, temperatura_c: lerNumero(f.temperatura_c),
       }
       const r = await gravarBoletimRda(supabase, {
         amostra_id: amostra.id, id_sistema: idSistema, serie: f.serie.trim() || null, rotacao_rpm: rpm,
-        temperatura_c: lerNumero(f.temperatura_c), entrada, resultado, boletim: b, data_ensaio: f.data_inicio || null,
+        temperatura_c: lerNumero(f.temperatura_c), pressao_psi: lerNumero(f.pressao_psi),
+        permeabilidade_md: lerNumero(f.permeabilidade_md),
+        entrada, resultado, boletim: b, data_ensaio: f.data_inicio || null,
+        incluirCurvasIons: salvarTudoNaAmostra,
+        sincronizarAmostra: salvarTudoNaAmostra,
       })
-      setMsg({ tipo: 'sucesso', texto: `Boletim gravado no disco ${amostra.codigo} (ensaio ${r.analise_id}): TR = ${cient(resultado.taxa_reacao)} mol/(cm²·s)${f.serie.trim() ? `, série "${f.serie.trim()}"` : ''}.` })
+
+      const itensSalvos: string[] = [
+        `ensaio RDA #${r.analise_id}`,
+        `${resultado.pontos.length} leituras AA`,
+        `${r.nCurvas} curva(s) numérica(s)`,
+      ]
+      if (r.amostraAtualizada) itensSalvos.push('geometria/massa no cadastro do disco')
+      if (r.petrofisicaSincronizada) itensSalvos.push('petrofísica (φ/K/massas)')
+
+      let avisoAnexo = ''
+      if (salvarTudoNaAmostra && arquivoBoletim && CFG_RDA) {
+        try {
+          const anexosExistentes = await listarArquivosAnexos(amostra.id, CFG_RDA).catch(() => [])
+          const jaAnexado = anexosExistentes.some(
+            (a) => a.analise_id === r.analise_id && a.nome_original === arquivoBoletim.name && a.tamanho_bytes === arquivoBoletim.size,
+          )
+          if (!jaAnexado) {
+            await uploadArquivoStorage(amostra.id, CFG_RDA, arquivoBoletim, r.analise_id)
+          }
+          itensSalvos.push(`planilha "${arquivoBoletim.name}" anexada`)
+        } catch (errAnexo) {
+          avisoAnexo = ` (Aviso: o boletim e os dados foram salvos, mas o anexo .xlsx não pôde ser enviado ao Storage: ${mensagemErro(errAnexo)})`
+        }
+      }
+
+      const amAtualizada = await buscarAmostraPorCodigo(amostra.codigo).catch(() => amostra)
+      if (amAtualizada) setAmostra(amAtualizada)
+
+      setUltimoSalvo({ amostraId: amostra.id, codigo: amostra.codigo, itens: itensSalvos })
+      setMsg({
+        tipo: 'sucesso',
+        texto: `Todos os dados foram gravados no disco ${amostra.codigo}: TR = ${cient(resultado.taxa_reacao)} mol/(cm²·s)${f.serie.trim() ? `, série "${f.serie.trim()}"` : ''}.${avisoAnexo}`,
+      })
       void carregarCatalogos()
     } catch (e) { setMsg({ tipo: 'erro', texto: mensagemErro(e) }) } finally { setOcupado(false) }
   }
@@ -258,9 +332,27 @@ export const BoletimRdaPanel: React.FC = () => {
         <Button variant="blue" icon={<Upload size={15} />} onClick={() => arquivoRef.current?.click()}>Importar boletim (.xlsx)</Button>
         <Button variant="secondary" icon={<FilePlus2 size={15} />} onClick={novoManual}>Novo boletim (manual)</Button>
         {boletim && <Badge variant="amber">importado: {boletim.codigo ?? 'sem código'}</Badge>}
+        {arquivoBoletim && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-blue-200)] bg-[var(--color-blue-50)] px-2.5 py-0.5 text-[12px] font-medium text-[var(--color-blue-800)]">
+            <Paperclip size={12} /> {arquivoBoletim.name}
+          </span>
+        )}
       </div>
 
       {msg && <Alert tipo={msg.tipo} mensagem={msg.texto} onClose={() => setMsg(null)} />}
+      {ultimoSalvo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-emerald-300 bg-emerald-50/80 px-4 py-3 text-[13px] text-emerald-950">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-700" />
+            <div>
+              <strong>Salvo na amostra {ultimoSalvo.codigo}:</strong> {ultimoSalvo.itens.join(' · ')}.
+            </div>
+          </div>
+          <Button size="sm" variant="blue" icon={<ExternalLink size={14} />} onClick={() => navigate(`/amostras/${ultimoSalvo.amostraId}?aba=rda`)}>
+            Abrir ficha da amostra
+          </Button>
+        </div>
+      )}
       {boletim && boletim.problemas.length > 0 && (
         <Card titulo="O que o leitor do boletim encontrou"><ListaAvisos avisos={boletim.problemas} /></Card>
       )}
@@ -305,7 +397,7 @@ export const BoletimRdaPanel: React.FC = () => {
       </Card>
 
       {/* ------------------------------------------------------------ cabeçalho */}
-      <Card titulo="Boletim" subtitulo="Condições do ensaio, disco, fluido e calibração da absorção atômica">
+      <Card titulo="Boletim" subtitulo="Condições do ensaio, disco, petrofísica, fluido e calibração da absorção atômica">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Input label="Estudo" value={f.estudo} onChange={set('estudo')} />
           <Input label="Operadores" value={f.operadores} onChange={set('operadores')} />
@@ -313,11 +405,13 @@ export const BoletimRdaPanel: React.FC = () => {
           <Input label="Fim" type="date" value={f.data_fim} onChange={set('data_fim')} />
           <Input label="Temperatura" unidade="°C" value={f.temperatura_c} onChange={set('temperatura_c')} />
           <Input label="Rotação" unidade="rpm" value={f.rotacao_rpm} onChange={set('rotacao_rpm')} obrigatorio />
+          <Input label="Pressão" unidade="psi" value={f.pressao_psi} onChange={set('pressao_psi')} />
           <Input label="Volume de ácido" unidade="mL" value={f.volume_acido_ml} onChange={set('volume_acido_ml')} />
           <Input label="Série" value={f.serie} onChange={set('serie')} list="rda-series-sugestoes" placeholder="IL HAc 10% 45 °C" />
           <Input label="Diâmetro" unidade="cm" value={f.diametro_cm} onChange={set('diametro_cm')} obrigatorio />
           <Input label="Comprimento" unidade="cm" value={f.comprimento_cm} onChange={set('comprimento_cm')} />
           <Input label="Porosidade φ" unidade="%" value={f.porosidade_pct} onChange={set('porosidade_pct')} />
+          <Input label="Permeabilidade K" unidade="mD" value={f.permeabilidade_md} onChange={set('permeabilidade_md')} />
           <div className="grid grid-cols-2 gap-2">
             <Input label="Massa antes" unidade="g" value={f.massa_antes_g} onChange={set('massa_antes_g')} />
             <Input label="Massa depois" unidade="g" value={f.massa_depois_g} onChange={set('massa_depois_g')} />
@@ -392,7 +486,7 @@ export const BoletimRdaPanel: React.FC = () => {
       </Card>
 
       {/* ------------------------------------------------------------ prévia */}
-      <Card titulo="Prévia do resultado" subtitulo="TR = 2 × (− inclinação de [H⁺] × tempo) / área corrigida"
+      <Card titulo="Prévia do resultado e Gráfico Padrão Origin" subtitulo="TR = 2 × (− inclinação de [H⁺] × tempo) / área corrigida · exporte em PNG 300 dpi, SVG, PDF ou CSV"
         acoes={<div className="w-44"><Input label="Janela até" unidade="s" value={f.janela_s} onChange={set('janela_s')} placeholder="todas" /></div>}>
         {!resultado ? (
           <p className="m-0 text-[13px] text-[var(--color-neutral-600)]">Falta: {faltando.join(', ')}.</p>
@@ -423,21 +517,52 @@ export const BoletimRdaPanel: React.FC = () => {
               </div>
             )}
             <ListaAvisos avisos={resultado.avisos} />
-            {grafico && <GraficoHTempo usados={grafico.usados} fora={grafico.fora} reta={grafico.reta} rotuloY={mineral === 'dolomita' ? '[H⁺] só Ca (mol/L)' : '[H⁺] (mol/L)'} />}
+            {grafico && (
+              <GraficoHTempo
+                usados={grafico.usados}
+                fora={grafico.fora}
+                pontosCompletos={grafico.pontosCompletos}
+                reta={grafico.reta}
+                rotuloY={mineral === 'dolomita' ? '[H⁺] só Ca (mol/L)' : '[H⁺] (mol/L)'}
+                c0MolL={entrada?.c0_mol_l ?? null}
+                taxaReacao={resultado.taxa_reacao}
+                r2={resultado.r2_h}
+                codigoAmostra={f.codigo.trim().toUpperCase() || null}
+                sistemaAcido={sistemaEscolhido ? `${sistemaEscolhido.id_sistema} (${sistemaEscolhido.nome_sistema})` : f.fluido || null}
+                rotacaoRpm={lerNumero(f.rotacao_rpm)}
+                temperaturaC={lerNumero(f.temperatura_c)}
+                mineral={mineral}
+              />
+            )}
           </div>
         )}
       </Card>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        {!podeGravar && (
-          <span className="text-[12px] text-[var(--color-neutral-600)]">
-            {!amostra ? 'Falta o disco cadastrado. ' : ''}{!idSistema ? 'Falta o sistema ácido. ' : ''}{!lerNumero(f.rotacao_rpm) ? 'Falta a rotação. ' : ''}
-            {resultado && temErro(resultado.avisos) ? 'O cálculo tem erro. ' : ''}
+      {/* ------------------------------------------------------------ salvar todos os dados na amostra */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-[var(--color-neutral-300)] bg-white px-5 py-4">
+        <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-[var(--color-neutral-800)]">
+          <input
+            type="checkbox"
+            checked={salvarTudoNaAmostra}
+            onChange={(e) => setSalvarTudoNaAmostra(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[var(--color-blue)]"
+          />
+          <span>
+            <strong>Salvar todos os dados na amostra:</strong> grava o ensaio RDA completo, todas as leituras AA, curvas numéricas ([H⁺], [Ca²⁺]{mineral === 'dolomita' ? ', [Mg²⁺]' : ''}), atualiza dimensões e massa inicial no cadastro do disco, sincroniza petrofísica (φ, K e massas antes/depois){arquivoBoletim ? ` e anexa a planilha "${arquivoBoletim.name}"` : ''}.
           </span>
-        )}
-        <Button icon={<Save size={15} />} loading={ocupado} disabled={!podeGravar} onClick={() => void gravar()}>
-          Gravar boletim{amostra ? ` em ${amostra.codigo}` : ''}{sistemaEscolhido ? ` · ${sistemaEscolhido.id_sistema}` : ''}
-        </Button>
+        </label>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {!podeGravar && (
+            <span className="text-[12px] text-[var(--color-neutral-600)]">
+              {!amostra ? 'Falta o disco cadastrado. ' : ''}{!idSistema ? 'Falta o sistema ácido. ' : ''}{!lerNumero(f.rotacao_rpm) ? 'Falta a rotação. ' : ''}
+              {resultado && temErro(resultado.avisos) ? 'O cálculo tem erro. ' : ''}
+            </span>
+          )}
+          <Button icon={<Save size={15} />} loading={ocupado} disabled={!podeGravar} onClick={() => void gravar()}>
+            Salvar todos os dados{amostra ? ` em ${amostra.codigo}` : ''}{sistemaEscolhido ? ` · ${sistemaEscolhido.id_sistema}` : ''}
+          </Button>
+        </div>
       </div>
     </div>
   )

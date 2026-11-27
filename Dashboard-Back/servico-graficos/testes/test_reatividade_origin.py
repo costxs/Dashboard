@@ -120,12 +120,66 @@ def test_exportar_excel_duas_abas_com_formulas(cliente_logado):
     assert str(ws2["B38"].value).startswith("=IFERROR(SLOPE(")
 
 
+@pytest.mark.parametrize("formato,inicio", [("png", b"\x89PNG"), ("svg", b"<?xml"), ("pdf", b"%PDF")])
+def test_grafico_rda_h_tempo_origin(cliente_logado, formato, inicio):
+    r = cliente_logado.post(
+        "/reatividade/grafico-rda-h-tempo",
+        json={
+            "usados": [
+                {"x": 0, "y": 1.73115, "rotulo": "T0"},
+                {"x": 180, "y": 1.73031, "rotulo": "T1"},
+                {"x": 360, "y": 1.72985, "rotulo": "T2"},
+                {"x": 600, "y": 1.72930, "rotulo": "T3"},
+            ],
+            "fora": [{"x": 1200, "y": 1.72955, "rotulo": "T4"}],
+            "r2": 0.9912,
+            "taxa_reacao": 4.25e-8,
+            "codigo_amostra": "RDA901",
+            "sistema_acido": "HAc 10 wt%",
+            "rotacao_rpm": 200,
+            "temperatura_c": 45,
+            "estilo": {"formato": formato, "dpi": 120},
+        },
+        headers=_headers(),
+    )
+    assert r.status_code == 200, r.text
+    assert r.content.startswith(inicio)
+
+
+@pytest.mark.parametrize("formato,inicio", [("png", b"\x89PNG"), ("svg", b"<?xml"), ("pdf", b"%PDF")])
+def test_grafico_rda_levich_origin(cliente_logado, formato, inicio):
+    r = cliente_logado.post(
+        "/reatividade/grafico-rda-levich",
+        json={
+            "medias": [
+                {"x": 3.236, "y": 3.1e-8, "erro": 2.0e-9, "rpm": 100, "n": 2},
+                {"x": 4.576, "y": 4.5e-8, "erro": 1.5e-9, "rpm": 200, "n": 2},
+                {"x": 7.236, "y": 7.2e-8, "erro": 2.5e-9, "rpm": 500, "n": 2},
+            ],
+            "discos": [
+                {"x": 3.236, "y": 3.0e-8, "rotulo": "RDA901"},
+                {"x": 3.236, "y": 3.2e-8, "rotulo": "RDA902"},
+            ],
+            "r2": 0.9985,
+            "sc": 580.4,
+            "d_cm2_s": 1.39e-5,
+            "nome_serie": "IL HAc 10% 45C",
+            "estilo": {"formato": formato, "dpi": 120},
+        },
+        headers=_headers(),
+    )
+    assert r.status_code == 200, r.text
+    assert r.content.startswith(inicio)
+
+
 @pytest.mark.parametrize(
     "rota,corpo",
     [
         ("/reatividade/grafico-t50", {"m0_g": 4.2, "tempo_min": 4.0, "mf_g": 2.4}),
         ("/reatividade/grafico-perda-massa", {"series": [{"nome": "A", "x_valores": [10, 20], "y_medias_pct": [5, 10], "y_desvios_pct": [0.1, 0.2]}]}),
         ("/reatividade/grafico-absorcao-atomica", {"ca_medias_mol_l": [0.5, 1.0], "ca_desvios_mol_l": [0.01, 0.02], "h_medias_mol_l": [3.4, 2.4], "h_desvios_mol_l": [0.02, 0.03]}),
+        ("/reatividade/grafico-rda-h-tempo", {"usados": [{"x": 0, "y": 1.73}, {"x": 180, "y": 1.72}]}),
+        ("/reatividade/grafico-rda-levich", {"medias": [{"x": 3.2, "y": 3e-8}]}),
         ("/reatividade/exportar-excel", {}),
     ],
 )

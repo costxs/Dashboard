@@ -1,6 +1,7 @@
 // =============================================================================
-// Gravação da reatividade no banco (migração 023):
-//   - gravarBoletimRda: um disco (analise_rda + rda_leituras + curva [H⁺] × tempo para os gráficos);
+// Gravação da reatividade no banco (migração 023 / 029):
+//   - gravarBoletimRda: um disco (analise_rda + rda_leituras + curvas numéricas + sincronização opcional
+//     do cadastro físico da amostra e petrofísica antes/depois);
 //     se o disco já tem o ensaio "aguardando resultado" criado pela planilha de controle, ATUALIZA esse.
 //   - calcularEGravarSerie: junta os discos da série, calcula slope, Sc e D e grava em rda_series.
 //   - cadastrarEstatica: miniplug (novo ou existente) + ensaio de dissolução estática, tudo ou nada.
@@ -29,6 +30,7 @@ export interface GravarBoletim {
   rotacao_rpm: number;
   temperatura_c?: number | null;
   pressao_psi?: number | null;
+  permeabilidade_md?: number | null;
   entrada: EntradaBoletim;
   /** se não vier, é calculado aqui */
   resultado?: ResultadoBoletim;
@@ -38,6 +40,10 @@ export interface GravarBoletim {
   observacoes?: string | null;
   /** atualizar este ensaio em vez de procurar/criar */
   analise_id?: number | null;
+  /** grava também curvas [Ca²⁺] × tempo e [Mg²⁺] × tempo em curvas/curva_pontos */
+  incluirCurvasIons?: boolean;
+  /** sincroniza dimensões/massa/status em amostras e porosidade/permeabilidade/massas em analise_petrofisica */
+  sincronizarAmostra?: boolean;
 }
 
 export async function gravarBoletimRda(sb: SupabaseClient, g: GravarBoletim) {
@@ -45,6 +51,16 @@ export async function gravarBoletimRda(sb: SupabaseClient, g: GravarBoletim) {
   if (r.avisos.some((a) => a.severidade === "ERRO")) throw new Error(`Boletim com erro: ${r.avisos.filter((a) => a.severidade === "ERRO").map((a) => a.mensagem).join("; ")}`);
   const e = g.entrada, b = g.boletim;
   const janela = e.tempoMaximo_s != null ? `0–${e.tempoMaximo_s} s` : `0–${Math.max(...e.leituras.map((l) => l.tempo_s))} s`;
+
+  const detalhesFluido = [
+    b?.fluido ? `Fluido: ${b.fluido}${b.conc_wt_pct != null ? ` (${b.conc_wt_pct} wt%)` : ""}` : null,
+    b?.densidade_g_ml != null ? `ρ=${b.densidade_g_ml} g/mL` : null,
+    b?.massa_molar_fluido != null ? `MM=${b.massa_molar_fluido} g/mol` : null,
+    (g.permeabilidade_md ?? b?.permeabilidade_md) != null ? `K=${g.permeabilidade_md ?? b?.permeabilidade_md} mD` : null,
+    ...Object.entries(b?.extras ?? {}).map(([k, v]) => `${k}: ${v}`),
+  ].filter(Boolean);
+
+  const obsBase = g.observacoes ?? b?.observacoes;
   const linha = {
     id_sistema: g.id_sistema, serie: g.serie ?? null, tipo_variavel: "rotação (RDA)",
     rotacao_rpm: g.rotacao_rpm, temperatura_c: g.temperatura_c ?? b?.temperatura_c ?? null, pressao_psi: g.pressao_psi ?? null,
@@ -58,8 +74,8 @@ export async function gravarBoletimRda(sb: SupabaseClient, g: GravarBoletim) {
     metodo_quantificacao: e.calMg ? "RDA / AAS (Ca e Mg)" : "RDA / AAS (Ca)",
     metodo_taxa: `boletim: 2·|d[H+]/dt| / área corrigida (${janela})${e.mineral === "dolomita" ? ", dolomita: só Ca (4 H+ por Ca)" : ""}`,
     estudo: b?.estudo ?? null, operadores: b?.operadores ?? null, data_inicio: b?.data_inicio ?? null, data_fim: b?.data_fim ?? null,
-    data_ensaio: g.data_ensaio ?? b?.data_inicio ?? null, responsavel: g.responsavel ?? b?.boletim_por ?? null,
-    observacoes: [g.observacoes ?? b?.observacoes, ...Object.entries(b?.extras ?? {}).map(([k, v]) => `${k}: ${v}`)].filter(Boolean).join(" · ") || null,
+    data_ensaio: g.data_ensaio ?? b?.data_inicio ?? null, responsavel: g.responsavel ?? b?.boletim_por ?? b?.operadores ?? null,
+    observacoes: [obsBase, ...detalhesFluido].filter(Boolean).join(" · ") || null,
   };
 
   // ensaio a atualizar: o informado, ou o "aguardando resultado" do controle, ou o mesmo disco na mesma rotação sem taxa
@@ -87,21 +103,120 @@ export async function gravarBoletimRda(sb: SupabaseClient, g: GravarBoletim) {
   })));
   if (e2) throw pt(e2, "rda_leituras");
 
-  // curva [H⁺] × tempo (os gráficos genéricos da ficha leem curvas/curva_pontos)
+  // curvas numéricas (os gráficos genéricos da ficha leem curvas/curva_pontos)
   const velhas = await sb.from("curvas").select("id").eq("analise_tabela", "analise_rda").eq("analise_id", id);
   if (velhas.error) throw pt(velhas.error, "curvas");
   for (const c of (velhas.data ?? []) as { id: number }[]) await sb.from("curvas").delete().eq("id", c.id);
-  const pontosH = r.pontos.filter((p) => p.h_mol_l != null);
-  if (pontosH.length) {
+
+  let nCurvas = 0;
+  const inserirCurvaRda = async (nome: string, yGrandeza: string, yUnidade: string, pts: { x: number; y: number }[]) => {
+    if (!pts.length) return;
     const { data: c, error: e3 } = await sb.from("curvas").insert({
-      amostra_id: g.amostra_id, analise_tabela: "analise_rda", analise_id: id, nome: "[H⁺] × tempo (RDA)",
-      x_grandeza: "Tempo", x_unidade: "s", y_grandeza: "[H⁺]", y_unidade: "mol/L",
+      amostra_id: g.amostra_id, analise_tabela: "analise_rda", analise_id: id, nome,
+      x_grandeza: "Tempo", x_unidade: "s", y_grandeza: yGrandeza, y_unidade: yUnidade,
     }).select("id").single();
     if (e3) throw pt(e3, "curvas");
-    const { error: e4 } = await sb.from("curva_pontos").insert(pontosH.map((p, i) => ({ curva_id: (c as { id: number }).id, ordem: i, x: p.tempo_s, y: p.h_mol_l })));
+    const { error: e4 } = await sb.from("curva_pontos").insert(pts.map((p, i) => ({ curva_id: (c as { id: number }).id, ordem: i, x: p.x, y: p.y })));
     if (e4) throw pt(e4, "curva_pontos");
+    nCurvas += 1;
+  };
+
+  const campoH = e.mineral === "dolomita" ? "h_so_ca_mol_l" : "h_mol_l";
+  const pontosH = r.pontos.filter((p) => p[campoH] != null).map((p) => ({ x: p.tempo_s, y: p[campoH] as number }));
+  await inserirCurvaRda("[H⁺] × tempo (RDA)", "[H⁺]", "mol/L", pontosH);
+
+  if (g.incluirCurvasIons) {
+    const pontosCa = r.pontos.filter((p) => p.ca_mol_l != null).map((p) => ({ x: p.tempo_s, y: p.ca_mol_l as number }));
+    await inserirCurvaRda("[Ca²⁺] × tempo (RDA)", "[Ca²⁺]", "mol/L", pontosCa);
+    const pontosMg = r.pontos.filter((p) => p.mg_mol_l != null && Number(p.mg_mol_l) > 0).map((p) => ({ x: p.tempo_s, y: p.mg_mol_l as number }));
+    await inserirCurvaRda("[Mg²⁺] × tempo (RDA)", "[Mg²⁺]", "mol/L", pontosMg);
   }
-  return { analise_id: id, resultado: r };
+
+  let amostraAtualizada = false;
+  let petrofisicaSincronizada = false;
+
+  if (g.sincronizarAmostra) {
+    const { data: amAtual } = await sb.from("amostras")
+      .select("diametro_cm, comprimento_cm, massa_seca_g, tipo_amostra, finalidade, status, responsavel, permeabilidade_fabricante_md")
+      .eq("id", g.amostra_id).maybeSingle();
+    if (amAtual) {
+      const am = amAtual as Record<string, unknown>;
+      const permMd = g.permeabilidade_md ?? b?.permeabilidade_md ?? null;
+      const patchAmostra: Record<string, unknown> = {
+        diametro_cm: e.diametro_cm || am.diametro_cm || null,
+        comprimento_cm: b?.comprimento_cm ?? am.comprimento_cm ?? null,
+        massa_seca_g: am.massa_seca_g ?? e.massa_antes_g ?? null,
+        tipo_amostra: am.tipo_amostra || "disco",
+        finalidade: am.finalidade || "RDA",
+        status: "utilizada",
+        responsavel: am.responsavel || g.responsavel || b?.operadores || null,
+      };
+      if (am.permeabilidade_fabricante_md == null && permMd != null) {
+        patchAmostra.permeabilidade_fabricante_md = permMd;
+      }
+      const { error: errAm } = await sb.from("amostras").update(patchAmostra).eq("id", g.amostra_id);
+      if (!errAm) amostraAtualizada = true;
+    }
+
+    const permMd = g.permeabilidade_md ?? b?.permeabilidade_md ?? null;
+    if (e.porosidade_pct != null || permMd != null || e.massa_antes_g != null || e.massa_depois_g != null) {
+      const { data: petros } = await sb.from("analise_petrofisica")
+        .select("id, momento, porosidade_pct, permeabilidade_gas_md, permeabilidade_liquido_md, massa_g")
+        .eq("amostra_id", g.amostra_id);
+      const listaPetro = (petros ?? []) as {
+        id: number; momento: string; porosidade_pct: number | null;
+        permeabilidade_gas_md: number | null; permeabilidade_liquido_md: number | null; massa_g: number | null;
+      }[];
+
+      if (e.porosidade_pct != null || permMd != null || e.massa_antes_g != null) {
+        const antes = listaPetro.find((x) => x.momento === "antes");
+        if (!antes) {
+          const { error: errP1 } = await sb.from("analise_petrofisica").insert({
+            amostra_id: g.amostra_id,
+            momento: "antes",
+            data_ensaio: g.data_ensaio ?? b?.data_inicio ?? null,
+            porosidade_pct: e.porosidade_pct ?? null,
+            permeabilidade_gas_md: permMd,
+            massa_g: e.massa_antes_g ?? null,
+            responsavel: g.responsavel ?? b?.operadores ?? null,
+            observacoes: "Registrado automaticamente a partir do boletim de RDA",
+          });
+          if (!errP1) petrofisicaSincronizada = true;
+        } else {
+          const patchAntes: Record<string, unknown> = {};
+          if (antes.porosidade_pct == null && e.porosidade_pct != null) patchAntes.porosidade_pct = e.porosidade_pct;
+          if (antes.permeabilidade_gas_md == null && antes.permeabilidade_liquido_md == null && permMd != null) {
+            patchAntes.permeabilidade_gas_md = permMd;
+          }
+          if (antes.massa_g == null && e.massa_antes_g != null) patchAntes.massa_g = e.massa_antes_g;
+          if (Object.keys(patchAntes).length > 0) {
+            const { error: errP1 } = await sb.from("analise_petrofisica").update(patchAntes).eq("id", antes.id);
+            if (!errP1) petrofisicaSincronizada = true;
+          }
+        }
+      }
+
+      if (e.massa_depois_g != null) {
+        const depois = listaPetro.find((x) => x.momento === "depois");
+        if (!depois) {
+          const { error: errP2 } = await sb.from("analise_petrofisica").insert({
+            amostra_id: g.amostra_id,
+            momento: "depois",
+            data_ensaio: b?.data_fim ?? g.data_ensaio ?? null,
+            massa_g: e.massa_depois_g,
+            responsavel: g.responsavel ?? b?.operadores ?? null,
+            observacoes: "Massa pós-ensaio registrada a partir do boletim de RDA",
+          });
+          if (!errP2) petrofisicaSincronizada = true;
+        } else if (depois.massa_g == null) {
+          const { error: errP2 } = await sb.from("analise_petrofisica").update({ massa_g: e.massa_depois_g }).eq("id", depois.id);
+          if (!errP2) petrofisicaSincronizada = true;
+        }
+      }
+    }
+  }
+
+  return { analise_id: id, resultado: r, amostraAtualizada, petrofisicaSincronizada, nCurvas };
 }
 
 export interface GravarSerie {

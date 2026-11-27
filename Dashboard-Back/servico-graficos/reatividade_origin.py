@@ -4,6 +4,8 @@ Endpoints:
   POST /reatividade/grafico-t50
   POST /reatividade/grafico-perda-massa
   POST /reatividade/grafico-absorcao-atomica
+  POST /reatividade/grafico-rda-h-tempo
+  POST /reatividade/grafico-rda-levich
   POST /reatividade/exportar-excel
 """
 from __future__ import annotations
@@ -15,6 +17,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator, FuncFormatter
 import numpy as np
 from fastapi import APIRouter, HTTPException, Response
 from openpyxl import Workbook
@@ -665,3 +668,229 @@ def exportar_excel_reatividade(pedido: PedidoExportarExcel):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome}"'},
     )
+
+
+class PontoXYRda(BaseModel):
+    x: float
+    y: float
+    rotulo: Optional[str] = None
+
+
+class PedidoGraficoRdaHTempo(BaseModel):
+    usados: List[PontoXYRda] = Field(default_factory=list)
+    fora: List[PontoXYRda] = Field(default_factory=list)
+    inclinacao: Optional[float] = None
+    intercepto: Optional[float] = None
+    r2: Optional[float] = None
+    taxa_reacao: Optional[float] = None
+    codigo_amostra: Optional[str] = None
+    sistema_acido: Optional[str] = None
+    rotacao_rpm: Optional[float] = None
+    temperatura_c: Optional[float] = None
+    mostrar_grade: bool = True
+    estilo: EstiloGraficoOrigin = Field(default_factory=EstiloGraficoOrigin)
+
+
+class PontoMediaLevich(BaseModel):
+    x: float
+    y: float
+    erro: float = 0.0
+    rpm: Optional[float] = None
+    n: int = 1
+
+
+class PedidoGraficoRdaLevich(BaseModel):
+    medias: List[PontoMediaLevich] = Field(default_factory=list)
+    discos: List[PontoXYRda] = Field(default_factory=list)
+    inclinacao: Optional[float] = None
+    intercepto: Optional[float] = None
+    r2: Optional[float] = None
+    sc: Optional[float] = None
+    d_cm2_s: Optional[float] = None
+    regime: Optional[str] = None
+    nome_serie: Optional[str] = None
+    mostrar_grade: bool = True
+    estilo: EstiloGraficoOrigin = Field(default_factory=EstiloGraficoOrigin)
+
+
+def _fmt_virgula(valor: float, casas: int) -> str:
+    return f"{valor:.{casas}f}".replace(".", ",")
+
+
+def _fmt_cient_pt(valor: float, casas: int = 2) -> str:
+    if valor == 0:
+        return "0"
+    exp = int(np.floor(np.log10(abs(valor))))
+    mant = valor / (10 ** exp)
+    return f"{mant:.{casas}f}".replace(".", "{,}") + f"\\times 10^{{{exp}}}"
+
+
+def _casas_eixo(valores: np.ndarray) -> int:
+    if len(valores) == 0:
+        return 4
+    span = float(np.max(valores) - np.min(valores))
+    if span <= 0:
+        span = abs(float(valores[0])) * 0.01 or 1e-4
+    passo = span / 5.0
+    if passo >= 1:
+        return 0
+    return int(min(7, max(2, np.ceil(-np.log10(passo)) + 1)))
+
+
+def _configurar_quadro_origin(ax, mostrar_grade: bool = True):
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.3)
+        spine.set_color("#111827")
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.tick_params(axis="both", which="major", direction="in", top=True, right=True, length=6, width=1.15, pad=5)
+    ax.tick_params(axis="both", which="minor", direction="in", top=True, right=True, length=3.2, width=0.85)
+    if mostrar_grade:
+        ax.grid(True, which="major", linestyle="--", linewidth=0.55, color="#cbd5e1", alpha=0.75, zorder=0)
+
+
+@router.post("/grafico-rda-h-tempo")
+def gerar_grafico_rda_h_tempo(pedido: PedidoGraficoRdaHTempo):
+    todos = list(pedido.usados) + list(pedido.fora)
+    if not todos:
+        raise HTTPException(422, "Envie ao menos um ponto para gerar o gráfico [H+] × tempo.")
+
+    fig, ax = _criar_figura_origin(pedido.estilo)
+    _configurar_quadro_origin(ax, pedido.mostrar_grade)
+
+    xs_all = np.array([p.x for p in todos], dtype=float)
+    ys_all = np.array([p.y for p in todos], dtype=float)
+
+    if pedido.fora:
+        xf = np.array([p.x for p in pedido.fora], dtype=float)
+        yf = np.array([p.y for p in pedido.fora], dtype=float)
+        ax.plot(
+            xf, yf, "o",
+            markerfacecolor="white", markeredgecolor="#64748b", markeredgewidth=1.35,
+            ms=6.5, label=f"Fora da janela (n = {len(pedido.fora)})", zorder=3,
+        )
+
+    if pedido.usados:
+        xu = np.array([p.x for p in pedido.usados], dtype=float)
+        yu = np.array([p.y for p in pedido.usados], dtype=float)
+        ax.plot(
+            xu, yu, "s",
+            color="#0f3d6e", markeredgecolor="#092545", markeredgewidth=0.9,
+            ms=6.5, label=f"Janela linear (n = {len(pedido.usados)})", zorder=4,
+        )
+
+        inc = pedido.inclinacao
+        inter = pedido.intercepto
+        if (inc is None or inter is None) and len(xu) >= 2 and np.std(xu) > 0:
+            inc_c, inter_c = np.polyfit(xu, yu, 1)
+            inc, inter = float(inc_c), float(inter_c)
+
+        if pedido.estilo.mostrar_reta_ajuste and inc is not None and inter is not None and len(xu) >= 2:
+            x_lin = np.linspace(float(np.min(xu)), float(np.max(xu)), 100)
+            r2_val = pedido.r2 if pedido.r2 is not None else _r2_seguro(xu, yu)
+            sinal = "−" if inc < 0 else "+"
+            rot_reta = (
+                f"Ajuste: y = {_fmt_virgula(inter, 5)} {sinal} ${ _fmt_cient_pt(abs(inc), 2) }$·t"
+                f" ($R^2$ = {_fmt_virgula(r2_val, 4)})"
+            )
+            ax.plot(x_lin, inter + inc * x_lin, "-", color="#c0392b", lw=1.85, label=rot_reta, zorder=5)
+
+    if pedido.taxa_reacao is not None:
+        ax.plot([], [], " ", label=f"TR = ${_fmt_cient_pt(pedido.taxa_reacao, 2)}$ mol/(cm²·s)")
+
+    x_min, x_max = float(np.min(xs_all)), float(np.max(xs_all))
+    x_span = x_max - x_min if x_max > x_min else max(abs(x_max), 1.0)
+    y_min, y_max = float(np.min(ys_all)), float(np.max(ys_all))
+    y_span = y_max - y_min if y_max > y_min else max(abs(y_max) * 0.002, 1e-5)
+
+    ax.set_xlim(max(0.0, x_min - 0.05 * x_span) if x_min >= 0 else x_min - 0.05 * x_span, x_max + 0.06 * x_span)
+    ax.set_ylim(y_min - 0.16 * y_span, y_max + 0.24 * y_span)
+
+    casas_y = _casas_eixo(ys_all)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: _fmt_virgula(v, 0 if x_span >= 10 else 1)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: _fmt_virgula(v, casas_y)))
+
+    ax.set_xlabel(pedido.estilo.eixo_x or "Tempo, t (s)", fontweight="bold", labelpad=7)
+    ax.set_ylabel(pedido.estilo.eixo_y or "[H⁺] (mol/L)", fontweight="bold", labelpad=8)
+
+    partes_titulo = [p for p in [
+        pedido.codigo_amostra,
+        pedido.sistema_acido,
+        f"{pedido.rotacao_rpm:.0f} rpm" if pedido.rotacao_rpm is not None else None,
+        f"{pedido.temperatura_c:g} °C" if pedido.temperatura_c is not None else None,
+    ] if p]
+    titulo_padrao = " · ".join(partes_titulo) if partes_titulo else None
+    if pedido.estilo.titulo or titulo_padrao:
+        ax.set_title(pedido.estilo.titulo or titulo_padrao, fontweight="bold", pad=10, fontsize=pedido.estilo.tamanho_fonte + 1)
+
+    _aplicar_legenda(ax, pedido.estilo)
+    nome = f"rda_h_tempo_{(pedido.codigo_amostra or 'disco').replace(' ', '_')}"
+    return _exportar_figura(fig, pedido.estilo, nome)
+
+
+@router.post("/grafico-rda-levich")
+def gerar_grafico_rda_levich(pedido: PedidoGraficoRdaLevich):
+    if not pedido.medias:
+        raise HTTPException(422, "Envie as médias por rotação para gerar o gráfico de Levich.")
+
+    fig, ax = _criar_figura_origin(pedido.estilo)
+    _configurar_quadro_origin(ax, pedido.mostrar_grade)
+
+    xm = np.array([m.x for m in pedido.medias], dtype=float)
+    ym = np.array([m.y for m in pedido.medias], dtype=float)
+    em = np.array([m.erro for m in pedido.medias], dtype=float)
+
+    if pedido.discos:
+        xd = np.array([d.x for d in pedido.discos], dtype=float)
+        yd = np.array([d.y for d in pedido.discos], dtype=float)
+        ax.plot(
+            xd, yd, "o",
+            markerfacecolor="white", markeredgecolor="#64748b", markeredgewidth=1.2,
+            ms=5.8, alpha=0.85, label=f"Discos individuais (n = {len(pedido.discos)})", zorder=2,
+        )
+
+    inc = pedido.inclinacao
+    inter = pedido.intercepto
+    if (inc is None or inter is None) and len(xm) >= 2 and np.std(xm) > 0:
+        inc_c, inter_c = np.polyfit(xm, ym, 1)
+        inc, inter = float(inc_c), float(inter_c)
+
+    if pedido.estilo.mostrar_reta_ajuste and inc is not None and inter is not None:
+        x_lin = np.linspace(0.0, float(np.max(xm)) * 1.08, 100)
+        r2_val = pedido.r2 if pedido.r2 is not None else _r2_seguro(xm, ym)
+        ax.plot(
+            x_lin, inter + inc * x_lin, "-", color="#c0392b", lw=1.85,
+            label=f"Ajuste Levich: slope = ${_fmt_cient_pt(inc, 2)}$ ($R^2$ = {_fmt_virgula(r2_val, 4)})",
+            zorder=3,
+        )
+
+    if pedido.estilo.mostrar_barras_erro and np.any(em > 0):
+        ax.errorbar(
+            xm, ym, yerr=em, fmt="s", color="#0f3d6e", ecolor="#0f3d6e",
+            elinewidth=1.2, capsize=4, capthick=1.2, ms=6.5,
+            label="Média por rotação ± DP", zorder=4,
+        )
+    else:
+        ax.plot(xm, ym, "s", color="#0f3d6e", ms=6.5, label="Média por rotação", zorder=4)
+
+    if pedido.d_cm2_s is not None:
+        sc_txt = f"Sc = {_fmt_virgula(pedido.sc, 1)} · " if pedido.sc is not None else ""
+        ax.plot([], [], " ", label=f"{sc_txt}D = ${_fmt_cient_pt(pedido.d_cm2_s, 2)}$ cm²/s")
+
+    todos_y = np.concatenate([ym + em, ym - em, np.array([d.y for d in pedido.discos], dtype=float) if pedido.discos else ym])
+    y_max = float(np.max(todos_y)) if len(todos_y) else 1e-6
+    ax.set_xlim(0.0, float(np.max(xm)) * 1.12 if len(xm) else 10.0)
+    ax.set_ylim(0.0, y_max * 1.25 if y_max > 0 else 1e-6)
+
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: _fmt_virgula(v, 1)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: "0" if v == 0 else f"{v:.2e}".replace(".", ",")))
+
+    ax.set_xlabel(pedido.estilo.eixo_x or "√ω (rad/s)^0,5", fontweight="bold", labelpad=7)
+    ax.set_ylabel(pedido.estilo.eixo_y or "Taxa de reação, TR (mol/cm²·s)", fontweight="bold", labelpad=8)
+    if pedido.estilo.titulo or pedido.nome_serie:
+        ax.set_title(pedido.estilo.titulo or f" Ajuste de Levich — {pedido.nome_serie}", fontweight="bold", pad=10)
+
+    _aplicar_legenda(ax, pedido.estilo)
+    nome = f"rda_levich_{(pedido.nome_serie or 'serie').replace(' ', '_')}"
+    return _exportar_figura(fig, pedido.estilo, nome)

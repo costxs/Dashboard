@@ -166,6 +166,26 @@ describe.skipIf(!PORTA)('no banco', () => {
     expect((await q(`select count(*)::int n from rda_leituras where usado`))[0].n).toBe(6)
     expect((await q(`select count(*)::int n from curvas`))[0].n).toBe(1)
     await expect(gravarBoletimRda(sbPg(pool, leitor), { amostra_id: am, id_sistema: 'SA01', rotacao_rpm: 200, entrada: b.entrada! })).rejects.toThrow(/sem permissão|analise_rda/)
+
+    // sincronizarAmostra + incluirCurvasIons grava geometria/massa no disco, petrofísica antes/depois e curvas de íons
+    const rSync = await gravarBoletimRda(sbPg(pool, adm), {
+      amostra_id: am, id_sistema: 'SA01', serie: 'IL HAc 10% 45 °C', rotacao_rpm: 200,
+      permeabilidade_md: 18.5, entrada: b.entrada!, boletim: b, analise_id: r.analise_id,
+      sincronizarAmostra: true, incluirCurvasIons: true,
+    })
+    expect(rSync.amostraAtualizada).toBe(true)
+    expect(rSync.petrofisicaSincronizada).toBe(true)
+    expect(rSync.nCurvas).toBe(2)
+    const [amRow] = await q(`select diametro_cm, comprimento_cm, massa_seca_g, status from amostras where id = $1`, [am])
+    expect(Number(amRow.diametro_cm)).toBeCloseTo(3.81, 4)
+    expect(Number(amRow.comprimento_cm)).toBeCloseTo(1.5, 4)
+    expect(Number(amRow.massa_seca_g)).toBeCloseTo(40.1234, 4)
+    expect(amRow.status).toBe('utilizada')
+    const petros = await q(`select momento, porosidade_pct, permeabilidade_gas_md, massa_g from analise_petrofisica where amostra_id = $1 order by momento`, [am])
+    expect(petros).toHaveLength(2)
+    expect(Number(petros[0].porosidade_pct)).toBeCloseTo(16, 4)
+    expect(Number(petros[0].permeabilidade_gas_md)).toBeCloseTo(18.5, 4)
+    expect(Number(petros[1].massa_g)).toBeCloseTo(39.9876, 4)
   })
 
   it('série: junta os discos, calcula Sc e D e mostra média e desvio por rotação', async () => {
